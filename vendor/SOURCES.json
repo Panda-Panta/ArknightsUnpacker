@@ -1,0 +1,109 @@
+{
+  "sources": [
+    {
+      "name": "Ark-FBS-Py",
+      "repository": "https://github.com/isHarryh/Ark-FBS-Py",
+      "commit": "161d5e229916d7193364983396076556fbeaa549",
+      "files": "ark_fbs/CN/*.py",
+      "source_archive_sha256": "34d42905c27ac9c2bd0cfd943ad6d4a8123ff0f5edfa738fe7d0eaece0335660",
+      "license_status": "No LICENSE found in pinned source archive. Redistribution permission is not established; local validation source only.",
+      "modifications": [
+        "Added package __init__.py only; generated schema modules unchanged."
+      ]
+    },
+    {
+      "name": "Ark-Unpacker lz4ak",
+      "repository": "https://github.com/isHarryh/Ark-Unpacker",
+      "commit": "4a4b9efc6be4690b68b70b4a16578950baa066d3",
+      "files": [
+        "lz4ak/Block.py",
+        "lz4ak/__init__.py"
+      ],
+      "license": "BSD-3-Clause",
+      "license_file": "Ark-Unpacker-LICENSE",
+      "modifications": [
+        "Replaced optional profiler import with contextlib.nullcontext to avoid importing the upstream CLI stack."
+      ]
+    },
+    {
+      "name": "Ark-Unpacker algorithm reference",
+      "repository": "https://github.com/isHarryh/Ark-Unpacker",
+      "commit": "4a4b9efc6be4690b68b70b4a16578950baa066d3",
+      "license": "BSD-3-Clause",
+      "references": [
+        "src/DecodeTextAsset.py (AES mask / signed payload offset)",
+        "src/ResolveSpine.py (object reference chain)",
+        "src/ResolveUSM.py (WannaCRI demux route)"
+      ],
+      "implementation": "Project-owned thin adapters; no upstream CLI copied."
+    }
+  ],
+  "sha256": {
+    "Ark-Unpacker-LICENSE": "9c04956c3815f8e270666233ef99e0d1d03e360405f7569cfa83ce294a4e954d",
+    "ark_fbs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lz4ak/Block.py": "981189532a088e48e59fdb925d128c2c623068632598e909b61dacfdeeeb4ed3",
+    "lz4ak/__init__.py": "36de1525096a460537826861c34c13b028031f5860e58dfda1315b3809a90790",
+    "ark_fbs/CN/activity_table.py": "a75745672687d7232e6c9c544340b19d0b7def112f6528b68a84a67b5e48d510",
+    "ark_fbs/CN/arkvent_table.py": "256e73b2e9f877a4f5ab270eaafe833064aeb5708f8135f6abc866ed5d84b0b7",
+    "ark_fbs/CN/audio_data.py": "d04bc294a6e97a24ccdb61257de68caa3ef23d2e7b8496b262b7ab9dcad386cc",
+    "ark_fbs/CN/bake_muzzle_data.py": "521e18766a1a9a7e591ce4a7e460f254578b5fe2baf57606881b5b405f46852a",
+    "ark_fbs/CN/battle_equip_table.py": "f239dbe86f057a8dab576c3132f3640f775a499a381f3977d04239ce36b6f623",
+    "ark_fbs/CN/buff_table.py": "8a93815220234fba4013818c1e256c3a7c3db8664ab1b6f3871c78fb34902476",
+    "ark_fbs/CN/building_data.py": "20666818aa8e9740f098a6f6c8c486a5f2295f6e6592f3a8d7cf309c15534ac5",
+    "ark_fbs/CN/building_local_data.py": "61f0170186573264642cdc825df0ab1436267871f678bc0c058dd269d750f8e0",
+    "ark_fbs/CN/campaign_table.py": "ae7b6366d4229d1e9ae166f3380a74bc646771f8477ad978916ed0a913efce70",
+    "ark_fbs/CN/chapter_table.py": "0674cb2bcb89088fff2edcace0b58e1cb179e1641053366ed32588d9e30850d2",
+    "ark_fbs/CN/character_table.py": "f3825d3e29d1e3bf7c1b34880e138fedd77791f4633242cc5c236d7f9cab7704",
+    "ark_fbs/CN/charm_table.py": "8c0594a16f25674ac3f59c89b5afba2b6f92a7e9edcc975a20b741a743eca42e",
+    "ark_fbs/CN/charword_table.py": "db41cccdb35f0a6841981cf978ca3946d87b764c5a75edbec907cc5aabf4b15c",
+    "ark_fbs/CN/char_master_table.py": "51ed2166fe1b069afdd96ced915aecac00632a55baa488020d0a9f5c348bc8a0",
+    "ark_fbs/CN/char_meta_table.py": "aad8a70ff1e2d9ec650c0dc9ff4135a6809e74b0cbb5f98440b77f5d794cf943",
+    "ark_fbs/CN/char_patch_table.py": "74806e6066a0884f7229c5aa04ddd63475c989464d4836aed250023aaae46260",
+    "ark_fbs/CN/checkin_table.py": "4167a08b91b938b9a094a839074c6277d942b824f3224bc1770105ab832aee39",
+    "ark_fbs/CN/climb_tower_table.py": "f7fa04affde5c7a70c91fcdf0e0dee8eef535ebec303a303c4c6974613370f4e",
+    "ark_fbs/CN/clue_data.py": "3fc0ef50f19bb361393e03ff52ca4b72cdd277d1b350275a6d7fa04d27326e29",
+    "ark_fbs/CN/cooperate_battle_table.py": "74e7d31d033aac50f7bcb4d196ba15ecca521781971e638fed6eaf7ba7762746",
+    "ark_fbs/CN/crisis_table.py": "296fb40c74066bf242240167518fcbf9e6ba0cfea3d6d3816898df0c668eaeeb",
+    "ark_fbs/CN/crisis_v2_table.py": "526324fb930bb9498f9b0622abb0c7c5180ff76bc9d4b23974e671a7f4ff164f",
+    "ark_fbs/CN/display_meta_table.py": "1bc971b0d0b4a4df1efa57e90c11a26583700b41eb68bbcea4e9b7744ead41cd",
+    "ark_fbs/CN/enemy_database.py": "f5bf1eb5c70903c09502f655c30d51bc521de9ae5ec8b173f19e75a70d07320c",
+    "ark_fbs/CN/enemy_handbook_table.py": "276e4b064423e24ffa05070570dd0cf730a9bbf5770eab23b8cc1b22fed4c91a",
+    "ark_fbs/CN/ep_breakbuff_table.py": "0a004a04367da522d4f762eda21425e0b07290b56d5bc8f6c899a45586be0d06",
+    "ark_fbs/CN/extra_battlelog_table.py": "c9be9d58db1e9080a10d5b59014bf06d1260f6a2d79c260962ec17c5a4d5257d",
+    "ark_fbs/CN/favor_table.py": "56e86486712ffe9a734ab65bd31bec00b8c3f28bd26dbfd1b585ee642782752f",
+    "ark_fbs/CN/gacha_table.py": "081e09b8c49af0ac4306755a172a52c0429e970d017073cc5fd60f00484c736c",
+    "ark_fbs/CN/gamedata_const.py": "e3a7f82af5b2d2d61d1b1efeab092a85230d63c8dcced23882c1735ead7157a3",
+    "ark_fbs/CN/handbook_info_table.py": "dbe00ed9e08eed00dd1c5f0186535935bfbf6bb90e8adc65f6d2cf513637f131",
+    "ark_fbs/CN/handbook_team_table.py": "63419f56c1935245daec3d79de2c74cf79460f7d93c7fee1feeaa330a0cafc93",
+    "ark_fbs/CN/hotupdate_meta_table.py": "d6889a25745fd5b0e6c8edec457f65ce69e284ee8ef2e9c86f138592c1723a25",
+    "ark_fbs/CN/init_text.py": "f6a6ca53c0ea8a78621d57c0208cb6e69f9d974f677b3b696ab8bd4e3f901a42",
+    "ark_fbs/CN/item_table.py": "5b07a5b9a86fa63d45ab63a17493843c941c5142d68a2ce4e4a52b44b78bc962",
+    "ark_fbs/CN/legion_mode_buff_table.py": "74542b5717c317110490e867e9e72f2f9657c1c0db2084248bd41a34dff219e0",
+    "ark_fbs/CN/level_script_table.py": "594d9e6b57e5a0d9c251521116b4b62760f805bdc8be526454c939872420c135",
+    "ark_fbs/CN/main_text.py": "f6a6ca53c0ea8a78621d57c0208cb6e69f9d974f677b3b696ab8bd4e3f901a42",
+    "ark_fbs/CN/medal_table.py": "df70899feddfe658446091e46d4e56c02968336a1b271c3e28323c447425ea27",
+    "ark_fbs/CN/meta_ui_table.py": "62b5b5d3d299289256207284fc03f22d33cbd62e8da003d50daf2333013cec1e",
+    "ark_fbs/CN/mission_table.py": "6b6b8a43aea043f47424268449a434b422095f527045399469a127237f411955",
+    "ark_fbs/CN/open_server_table.py": "02a7fdf2855850d5314c84f333fa52d1568c2b335fce61d97685baf890d44efa",
+    "ark_fbs/CN/prts___levels.py": "c3a167d8ed6c120bdc0641c6711b296895817083033cf85a334621556ee13032",
+    "ark_fbs/CN/replicate_table.py": "5faa4a6d8e9a71bc54fb6e75f3aef4fb1ebc71bad6ca94eeaeadb8581aa55698",
+    "ark_fbs/CN/resource_manifest.py": "3f0baa11d7651acd0ef82e2b6c670716e88fcb19457f8ee68dfad7e7edf77e65",
+    "ark_fbs/CN/retro_table.py": "847fbe4299173d05cb138302537ea89769cc856d0715eee9cde426c7c2bd7ea9",
+    "ark_fbs/CN/roguelike_topic_table.py": "b43ffc8b863720894ae190696085178e022fc3b7f55657d056484d06edabb766",
+    "ark_fbs/CN/sandbox_perm_table.py": "87edd5f0cf822369332157d9ab4a4bf3c6e30919ff4b9f3f632c90296bf5c20a",
+    "ark_fbs/CN/sandbox_table.py": "44ab544f70e4cafa2acd360474755399eb9764524e09036980eab5d18bafb8c8",
+    "ark_fbs/CN/shop_client_table.py": "10a686d6e4801c5094f8a3e31ab3be3b20868e62c8bc205f6b6453f56290a54d",
+    "ark_fbs/CN/skill_table.py": "db289910afb3970be5fe5cf3e666a37a1d58c954c6ae4bd0d1185119cba84179",
+    "ark_fbs/CN/skin_table.py": "a7761e99adaec56b65c3f02620433ffcda280f252544964460cc5f12678cd1bd",
+    "ark_fbs/CN/special_operator_table.py": "d03a2bab8a35dc93c6b2b3d9e53129b8c4ff10ff7a12e5409d1c8589c26ba22b",
+    "ark_fbs/CN/stage_table.py": "e7941759b6143e26b1a65fc478545bf7a9f1735b6e0051b93009b66c5f5b55e5",
+    "ark_fbs/CN/story_review_meta_table.py": "bc691821c0aafeaa634fdae945619b3b4db36252419f296f14d22f432875b3a4",
+    "ark_fbs/CN/story_review_table.py": "fa2d55438a619b7146845a29387a70a96c6edde20f5e620e1dc3e7245f1af569",
+    "ark_fbs/CN/story_table.py": "5fc538ac69594f2a73870ee6ab800ca0a279fa11a44ba35c2c843720bbda09c3",
+    "ark_fbs/CN/tip_table.py": "672a49f5369d113d6464df252b921b53c396ae1fed52021fd064a7408b91386d",
+    "ark_fbs/CN/token_table.py": "f3825d3e29d1e3bf7c1b34880e138fedd77791f4633242cc5c236d7f9cab7704",
+    "ark_fbs/CN/uniequip_table.py": "33dcda5b042abb56e9d81ea104d02a1c13a0de4c706fdd821878f29a9b487d74",
+    "ark_fbs/CN/zone_table.py": "4875baa2f12a6f43834c96e844ecb37f70a3c893a5623aa3893ba98c0c1a665d",
+    "ark_fbs/CN/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

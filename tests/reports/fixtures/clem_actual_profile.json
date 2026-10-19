@@ -1,0 +1,627 @@
+{
+  "char_id": "char_4231_clemnt",
+  "name": "克莱门莎",
+  "summary": {
+    "profession": "WARRIOR",
+    "sub_profession": "primguard",
+    "rarity": "TIER_6",
+    "phase": 2,
+    "level": 90,
+    "potential": 6,
+    "trust": 200,
+    "obtainable": true,
+    "appellation": "Clementia",
+    "form_of": null
+  },
+  "attributes": [
+    {
+      "key": "maxHp",
+      "label": "生命上限",
+      "base": 2720,
+      "trust": 0,
+      "potential": 0,
+      "module": 0,
+      "value": 2720,
+      "unit": ""
+    },
+    {
+      "key": "atk",
+      "label": "攻击",
+      "base": 920,
+      "trust": 110,
+      "potential": 35.0,
+      "module": 0,
+      "value": 1065.0,
+      "unit": ""
+    },
+    {
+      "key": "def",
+      "label": "防御",
+      "base": 371,
+      "trust": 0,
+      "potential": 0,
+      "module": 0,
+      "value": 371,
+      "unit": ""
+    },
+    {
+      "key": "magicResistance",
+      "label": "法术抗性",
+      "base": 10.0,
+      "trust": 0.0,
+      "potential": 0,
+      "module": 0,
+      "value": 10.0,
+      "unit": ""
+    },
+    {
+      "key": "cost",
+      "label": "初始部署费用",
+      "base": 23,
+      "trust": 0,
+      "potential": -2.0,
+      "module": 0,
+      "value": 21.0,
+      "unit": ""
+    },
+    {
+      "key": "respawnTime",
+      "label": "再部署时间",
+      "base": 70,
+      "trust": 0,
+      "potential": 0,
+      "module": 0,
+      "value": 70,
+      "unit": "秒"
+    },
+    {
+      "key": "blockCnt",
+      "label": "阻挡数",
+      "base": 2,
+      "trust": 0,
+      "potential": 0,
+      "module": 0,
+      "value": 2,
+      "unit": ""
+    },
+    {
+      "key": "baseAttackTime",
+      "label": "基础攻击间隔",
+      "base": 1.2,
+      "trust": 0.0,
+      "potential": 0,
+      "module": 0,
+      "value": 1.2,
+      "unit": "秒"
+    },
+    {
+      "key": "attackSpeed",
+      "label": "基础攻击速度",
+      "base": 100.0,
+      "trust": 0.0,
+      "potential": 0,
+      "module": 0,
+      "value": 100.0,
+      "unit": ""
+    }
+  ],
+  "trait": "能够阻挡两个敌人，可以造成元素伤害",
+  "talents": [
+    {
+      "name": "生死定夺",
+      "description": "造成物理伤害时有25%概率攻击力提升至150%（+15%），目标防御力低于初始值时概率提升至50%",
+      "potential_delta": {
+        "t1_atk_scale": {
+          "before": 1.35,
+          "after": 1.5,
+          "delta": 0.15,
+          "kind": "potential"
+        }
+      },
+      "unlock_condition": {
+        "level": 1,
+        "phase": "PHASE_2"
+      },
+      "blackboard": [
+        {
+          "key": "t1_atk_scale",
+          "value": 1.5,
+          "valueStr": null
+        },
+        {
+          "key": "prob_normal",
+          "value": 0.25,
+          "valueStr": null
+        },
+        {
+          "key": "prob_special",
+          "value": 0.5,
+          "valueStr": null
+        }
+      ],
+      "token_key": null
+    },
+    {
+      "name": "习得性防御",
+      "description": "受到来自自身前方单位造成的物理和法术伤害降低35%（+5%），若伤害来源为【海怪】，则降低55%（+5%）",
+      "potential_delta": {
+        "damage_resistance_normal": {
+          "before": 0.3,
+          "after": 0.35,
+          "delta": 0.05,
+          "kind": "potential"
+        },
+        "damage_resistance_seamonster": {
+          "before": 0.5,
+          "after": 0.55,
+          "delta": 0.05,
+          "kind": "potential"
+        }
+      },
+      "unlock_condition": {
+        "level": 1,
+        "phase": "PHASE_2"
+      },
+      "blackboard": [
+        {
+          "key": "damage_resistance_normal",
+          "value": 0.35,
+          "valueStr": null
+        },
+        {
+          "key": "damage_resistance_seamonster",
+          "value": 0.55,
+          "valueStr": null
+        },
+        {
+          "key": "tag",
+          "value": 0.0,
+          "valueStr": "seamonster"
+        }
+      ],
+      "token_key": null
+    }
+  ],
+  "skills": [
+    {
+      "index": 1,
+      "id": "skchr_clemnt_1",
+      "name": "冲蚀",
+      "level": "专精3",
+      "numeric_level": 10,
+      "sp_type": "INCREASE_WHEN_ATTACK",
+      "trigger": "AUTO",
+      "init_sp": 0,
+      "sp_cost": 2,
+      "duration": 0.0,
+      "duration_type": "NONE",
+      "description": "下次攻击的攻击力提高至290%并造成相当于物理伤害35%的侵蚀损伤（累计满时爆发（普通、精英敌人1000点、领袖2000点累计值），敌人立即受到5000点元素伤害且永久降低120点防御力（可叠加）。8秒冷却）",
+      "blackboard": [
+        {
+          "key": "atk_scale",
+          "value": 2.9,
+          "valueStr": null
+        },
+        {
+          "key": "ep_damage_ratio",
+          "value": 0.35,
+          "valueStr": null
+        }
+      ],
+      "diagnostics": [],
+      "max_charge": 1
+    },
+    {
+      "index": 2,
+      "id": "skchr_clemnt_2",
+      "name": "风暴潮",
+      "level": "专精3",
+      "numeric_level": 10,
+      "sp_type": "INCREASE_WITH_TIME",
+      "trigger": "MANUAL",
+      "init_sp": 15,
+      "sp_cost": 20,
+      "duration": 16.0,
+      "duration_type": "NONE",
+      "description": "攻击范围扩大，攻击速度+100，每次攻击对目标及其周围最多5名地面敌人造成相当于攻击力250%的物理伤害；向前方召唤浮游放逐舱，放逐舱使周围累计不超过8重量的最多15名地面敌人不断向前移动；放逐舱在移动3格后消失并留下漩涡，处于漩涡的所有敌人移动速度-70%且每秒受到200点侵蚀损伤（累计满时爆发（普通、精英敌人1000点、领袖2000点累计值），敌人立即受到5000点元素伤害且永久降低120点防御力（可叠加）。8秒冷却）和相当于攻击力300%的物理伤害",
+      "blackboard": [
+        {
+          "key": "attack_speed",
+          "value": 100.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@aoe_atk_scale",
+          "value": 2.5,
+          "valueStr": null
+        },
+        {
+          "key": "attack@max_passenger_mass",
+          "value": 8.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@max_passenger_cnt",
+          "value": 15.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@move_speed",
+          "value": -0.7,
+          "valueStr": null
+        },
+        {
+          "key": "attack@water_element",
+          "value": 200.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@physical_atk_scale",
+          "value": 3.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@max_target",
+          "value": 5.0,
+          "valueStr": null
+        }
+      ],
+      "diagnostics": [],
+      "max_charge": 1
+    },
+    {
+      "index": 3,
+      "id": "skchr_clemnt_3",
+      "name": "与海为敌",
+      "level": "专精3",
+      "numeric_level": 10,
+      "sp_type": "INCREASE_WITH_TIME",
+      "trigger": "MANUAL",
+      "init_sp": 30,
+      "sp_cost": 42,
+      "duration": 0.0,
+      "duration_type": "AMMO",
+      "description": "攻击范围扩大，攻击目标数+2，每次攻击对目标造成相当于攻击力235%的物理伤害并额外造成相当于物理伤害20%的侵蚀损伤（累计满时爆发（普通、精英敌人1000点、领袖2000点累计值），敌人立即受到5000点元素伤害且永久降低120点防御力（可叠加）。8秒冷却）；当全场有敌人侵蚀损伤（累计满时爆发（普通、精英敌人1000点、领袖2000点累计值），敌人立即受到5000点元素伤害且永久降低120点防御力（可叠加）。8秒冷却）爆发时，消耗1发弹药对目标所在位置及其周围四格内所有地面敌人造成3次相当于攻击力300%的物理伤害与相当于攻击力250%的元素伤害\n技能装有10发弹药，打完后结束（可随时停止技能）",
+      "blackboard": [
+        {
+          "key": "attack@max_target",
+          "value": 3.0,
+          "valueStr": null
+        },
+        {
+          "key": "attack@atk_scale",
+          "value": 2.35,
+          "valueStr": null
+        },
+        {
+          "key": "attack@ep_damage_ratio",
+          "value": 0.2,
+          "valueStr": null
+        },
+        {
+          "key": "attack@ep_break_duration",
+          "value": 1.0,
+          "valueStr": null
+        },
+        {
+          "key": "projectile_life_time",
+          "value": 3.5,
+          "valueStr": null
+        },
+        {
+          "key": "s3_atk_scale",
+          "value": 3.0,
+          "valueStr": null
+        },
+        {
+          "key": "ep_damage_scale",
+          "value": 2.5,
+          "valueStr": null
+        },
+        {
+          "key": "trigger_time",
+          "value": 10.0,
+          "valueStr": null
+        },
+        {
+          "key": "audio_trigger_cnt",
+          "value": 3.0,
+          "valueStr": null
+        },
+        {
+          "key": "ep_break_duration",
+          "value": 1.0,
+          "valueStr": null
+        }
+      ],
+      "diagnostics": [],
+      "max_charge": 1
+    }
+  ],
+  "building_skills": [
+    {
+      "name": "谈判技巧",
+      "description": "进驻会客室时，线索搜集速度提升20%，心情每小时消耗+1",
+      "room": "MEETING",
+      "unlock": {
+        "level": 1,
+        "phase": "PHASE_0"
+      },
+      "id": "meet_spd&cost[110]"
+    },
+    {
+      "name": "合作原则",
+      "description": "与其他干员进驻会客室一起工作时，线索搜集速度提升15%，心情每小时消耗+1",
+      "room": "MEETING",
+      "unlock": {
+        "level": 1,
+        "phase": "PHASE_2"
+      },
+      "id": "meet_spd&cost_char[000]"
+    }
+  ],
+  "potentials": [
+    "部署费用-1",
+    "第一天赋效果增强",
+    "攻击力+35",
+    "第二天赋效果增强",
+    "部署费用-1"
+  ],
+  "modules": [],
+  "metadata": {
+    "version": "78.2.0",
+    "resource_version": "26-10-14-13-44-12-52990322",
+    "source": {
+      "path": "local-game/character_table.bin",
+      "layer": "hot",
+      "logical_name": "gamedata/excel/character_table9fc534",
+      "object_name": "character_table9fc534",
+      "path_id": "1294857812920563706",
+      "table": "character_table",
+      "pointer": "/char_4231_clemnt",
+      "sha256": "39a511f3bd51a74497274c69b784bfe585b546f1ebc3a30cb5575b6eab693f58",
+      "decoder_version": "pc-fbs-161d5e2-normalize-v1",
+      "field_evidence": {
+        "format": "flatbuffers",
+        "schemaCommit": "161d5e229916d7193364983396076556fbeaa549",
+        "fields": {
+          "/characters": {
+            "getter": "clz_Torappu_SimpleKVTable_clz_Torappu_CharacterData.Characters",
+            "states": [
+              "vector"
+            ],
+            "state": "vector",
+            "dictionary": true
+          },
+          "/characters/*/allSkillLvlup": {
+            "getter": "clz_Torappu_CharacterData.AllSkillLvlup",
+            "states": [
+              "empty_vector",
+              "vector"
+            ],
+            "state": "empty_vector",
+            "dictionary": false
+          },
+          "/characters/*/displayTokenDict": {
+            "getter": "clz_Torappu_CharacterData.DisplayTokenDict",
+            "states": [
+              "absent_vector",
+              "vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": true
+          },
+          "/characters/*/favorKeyFrames": {
+            "getter": "clz_Torappu_CharacterData.FavorKeyFrames",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/phases": {
+            "getter": "clz_Torappu_CharacterData.Phases",
+            "states": [
+              "vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/phases/*/attributesKeyFrames": {
+            "getter": "clz_Torappu_CharacterData_PhaseData.AttributesKeyFrames",
+            "states": [
+              "vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/phases/*/evolveCost": {
+            "getter": "clz_Torappu_CharacterData_PhaseData.EvolveCost",
+            "states": [
+              "absent_vector",
+              "empty_vector",
+              "vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks": {
+            "getter": "clz_Torappu_CharacterData.PotentialRanks",
+            "states": [
+              "vector",
+              "empty_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/equivalentCost": {
+            "getter": "clz_Torappu_CharacterData_PotentialRank.EquivalentCost",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/skills": {
+            "getter": "clz_Torappu_CharacterData.Skills",
+            "states": [
+              "empty_vector",
+              "vector"
+            ],
+            "state": "empty_vector",
+            "dictionary": false
+          },
+          "/characters/*/subPower": {
+            "getter": "clz_Torappu_CharacterData.SubPower",
+            "states": [
+              "absent_vector",
+              "vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/tagList": {
+            "getter": "clz_Torappu_CharacterData.TagList",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/talents": {
+            "getter": "clz_Torappu_CharacterData.Talents",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/talents/*/candidates": {
+            "getter": "clz_Torappu_CharacterData_TalentDataBundle.Candidates",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/talents/*/candidates/*/blackboard": {
+            "getter": "clz_Torappu_TalentData.Blackboard",
+            "states": [
+              "vector",
+              "empty_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/trait/candidates": {
+            "getter": "clz_Torappu_CharacterData_TraitDataBundle.Candidates",
+            "states": [
+              "vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/trait/candidates/*/blackboard": {
+            "getter": "clz_Torappu_CharacterData_TraitData.Blackboard",
+            "states": [
+              "vector",
+              "empty_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/abnormalAntis": {
+            "getter": "clz_Torappu_AttributeModifierData.AbnormalAntis",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/abnormalComboImmunes": {
+            "getter": "clz_Torappu_AttributeModifierData.AbnormalComboImmunes",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/abnormalCombos": {
+            "getter": "clz_Torappu_AttributeModifierData.AbnormalCombos",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/abnormalFlags": {
+            "getter": "clz_Torappu_AttributeModifierData.AbnormalFlags",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/abnormalImmunes": {
+            "getter": "clz_Torappu_AttributeModifierData.AbnormalImmunes",
+            "states": [
+              "absent_vector"
+            ],
+            "state": "absent_vector",
+            "dictionary": false
+          },
+          "/characters/*/potentialRanks/*/buff/attributes/attributeModifiers": {
+            "getter": "clz_Torappu_AttributeModifierData.AttributeModifiers",
+            "states": [
+              "vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/allSkillLvlup/*/lvlUpCost": {
+            "getter": "clz_Torappu_CharacterData_SkillLevelCost.LvlUpCost",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          },
+          "/characters/*/skills/*/levelUpCostCond": {
+            "getter": "clz_Torappu_CharacterData_MainSkill.LevelUpCostCond",
+            "states": [
+              "empty_vector",
+              "vector"
+            ],
+            "state": "empty_vector",
+            "dictionary": false
+          },
+          "/characters/*/skills/*/levelUpCostCond/*/levelUpCost": {
+            "getter": "clz_Torappu_CharacterData_MainSkill_SpecializeLevelData.LevelUpCost",
+            "states": [
+              "vector",
+              "absent_vector"
+            ],
+            "state": "vector",
+            "dictionary": false
+          }
+        },
+        "enumRepresentation": "raw-integer",
+        "resourceVerification": {
+          "manifestMatch": true,
+          "sizeMatch": true,
+          "hashKind": "short_token",
+          "hash": "5af3",
+          "cryptographicDigestVerified": false,
+          "sha256": "39a511f3bd51a74497274c69b784bfe585b546f1ebc3a30cb5575b6eab693f58"
+        }
+      }
+    },
+    "snapshot_id": "81b12cf46b0517fd8e66465f1d52a89a09d60490bcad77687bd275e2549e5a03"
+  },
+  "diagnostics": []
+}
