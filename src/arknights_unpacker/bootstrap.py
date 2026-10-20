@@ -7,7 +7,7 @@ import time
 import traceback
 
 from . import __version__
-from .contracts import ExportFormat, as_jsonable
+from .contracts import ExportFormat, ReportOptions, as_jsonable
 from .paths import atomic_json, validate_data_root, validate_output
 
 
@@ -22,25 +22,31 @@ def verify_installation(services, root: str, target: Path) -> dict:
     scan = services.scan(root, emit=progress)
     data = services.load_data(root, emit=progress)
     rows = services.operators()
-    char_id = "char_4231_clemnt" if any(r["id"] == "char_4231_clemnt" for r in rows) else rows[0]["id"]
+    available = {row['id'] for row in rows}
+    char_id = next((name for name in ('char_103_angel', 'char_4231_clemnt') if name in available), rows[0]['id'])
     profile = services.operator_profile(char_id)
     modules = services.modules()
     module_ids = [row['id'] for row in modules[:4]]
-    artifacts = services.export([char_id], module_ids, str(target / "reports"),
-                                {ExportFormat.PNG, ExportFormat.HTML}, emit=progress)
-    module_collection = None
-    if module_ids:
-        from PIL import Image
-        pngs = [item for item in artifacts if item.format == 'png' and Path(item.path).name.startswith('modules_')]
-        htmls = [item for item in artifacts if item.format == 'html' and Path(item.path).name == 'modules.html']
-        if len(pngs) != 1 or pngs[0].pages != 1 or len(htmls) != 1:
-            raise RuntimeError('模组合集验收必须生成一张完整PNG和一个HTML')
-        with Image.open(pngs[0].path) as picture:
-            image_size = picture.size
-            picture.verify()
-        module_collection = {'module_ids': module_ids, 'png': pngs[0].path, 'html': htmls[0].path,
-                             'image_size': image_size, 'pages': 1,
-                             'scope': 'Manually selected current modules; no server update observed.'}
+    # One scan/data load exercises both export themes through the actual services.
+    report_runs = {}
+    for theme in ('dark', 'light'):
+        artifacts = services.export([char_id], module_ids, str(target / 'reports' / theme),
+                                    {ExportFormat.PNG, ExportFormat.HTML},
+                                    options=ReportOptions(theme=theme), emit=progress)
+        module_collection = None
+        if module_ids:
+            from PIL import Image
+            pngs = [item for item in artifacts if item.format == 'png' and Path(item.path).name.startswith('modules_')]
+            htmls = [item for item in artifacts if item.format == 'html' and Path(item.path).name == 'modules.html']
+            if len(pngs) != 1 or pngs[0].pages != 1 or len(htmls) != 1:
+                raise RuntimeError('模组合集验收必须生成一张完整PNG和一个HTML')
+            with Image.open(pngs[0].path) as picture:
+                image_size = picture.size
+                picture.verify()
+            module_collection = {'module_ids': module_ids, 'png': pngs[0].path, 'html': htmls[0].path,
+                                 'image_size': image_size, 'pages': 1,
+                                 'scope': 'Manually selected current modules; no server update observed.'}
+        report_runs[theme] = {'artifacts': as_jsonable(artifacts), 'module_collection': module_collection}
     extraction_checks = []
     def sample_path(relative):
         for layer in ("hot", "base"):
@@ -95,8 +101,8 @@ def verify_installation(services, root: str, target: Path) -> dict:
                "files": len(scan["snapshot"].files), "resource_count": len(scan["catalog"].resources),
                "data_complete": data.complete, "data_version": data.version,
                "resource_version": data.resource_version, "operators": len(rows), "modules": len(modules),
-               "profile": as_jsonable(profile), "artifacts": as_jsonable(artifacts),
-               "module_collection": module_collection,
+               "profile": as_jsonable(profile), "artifacts": report_runs['dark']['artifacts'],
+               "module_collection": report_runs['dark']['module_collection'], "report_runs": report_runs,
                "extraction_checks": extraction_checks,
                "elapsed_seconds": round(time.monotonic() - start, 2), "events": events,
                "evidence": "Production service and isolated worker flow; browser offline rendering not exercised."}
@@ -176,6 +182,9 @@ def main() -> int:
                                       "output_directory_exists": Path(services.config["output_root"]).is_dir(),
                                       "settings_output": window.settings.output.text(),
                                       "module_image_layout": window.settings.report_options().module_image_layout,
+                                      "report_theme": window.settings.report_options().theme,
+                                      "report_theme_options": [window.settings.theme.itemData(i) for i in range(window.settings.theme.count())],
+                                      "report_theme_labels": [window.settings.theme.itemText(i) for i in range(window.settings.theme.count())],
                                       "queue_idle": not window.queue.busy,
                                       "scan_id": getattr(services.scan_snapshot, 'snapshot_id', None),
                                       "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),

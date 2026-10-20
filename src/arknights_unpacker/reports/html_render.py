@@ -8,25 +8,23 @@ from urllib.parse import quote
 
 from ..contracts import ReportDocument
 from ..paths import resource_root
-from .model import Block, plain, present, semantic_blocks
+from .model import Block, plain, present
+from .style import ordered_groups, theme_css
 
 _ASSETS = resource_root() / 'resources' / 'html'
 CSS = (_ASSETS / 'report.css').read_text(encoding='utf-8')
 JS = (_ASSETS / 'report.js').read_text(encoding='utf-8')
 _PAGE = Template((_ASSETS / 'operator.html').read_text(encoding='utf-8'))
 
-_GROUPS = (
-    ('草稿警告', 'notice', '阅读提示'), ('概览', 'overview', '干员信息'),
-    ('特性', 'trait', '特性'), ('属性', 'attributes', '属性与加成'),
-    ('天赋', 'talents', '天赋'), ('技能', 'skills', '技能'),
-    ('后勤', 'building', '后勤技能'), ('潜能', 'potentials', '潜能提升'),
-    ('模组', 'modules', '模组'), ('更新对照', 'changes', '更新对照'),
-    ('来源与诊断', 'sources', '来源与诊断'), ('', 'version', '资料版本与口径'),
-)
-
 
 def _e(value) -> str:
     return escape(str(value), quote=True)
+
+
+def _styles(theme: str) -> str:
+    # Exported files stay self-contained. Paper printing always uses the shared
+    # light palette while the screen preserves the selected export theme.
+    return theme_css(theme) + '\n' + CSS + '\n@media print {\n' + theme_css('light') + '\n}'
 
 
 def _portrait(document: ReportDocument) -> str:
@@ -144,12 +142,8 @@ def _modules(items) -> str:
 
 
 def render_html(document: ReportDocument) -> str:
-    blocks = semantic_blocks(document)
     content, directory = [], []
-    for group, anchor, title in _GROUPS:
-        items = [(index, block) for index, block in enumerate(blocks) if block.group == group]
-        if not items:
-            continue
+    for group, anchor, title, items in ordered_groups(document):
         directory.append(f'<li><a href="#{anchor}">{_e(title)}</a></li>')
         classes = 'report-section' + (' warning' if group == '草稿警告' else '') + (' auxiliary' if anchor in {'version', 'sources'} else '')
         content.append(f'<section class="{classes}" id="{anchor}" data-report-section data-report-group="{_e(group)}">'
@@ -161,11 +155,20 @@ def render_html(document: ReportDocument) -> str:
         else:
             content.extend(_block(index, block) for index, block in items)
         content.append('</section>')
-    return _PAGE.substitute(title=_e(document.title or '干员与模组资料'), css=CSS, script=JS,
+    return _PAGE.substitute(title=_e(document.title or '干员与模组资料'), theme=_e(document.options.theme),
+                            css=_styles(document.options.theme), script=JS,
                             directory=''.join(directory), header=_header(document), content=''.join(content))
 
 
-def render_index(entries: list[dict[str, str]], title: str) -> str:
+def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light') -> str:
     rows = ''.join('<tr>' + f'<td><a href="{quote(entry["path"])}">{_e(entry["title"])}</a></td>' + ''.join(
         f'<td>{_e(entry.get(key, ""))}</td>' for key in ('profession', 'version', 'status')) + '</tr>' for entry in entries)
-    return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + _e(title) + '</title><style>' + CSS + '</style></head><body><main class="index-main"><h1>' + _e(title) + '</h1><p>离线资料目录 · 移动整个任务文件夹后仍可使用</p><div class="table-wrap"><table><thead><tr><th>资料</th><th>职业</th><th>数据版本</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table></div></main></body></html>'
+    return ('<!doctype html>'
+            f'<html lang="zh-CN" data-report-theme="{_e(theme)}"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>{_e(title)}</title><style>{_styles(theme)}</style></head>'
+            f'<body><main class="index-main"><h1>{_e(title)}</h1>'
+            '<p>离线资料目录 · 移动整个任务文件夹后仍可使用</p>'
+            '<div class="table-wrap"><table><thead><tr>'
+            '<th>资料</th><th>职业</th><th>数据版本</th><th>状态</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table></div></main></body></html>')

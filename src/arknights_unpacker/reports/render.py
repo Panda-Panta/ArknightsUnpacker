@@ -5,9 +5,10 @@ import math
 import os
 
 from PIL import Image, ImageDraw, ImageFont
+from PIL.PngImagePlugin import PngInfo
 
 from ..contracts import ReportDocument, CancelToken, null_progress
-from .model import semantic_blocks
+from .style import ordered_groups, style_version, theme_colors, typography
 
 MAX_SINGLE_IMAGE_PIXELS = 80_000_000
 
@@ -20,6 +21,13 @@ class DrawLine:
     continued: bool = False
     cells: list[str] = field(default_factory=list)
     column_labels: list[str] = field(default_factory=list)
+    column_widths: list[int] = field(default_factory=list)
+    padding_top: int = 0
+    padding_bottom: int = 0
+    first: bool = False
+    last: bool = False
+    row_index: int = -1
+    group: str = ''
 
 
 def _font(size: int, bold: bool = False):
@@ -47,7 +55,9 @@ def wrap_text(text: str, font, width: int, *, cancel: CancelToken | None = None)
             if cancel and index % 128 == 0:
                 cancel.check()
             candidate = current + character
-            if current and font.getlength(candidate) > width:
+            bounds = font.getbbox(candidate)
+            measured_width = max(font.getlength(candidate), bounds[2] - min(0, bounds[0]))
+            if current and measured_width > width:
                 lines.append(current)
                 current = character
             else:
@@ -57,18 +67,93 @@ def wrap_text(text: str, font, width: int, *, cancel: CancelToken | None = None)
     return lines
 
 
+class _Layout:
+    """Measure once with the fonts that will actually paint every line."""
+    def __init__(self, options):
+        type_style = typography()
+        self.body = _font(options.font_size)
+        self.table_heading = _font(options.font_size, True)
+        self.heading = _font(round(options.font_size * type_style['heading_scale']), True)
+        self.section = _font(round(options.font_size * type_style['section_scale']), True)
+        self.title = _font(round(options.font_size * type_style['title_scale']), True)
+        # Fixed page furniture stays readable even at the 320px/96px extreme.
+        self.caption = _font(max(10, min(22, round(options.font_size * type_style['caption_scale']))))
+        self.margin = min(48, options.width // 14)
+        self.width = options.width - self.margin * 2
+        self.padding = min(18, max(8, options.font_size // 2))
+        self.gap = max(10, options.font_size // 2)
+        self.chrome_padding = min(24, max(12, options.font_size // 2))
+        self.body_height = math.ceil(options.font_size * type_style['line_height'])
+        self.heading_height = math.ceil(self.heading.size * type_style['line_height'])
+        self.section_height = math.ceil(self.section.size * 1.4)
+        self.title_height = math.ceil(self.title.size * 1.35)
+        self.caption_height = math.ceil(self.caption.size * type_style['line_height'])
+        self.header_height = self.caption_height + self.chrome_padding * 2
+        self.footer_height = self.caption_height + self.chrome_padding * 2
+        self.page_height = min(options.max_page_height, 20_000_000 // options.width)
+        self.capacity = self.page_height - self.header_height - self.footer_height
+
+
+def _table_widths(width: int, count: int) -> list[int]:
+    weights = [1.6] + [1] * (count - 1)
+    widths = [int(width * weight / sum(weights)) for weight in weights]
+    widths[-1] += width - sum(widths)
+    return widths
+
+
+def _block_lines(block, layout: _Layout, cancel) -> list[DrawLine]:
+    lines = []
+    heading = wrap_text(block.title, layout.heading, layout.width - layout.padding * 2, cancel=cancel)
+    for index, text in enumerate(heading):
+        top = layout.padding if index == 0 else 0
+        bottom = layout.padding if index == len(heading) - 1 else 0
+        lines.append(DrawLine(text, layout.heading_height + top + bottom,
+            'warning-heading' if block.group == '草稿警告' else 'heading',
+            padding_top=top, padding_bottom=bottom, first=index == 0,
+            last=index == len(heading) - 1, group=block.group))
+
+    def add_row(key, value, row_index=-1):
+        wrapped = wrap_text(f'{key}：{value}', layout.body, layout.width - layout.padding * 2, cancel=cancel)
+        for index, text in enumerate(wrapped):
+            lines.append(DrawLine(text, layout.body_height,
+                'potential' if '潜能' in key else 'body', index > 0,
+                first=index == 0, last=index == len(wrapped) - 1,
+                row_index=row_index, group=block.group))
+
+    for row_index, (key, value) in enumerate(block.rows):
+        add_row(key, value, row_index)
+    if block.columns:
+        if layout.width >= (len(block.columns) * 3 + 4) * layout.body.size:
+            widths = _table_widths(layout.width, len(block.columns))
+            for row_index, row in enumerate([block.columns, *block.cells]):
+                font = layout.table_heading if row_index == 0 else layout.body
+                wrapped = [wrap_text(str(row[column]) if column < len(row) else '', font,
+                                     width - layout.padding * 2, cancel=cancel)
+                           for column, width in enumerate(widths)]
+                fragments = max(map(len, wrapped), default=1)
+                for part in range(fragments):
+                    cells = [values[part] if part < len(values) else '' for values in wrapped]
+                    lines.append(DrawLine(' | '.join(cells), layout.body_height,
+                        'table-header' if row_index == 0 else 'table', cells=cells,
+                        column_labels=block.columns, column_widths=widths,
+                        first=part == 0, last=part == fragments - 1,
+                        row_index=row_index - 1, group=block.group))
+        else:
+            # Preserve the labeled fallback rather than compressing seven columns.
+            for row_index, row in enumerate(block.cells):
+                for column, key in enumerate(block.columns):
+                    add_row(key, str(row[column]) if column < len(row) else '', row_index)
+                lines.append(DrawLine('', max(6, layout.gap // 2), 'separator', group=block.group))
+    lines.append(DrawLine('', layout.padding + layout.gap, 'card-end', padding_bottom=layout.gap,
+                          group=block.group))
+    return lines
+
+
 def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None, emit=null_progress) -> list[list[DrawLine]]:
     options = document.options
     single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
-    body_font = _font(options.font_size)
-    heading_font = _font(round(options.font_size * 1.12), True)
-    margin = min(48, options.width // 14)
-    content_width = options.width - 2 * margin
-    line_height = math.ceil(options.font_size * 1.48)
-    heading_height = math.ceil(options.font_size * 1.85)
-    # Reserve a complete title and page footer on every page.
-    page_height = min(options.max_page_height, 20_000_000 // options.width)
-    capacity = None if single_module_image else page_height - margin * 2 - heading_height * 2
+    layout = _Layout(options)
+    capacity = None if single_module_image else layout.capacity
     pages: list[list[DrawLine]] = []
     current: list[DrawLine] = []
     used = 0
@@ -80,45 +165,51 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
         if capacity is not None and used + line.height > capacity and current:
             pages.append(current)
             current, used = [], 0
+            # An empty card tail must not create a page containing only whitespace.
+            if line.kind == 'card-end':
+                return
+        if capacity is not None and line.height > capacity:
+            raise ValueError('图片分页空间不足。请增加单页高度或减小字号。')
         current.append(line)
         used += line.height
 
-    blocks = semantic_blocks(document)
-    for block_index, block in enumerate(blocks, 1):
-        if cancel:
-            cancel.check()
-        emit({'kind':'progress','stage':'report_layout','current':block_index,'total':len(blocks),'message':block.title})
-        heading = wrap_text(block.title, heading_font, content_width - 16, cancel=cancel)
-        # Keep a section heading with at least its first content line when feasible.
-        required = len(heading) * heading_height + line_height
-        if capacity is not None and current and used + required > capacity:
+    def keep_with_content(required):
+        nonlocal current, used
+        if capacity is not None and current and required <= capacity and used + required > capacity:
             pages.append(current)
             current, used = [], 0
-        for text in heading:
-            add(DrawLine(text, heading_height, 'warning-heading' if block.group == '草稿警告' else 'heading'))
-        for key, value in block.rows:
-            lines = wrap_text(f'{key}：{value}', body_font, content_width - 12, cancel=cancel)
-            for index, text in enumerate(lines):
-                add(DrawLine(text, line_height, 'potential' if '潜能' in key else 'body', index > 0))
-        if block.columns:
-            if content_width >= (len(block.columns) * 3 + 4) * options.font_size:
-                weights = [1.6] + [1] * (len(block.columns)-1)
-                widths = [int(content_width * weight / sum(weights)) for weight in weights]
-                for row_index,row in enumerate([block.columns,*block.cells]):
-                    wrapped = [wrap_text(value,body_font,width-16,cancel=cancel) for value,width in zip(row,widths)]
-                    for line_index in range(max(map(len,wrapped),default=1)):
-                        cells = [values[line_index] if line_index < len(values) else '' for values in wrapped]
-                        add(DrawLine(' | '.join(cells),line_height,'table-header' if row_index==0 else 'table',
-                                     cells=cells,column_labels=block.columns))
-                add(DrawLine('', max(8,line_height//2)))
-                continue
-            # A narrow image uses labeled rows instead of unreadably narrow columns.
-            for row in block.cells:
-                for key, value in zip(block.columns, row):
-                    for index, text in enumerate(wrap_text(f'{key}：{value}', body_font, content_width - 12, cancel=cancel)):
-                        add(DrawLine(text, line_height, 'potential' if key == '潜能' else 'body', index > 0))
-                add(DrawLine('', max(8, line_height // 3), 'separator'))
-        add(DrawLine('', max(8, line_height // 2)))
+
+    # The full source title participates in pagination, even when it alone needs
+    # several pages. A short masthead is repeated without duplicating source text.
+    for text in wrap_text(document.title, layout.title, layout.width, cancel=cancel):
+        add(DrawLine(text, layout.title_height, 'title'))
+    add(DrawLine('', layout.chrome_padding + layout.gap, 'title-end', padding_bottom=layout.gap))
+    groups = ordered_groups(document)
+    total = sum(len(blocks) for _, _, _, blocks in groups)
+    block_index = 0
+    for group, _, title, blocks in groups:
+        section = wrap_text(title, layout.section, layout.width - 16, cancel=cancel)
+        section_lines = [DrawLine(text, layout.section_height + (layout.gap if index == 0 else 0) +
+                                 (layout.gap if index == len(section) - 1 else 0), 'section',
+                                 padding_top=layout.gap if index == 0 else 0,
+                                 padding_bottom=layout.gap if index == len(section) - 1 else 0,
+                                 last=index == len(section) - 1, group=group)
+                         for index, text in enumerate(section)]
+        for group_index, (_, block) in enumerate(blocks):
+            if cancel:
+                cancel.check()
+            block_index += 1
+            emit({'kind':'progress','stage':'report_layout','current':block_index,'total':total,'message':block.title})
+            lines = _block_lines(block, layout, cancel)
+            heading_size = sum(line.height for line in lines if line.kind in {'heading', 'warning-heading'})
+            first_content = next((line.height for line in lines if line.kind not in {'heading', 'warning-heading'}), 0)
+            if group_index == 0:
+                keep_with_content(sum(line.height for line in section_lines) + heading_size + first_content)
+                for line in section_lines:
+                    add(line)
+            keep_with_content(heading_size + first_content)
+            for line in lines:
+                add(line)
     if current:
         pages.append(current)
     return pages
@@ -129,24 +220,10 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
     options = document.options
     single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
     pages = layout_pages(document, cancel=cancel, emit=emit)
-    dark = options.theme == 'dark'
-    if dark:
-        colors = dict(
-            bg='#15191e', fg='#f1f4f8', header='#212832', header_border='#323e4e',
-            muted='#7a8c9e', accent='#ffb830', accent_marker='#00c2d6',
-            border='#2d3744', warning_header='#451e11', warning_marker='#f59e0b', warning_fg='#fed7aa'
-        )
-    else:
-        colors = dict(
-            bg='#ffffff', fg='#16222c', header='#edf3f7', header_border='#d3dee7',
-            muted='#5e7182', accent='#b45309', accent_marker='#0093a2',
-            border='#d2dce6', warning_header='#fef3c7', warning_marker='#d97706', warning_fg='#92400e'
-        )
-    margin = min(48, options.width // 14)
-    body = _font(options.font_size)
-    heading = _font(round(options.font_size * 1.12), True)
-    small = _font(max(12, round(options.font_size * .7)))
-    heading_height = math.ceil(options.font_size * 1.85)
+    colors = theme_colors(options.theme)
+    layout = _Layout(options)
+    margin = layout.margin
+    right = options.width - margin
     paths = []
     for index, lines in enumerate(pages, 1):
         if cancel:
@@ -154,8 +231,9 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
         emit({'kind':'progress','stage':'report_png','current':index,'total':len(pages),'message':f'{document.title} · 第{index}页'})
         if cancel:
             cancel.check()
-        full_height = margin * 2 + heading_height * 2 + sum(line.height for line in lines)
-        height = full_height if single_module_image else min(options.max_page_height, full_height)
+        height = layout.header_height + layout.footer_height + sum(line.height for line in lines)
+        if not single_module_image and height > layout.page_height:
+            raise ValueError('图片排版超过单页高度，未生成裁切图片。请增加单页高度或减小字号。')
         # RGB alone needs three bytes per pixel, with extra drawing/PNG buffers.
         # Refuse an excessive single canvas before allocating it; silently
         # splitting or clipping here would violate the requested layout.
@@ -166,58 +244,114 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
         image = None
         try:
             try:
-                image = Image.new('RGB', (options.width, height), colors['bg'])
+                image = Image.new('RGB', (options.width, height), colors['canvas'])
             except MemoryError as error:
                 if single_module_image:
                     raise ValueError('内存不足，无法生成模组单张长图。请改用分页排版或减少所选模组。') from error
                 raise
             draw = ImageDraw.Draw(image)
-            # A short repeated title cannot run beyond the right edge.
-            title = wrap_text(document.title, heading, options.width - margin * 2 - 16, cancel=cancel)[0]
-            if title != document.title:
-                title = title[:-1] + '…'
-            draw.rectangle((margin, margin + 2, margin + 5, margin + heading_height - 6), fill=colors['accent_marker'])
-            draw.text((margin + 12, margin), title, font=heading, fill=colors['fg'])
-            y_title_line = margin + heading_height - 4
-            draw.line((margin, y_title_line, options.width - margin, y_title_line), fill=colors['border'])
-            draw.line((margin, y_title_line, margin + min(72, (options.width - margin * 2) // 4), y_title_line), fill=colors['accent_marker'], width=2)
-            y = margin + heading_height
-            for line in lines:
+            draw.rectangle((0, 0, options.width, layout.header_height), fill=colors['bar'])
+            draw.text((margin, layout.chrome_padding), 'ARKNIGHTS / 本地资料',
+                      font=layout.caption, fill=colors['bar_muted'], anchor='lt')
+            if not lines or lines[0].kind != 'title':
+                draw.line((0, layout.header_height - 2, options.width, layout.header_height - 2),
+                          fill=colors['accent'], width=3)
+            y = layout.header_height
+            for line_index, line in enumerate(lines):
                 if cancel:
                     cancel.check()
-                if line.kind in {'heading','warning-heading'}:
+                bottom = y + line.height
+                if line.kind == 'title':
+                    draw.rectangle((0, y, options.width, bottom), fill=colors['bar'])
+                    draw.text((margin, y + (line.height - layout.title.size) // 2), line.text,
+                              font=layout.title, fill=colors['bar_ink'], anchor='lt')
+                elif line.kind == 'title-end':
+                    end = bottom - line.padding_bottom
+                    draw.rectangle((0, y, options.width, end), fill=colors['bar'])
+                    draw.line((0, end - 2, options.width, end - 2), fill=colors['accent'], width=3)
+                elif line.kind == 'section':
+                    text_y = y + line.padding_top + (layout.section_height - layout.section.size) // 2
+                    draw.text((margin + 12, text_y), line.text, font=layout.section,
+                              fill=colors['accent_dark'], anchor='lt')
+                    draw.rectangle((margin, text_y, margin + 4, text_y + layout.section.size), fill=colors['accent'])
+                    if line.last:
+                        draw.line((margin, bottom - 4, right, bottom - 4), fill=colors['accent'], width=2)
+                elif line.kind in {'heading','warning-heading'}:
                     is_warning = line.kind == 'warning-heading'
-                    h_bg = colors['warning_header'] if is_warning else colors['header']
-                    h_marker = colors['warning_marker'] if is_warning else colors['accent_marker']
-                    h_fg = colors['warning_fg'] if is_warning else colors['fg']
-                    draw.rectangle((margin - 6, y, options.width - margin + 6, y + line.height - 4),
-                                   fill=h_bg, outline=colors['header_border'])
-                    draw.rectangle((margin - 6, y, margin - 1, y + line.height - 4), fill=h_marker)
-                    draw.text((margin + 6, y + 3), line.text, font=heading, fill=h_fg)
+                    border = colors['warning_rule'] if is_warning else colors['rule']
+                    draw.rectangle((margin, y, right, bottom),
+                                   fill=colors['warning_bg'] if is_warning else colors['header'])
+                    draw.line((margin, y, margin, bottom), fill=border)
+                    draw.line((right, y, right, bottom), fill=border)
+                    if line.first or line_index == 0:
+                        draw.line((margin, y, right, y), fill=border)
+                    if line.last:
+                        draw.line((margin, bottom - 1, right, bottom - 1), fill=border)
+                    text_y = y + line.padding_top + (layout.heading_height - layout.heading.size) // 2
+                    draw.text((margin + layout.padding, text_y), line.text, font=layout.heading,
+                              fill=colors['warning_ink'] if is_warning else colors['header_ink'], anchor='lt')
                 elif line.kind in {'table','table-header'}:
-                    weights = [1.6] + [1] * (len(line.cells)-1)
-                    widths = [int((options.width-margin*2) * weight / sum(weights)) for weight in weights]
                     x = margin
-                    for column_index,(cell,width) in enumerate(zip(line.cells,widths)):
+                    for column_index,(cell,width) in enumerate(zip(line.cells,line.column_widths)):
                         is_h = line.kind == 'table-header'
-                        cell_bg = colors['header'] if is_h else colors['bg']
-                        draw.rectangle((x, y, x + width, y + line.height), fill=cell_bg, outline=colors['border'])
+                        cell_bg = colors['header'] if is_h else colors['table_alt'] if line.row_index % 2 else colors['paper']
+                        draw.rectangle((x, y, x + width, bottom), fill=cell_bg)
+                        draw.line((x, y, x, bottom), fill=colors['rule'])
+                        draw.line((x + width, y, x + width, bottom), fill=colors['rule'])
+                        if line.first or line_index == 0:
+                            draw.line((x, y, x + width, y), fill=colors['rule'])
+                        if line.last:
+                            draw.line((x, bottom - 1, x + width, bottom - 1), fill=colors['rule'])
                         is_pot = line.column_labels[column_index] == '潜能'
-                        draw.text((x + 7, y + 3), cell, font=body, fill=colors['accent'] if is_pot else colors['fg'])
+                        if cell:
+                            draw.text((x + layout.padding, y + (line.height - layout.body.size) // 2), cell,
+                                      font=layout.table_heading if is_h else layout.body,
+                                      fill=colors['gold'] if is_pot else colors['header_ink'] if is_h else colors['ink'], anchor='lt')
                         x += width
+                elif line.kind == 'card-end':
+                    end = bottom - line.padding_bottom
+                    warning = line.group == '草稿警告'
+                    border = colors['warning_rule'] if warning else colors['rule']
+                    draw.rectangle((margin, y, right, end), fill=colors['warning_bg'] if warning else colors['paper'])
+                    draw.line((margin, y, margin, end), fill=border)
+                    draw.line((right, y, right, end), fill=border)
+                    draw.line((margin, end, right, end), fill=border)
                 elif line.kind == 'separator':
-                    draw.line((margin, y + line.height // 2, options.width - margin, y + line.height // 2), fill=colors['border'])
+                    draw.rectangle((margin, y, right, bottom), fill=colors['paper'])
+                    draw.line((margin, y, margin, bottom), fill=colors['rule'])
+                    draw.line((right, y, right, bottom), fill=colors['rule'])
+                    draw.line((margin, y + line.height // 2, right, y + line.height // 2), fill=colors['rule'])
                 else:
-                    draw.text((margin + 6, y + 3), line.text, font=body,
-                              fill=colors['accent'] if line.kind == 'potential' else colors['fg'])
-                y += line.height
-            footer = f'第 {index} / {len(pages)} 页 · 本地数据快照 · 模板 {document.metadata.get("template_version", "")} '
-            footer_y = height - margin - options.font_size
-            draw.line((margin, footer_y - 8, options.width - margin, footer_y - 8), fill=colors['border'])
-            draw.text((margin, footer_y), footer, font=small, fill=colors['muted'])
+                    warning = line.group == '草稿警告'
+                    border = colors['warning_rule'] if warning else colors['rule']
+                    background = (colors['warning_bg'] if warning else colors['gold_bg'] if line.kind == 'potential'
+                                  else colors['table_alt'] if line.row_index % 2 else colors['paper'])
+                    draw.rectangle((margin, y, right, bottom), fill=background)
+                    draw.line((margin, y, margin, bottom), fill=border)
+                    draw.line((right, y, right, bottom), fill=border)
+                    if line.first or line_index == 0:
+                        draw.line((margin, y, right, y), fill=border)
+                    if line.text:
+                        draw.text((margin + layout.padding, y + (line.height - layout.body.size) // 2), line.text,
+                                  font=layout.body, fill=colors['warning_ink'] if warning else colors['gold']
+                                  if line.kind == 'potential' else colors['ink'], anchor='lt')
+                if line_index == len(lines) - 1 and line.kind in {'body', 'potential', 'table', 'table-header', 'heading', 'warning-heading'}:
+                    draw.line((margin, bottom - 1, right, bottom - 1), fill=colors['rule'])
+                y = bottom
+            footer = f'第 {index} / {len(pages)} 页'
+            full_footer = footer + ' · 本地数据快照'
+            if layout.caption.getlength(full_footer) <= layout.width:
+                footer = full_footer
+            footer_y = height - layout.footer_height
+            draw.line((margin, footer_y + 3, right, footer_y + 3), fill=colors['rule'])
+            draw.text((margin, footer_y + layout.chrome_padding), footer,
+                      font=layout.caption, fill=colors['muted'], anchor='lt')
             if cancel:
                 cancel.check()
-            image.save(temporary, format='PNG', optimize=False)
+            info = PngInfo()
+            info.add_text('report_theme', options.theme)
+            info.add_text('report_style', style_version())
+            image.save(temporary, format='PNG', optimize=False, pnginfo=info)
             if cancel:
                 cancel.check()
             temporary.replace(path)

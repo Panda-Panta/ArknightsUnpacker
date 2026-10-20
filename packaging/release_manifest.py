@@ -68,7 +68,7 @@ def main():
     if not (bundle / "ArknightsUnpacker.exe").is_file():
         raise SystemExit("Missing executable")
     required_assets = (
-        "resources/folder_rules.json", "resources/html/operator.html", "resources/html/report.css",
+        "resources/folder_rules.json", "resources/report_styles.json", "resources/html/operator.html", "resources/html/report.css",
         "vendor/ark_fbs/__init__.py", "vendor/ark_fbs/CN/__init__.py", "vendor/ark_fbs/CN/character_table.py",
         "vendor/lz4ak/Block.py", "fmod_toolkit/libfmod/Windows/x64/fmod.dll",
         "PySide6/plugins/platforms/qwindows.dll", "docs/USER_GUIDE.md", "docs/THIRD_PARTY_NOTICES.md",

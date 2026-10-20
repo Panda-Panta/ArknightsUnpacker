@@ -7,6 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
+const reportStyles = JSON.parse(fs.readFileSync(path.join(__dirname, '../resources/report_styles.json'), 'utf8'));
 
 function argumentsOf(argv) {
   const result = {html: [], output: '', channel: 'msedge'};
@@ -101,6 +102,30 @@ async function verifyReport(browser, filename, directory) {
   try {
     await page.goto(result.fileUrl, {waitUntil: 'load', timeout: 20000});
     await capture('desktop-1450');
+    await check('selected-theme-shared-palette-and-fonts', async () => {
+      const actual = await page.evaluate(() => {
+        const color = (selector, property) => {
+          const element = document.querySelector(selector);
+          return element ? getComputedStyle(element)[property] : null;
+        };
+        return {theme: document.documentElement.dataset.reportTheme,
+          colorScheme: getComputedStyle(document.documentElement).colorScheme,
+          canvas: color('body', 'backgroundColor'), paper: color('main', 'backgroundColor'),
+          ink: color('body', 'color'), header: color('details.block > summary', 'backgroundColor'),
+          bar: color('.page-bar', 'backgroundColor'), font: color('body', 'fontFamily'),
+          selected: color('.controls button[aria-pressed="true"], [data-stage-controls] button[aria-pressed="true"]', 'backgroundColor')};
+      });
+      assert(['light', 'dark'].includes(actual.theme), 'Report must identify the selected light/dark export theme');
+      const colors = reportStyles.themes[actual.theme];
+      const rgb = hex => 'rgb(' + [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16)).join(', ') + ')';
+      for (const role of ['canvas', 'paper', 'ink', 'header', 'bar']) {
+        if (actual[role] !== null) assert(actual[role] === rgb(colors[role]), `${role} must use shared ${actual.theme} palette: ${actual[role]}`);
+      }
+      if (actual.selected !== null) assert(actual.selected === rgb(colors.selected_bg), 'Selected control has the wrong theme');
+      assert(actual.colorScheme === actual.theme, 'Native form-control color scheme does not match export theme');
+      assert(actual.font.includes('Microsoft YaHei'), 'Report body does not use the shared CJK font stack');
+      return actual;
+    });
     await check('semantic-parent-markup', async () => {
       const structure = await page.evaluate(() => ({
         sections: document.querySelectorAll('[data-report-section]').length,
@@ -252,9 +277,22 @@ async function verifyReport(browser, filename, directory) {
       assert(during.open === during.total && during.total > 0, 'Print must expand every report block');
       assert(during.hidden.length === 0, 'Print must remove search/tab/stage filtering from report content');
       assert(JSON.stringify(before) === JSON.stringify(after), 'afterprint did not restore exact search/tab/stage/fold state');
+      const colors = () => page.evaluate(() => ({theme: document.documentElement.dataset.reportTheme,
+        scheme: getComputedStyle(document.documentElement).colorScheme,
+        paper: getComputedStyle(document.querySelector('main')).backgroundColor,
+        ink: getComputedStyle(document.body).color}));
+      const screenColors = await colors();
+      await page.emulateMedia({media: 'print'});
+      const printColors = await colors();
+      const rgb = hex => 'rgb(' + [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16)).join(', ') + ')';
+      assert(printColors.paper === rgb(reportStyles.themes.light.paper) && printColors.ink === rgb(reportStyles.themes.light.ink), 'Print must use the shared light paper palette');
+      assert(printColors.scheme === 'light', 'Print form controls must use light color scheme');
+      await capture('print-css-1450');
+      await page.emulateMedia({media: 'screen'});
+      assert(JSON.stringify(screenColors) === JSON.stringify(await colors()), 'Leaving print changed the chosen screen theme');
       await page.locator('#clear-search').click();
       await page.locator('#expand-all').click();
-      return {before, during, after, actualPaperPrint: false};
+      return {before, during, after, screenColors, printColors, actualPaperPrint: false};
     });
     await check('mobile-390-local-table-scroll', async () => {
       await page.setViewportSize({width: 390, height: 844});
