@@ -43,7 +43,7 @@ class EntityView(QWidget):
         self.diagnostics = QLabel()
         self.diagnostics.setObjectName(kind + 'Diagnostics')
         self.diagnostics.setWordWrap(True)
-        self.diagnostics.setStyleSheet('color: #785223; background: #fff4dd; padding: 8px;')
+        self.diagnostics.setProperty('notice', 'warning')
         self.diagnostics.hide()
         layout.addWidget(self.diagnostics)
         tools = QHBoxLayout()
@@ -71,6 +71,8 @@ class EntityView(QWidget):
         self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setStretchLastSection(True)
+        for column, width in enumerate([190, 140, 65, 110] if kind == 'modules' else [190, 70, 80, 110]):
+            self.table.setColumnWidth(column, width)
         self.table.selectionModel().selectionChanged.connect(self.select_profile)
         split.addWidget(self.table)
         detail = QWidget()
@@ -87,6 +89,7 @@ class EntityView(QWidget):
         else:
             self.module_choice.hide()
         self.details = QTextBrowser()
+        self.details.setObjectName(kind + 'Details')
         self.details.setOpenExternalLinks(False)
         self.details.setHtml('<h2>资料预览</h2><p>解析完成后选择一项查看。资料中的诊断与来源将随导出保留。</p>')
         detail_layout.addWidget(self.details)

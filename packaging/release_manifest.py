@@ -7,6 +7,7 @@ from importlib import metadata
 import json
 from pathlib import Path
 import platform
+import subprocess
 
 
 def sha256(path: Path) -> str:
@@ -24,6 +25,20 @@ def source_records(root: Path):
         source_inputs.extend(files_under(root / name))
     source_inputs.extend(root / "docs" / name for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
     return [{"path": p.relative_to(root).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in sorted(set(source_inputs))]
+
+
+def source_provenance(root: Path):
+    """Record the actual checkout; input hashes remain authoritative for bytes."""
+    try:
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL,
+                                           encoding="utf-8").strip()
+        return {"source_kind": "git-workspace-file-manifest", "git_commit": git("rev-parse", "HEAD"),
+                "git_tree": git("rev-parse", "HEAD^{tree}"),
+                "git_dirty": bool(git("status", "--porcelain", "--untracked-files=normal"))}
+    except (OSError, subprocess.CalledProcessError):
+        return {"source_kind": "workspace-file-manifest", "git_commit": None, "git_tree": None,
+                "git_dirty": None}
 
 
 def main():
@@ -70,11 +85,11 @@ def main():
     provenance = {
         "version": args.version, "task_id": args.task_id,
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
-        "source_kind": "workspace-file-manifest-no-git", "python": platform.python_version(),
+        **source_provenance(root), "python": platform.python_version(),
         "source_consistency_checked": bool(args.source_snapshot),
         "platform": platform.platform(),
         "preflight": __import__("os").environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
-        "acceptance": "Build succeeded; consult artifacts/M9 for final runtime acceptance.",
+        "acceptance": "Build succeeded; consult docs/ACCEPTANCE.md for runtime acceptance boundaries.",
         "upstreams": {
             "Ark-Unpacker": "4a4b9efc6be4690b68b70b4a16578950baa066d3",
             "Ark-FBS-Py": "161d5e229916d7193364983396076556fbeaa549",

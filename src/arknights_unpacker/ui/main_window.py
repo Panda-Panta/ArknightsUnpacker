@@ -6,7 +6,7 @@ import uuid
 import os
 from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent, QFontDatabase, QFont
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox, QCheckBox, QTabWidget,
     QComboBox, QMessageBox, QScrollArea)
 from arknights_unpacker.contracts import BuildSpec, ExportFormat, ReportOptions, ExtractionResult, as_jsonable
@@ -18,7 +18,7 @@ from .module_view import ModuleView
 from .jobs import JobQueue, JobsView
 from .settings import SettingsView
 from .report_preview import ObjectsDialog, ReportArtifactsDialog
-from .styles import STYLE
+from .styles import apply_theme
 from .job_history import remaining_extraction
 
 
@@ -26,13 +26,18 @@ class MainWindow(QMainWindow):
     """Native workbench; all expensive services run in a serial cancellable queue."""
     def __init__(self, services, initial_root: str = ''):
         super().__init__()
+        apply_theme(QApplication.instance())
         self.services = services
         self._scan_pending = False
         self._load_pending = False
         self._monitor_stamp = None
         self._dialogs = []
         self._profile_pending = set()
+        self._restored_module_choices = {}
         self._closing = False
+        self._restore_pending = False
+        self._view_state_ready = False
+        self._display_data_identity = None
         if not QFontDatabase.families():
             # The offscreen Qt platform has no system font discovery on Windows.
             font_path = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts/msyh.ttc'
@@ -44,7 +49,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('明日方舟 · 资源与资料工作台')
         self.resize(1450, 930)
         self.setMinimumSize(1050, 700)
-        self.setStyleSheet(STYLE)
         self.queue = JobQueue(self, history_root=Path(services.data_root) / 'queue', resume_handler=self.prepare_recovery)
         self.queue.message.connect(self.show_status)
         self.queue.changed.connect(self._queue_changed)
@@ -57,11 +61,11 @@ class MainWindow(QMainWindow):
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(14, 9, 14, 12)
         title_row = QHBoxLayout()
-        title = QLabel('明日方舟  /  资源与资料工作台')
+        title = QLabel('ARKNIGHTS  /  资源与资料工作台')
         title.setObjectName('appTitle')
         title_row.addWidget(title)
         title_row.addStretch()
-        subtitle = QLabel('本地资源  ·  只读扫描  ·  可追溯导出')
+        subtitle = QLabel('资源索引  /  资料档案  /  原图导出')
         subtitle.setObjectName('subtitle')
         title_row.addWidget(subtitle)
         header_layout.addLayout(title_row)
@@ -75,7 +79,8 @@ class MainWindow(QMainWindow):
         self.choose_root_button = QPushButton('选择目录…')
         self.choose_root_button.clicked.connect(self.choose_root)
         root_row.addWidget(self.choose_root_button)
-        self.scan_button = QPushButton('扫描 / 重新扫描')
+        self.scan_button = QPushButton('扫描 / 检查更新')
+        self.scan_button.setToolTip('与程序旁已保存的完整扫描比较，不会删除原有历史结果。')
         self.scan_button.setProperty('primary', True)
         self.scan_button.setObjectName('scanButton')
         self.scan_button.clicked.connect(self.scan)
@@ -94,6 +99,10 @@ class MainWindow(QMainWindow):
         self.strict.setToolTip('重新计算所选资源范围的完整摘要；耗时更长，可取消。')
         root_row.addWidget(self.strict)
         header_layout.addLayout(root_row)
+        self.session_label = QLabel('扫描和解析结果会自动保存在程序旁；下次启动直接读取。')
+        self.session_label.setObjectName('sessionStatus')
+        self.session_label.setWordWrap(True)
+        header_layout.addWidget(self.session_label)
         layout.addWidget(header)
         baseline_row = QHBoxLayout()
         baseline_row.addWidget(QLabel('资料对照'))
@@ -139,9 +148,10 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         footer.addWidget(self.cancel_button)
         layout.addLayout(footer)
-        self.statusBar().showMessage('选择游戏目录开始。核心资料需要手动解析。')
+        self.statusBar().showMessage('选择游戏目录开始，或读取上次保存的扫描与资料。')
         self.explorer.extract_requested.connect(self.extract)
         self.updates.extract_requested.connect(self.extract)
+        self.updates.images_requested.connect(lambda paths: self.extract(paths, kinds=['image'], mode='auto'))
         self.explorer.objects_requested.connect(self.objects)
         self.settings.changed.connect(self.save_settings)
         self.settings.output.textChanged.connect(lambda text: self.output_label.setText('输出：' + text))
@@ -160,7 +170,106 @@ class MainWindow(QMainWindow):
         self.monitor_timer.start()
         self._queue_changed()
         if self.root_edit.text().strip():
-            QTimer.singleShot(200, self.scan)
+            QTimer.singleShot(0, self.restore_previous)
+
+    def restore_previous(self):
+        if self._closing or self._restore_pending or self.queue.busy:
+            return
+        root = self.root_edit.text().strip()
+        if not root:
+            return
+        self._restore_pending = True
+        job = self.queue.submit('读取上次扫描与解析结果',
+                                lambda **kw: self.services.restore(root, **kw), self.restored)
+        def cleanup():
+            if job.status not in ('排队中', '运行中', '正在取消'):
+                self._restore_pending = False
+        self.queue.changed.connect(cleanup)
+
+    def restored(self, result):
+        if result.get('snapshot') is not None:
+            self.scanned(result)
+        elif self.services.gamedata is not None:
+            self.data_loaded(self.services.gamedata)
+        else:
+            self.refresh_entities()
+            self.refresh_history()
+        self.restore_view_state()
+        self._view_state_ready = True
+        has_results = self.services.scan_snapshot is not None or self.services.gamedata is not None
+        self.refresh_session_label(restored=has_results)
+        if has_results:
+            self.show_status('已读取上次保存的结果。点击“扫描 / 检查更新”与已保存基线比较；核心资料可直接查看和导出。')
+        else:
+            self.show_status('当前目录尚无保存结果。点击“扫描 / 检查更新”，再按需解析核心数据。')
+
+    def refresh_session_label(self, *, restored=False):
+        scan = self.services.scan_snapshot
+        data = self.services.gamedata
+        parts = ['已恢复保存结果' if restored else '结果已自动保存']
+        if scan is not None:
+            from .models import time_text
+            parts.append(f'{len(value(scan, "files", [])):,} 个文件 · {time_text(value(scan, "finished_at"))}')
+        if data is not None:
+            parts.append(f'资料 {value(data, "version", "未知版本")} · {len(self.services.operators()):,} 项干员资料')
+        if len(parts) == 1:
+            parts = ['当前目录暂无保存结果，扫描后自动记录。']
+        self.session_label.setText('　|　'.join(parts))
+        self.session_label.setToolTip('保存位置：' + str(self.services.data_root))
+
+    def remember_view_state(self):
+        # Cancelling startup must not save the empty defaults over the user's
+        # previous filters, selected operator or tab before they were restored.
+        if not self._view_state_ready:
+            return
+        root = value(self.services.installation, 'root') or self.root_edit.text().strip()
+        if not root:
+            return
+        def selected_id(view):
+            rows = selected_records(view.table)
+            return str(rows[0]['id']) if len(rows) == 1 else None
+        state = {'root': str(Path(root).resolve()), 'tab': self.tabs.currentIndex(),
+                 'explorer_folder': self.explorer.folder, 'explorer_recursive': self.explorer.recursive.isChecked(),
+                 'explorer_ab': self.explorer.ab_only.isChecked(), 'explorer_search': self.explorer.search.text(),
+                 'update_mode': self.updates.mode.currentIndex(), 'update_ab': self.updates.ab_only.isChecked(),
+                 'update_search': self.updates.search.text()}
+        for key, view in (('operators', self.operators), ('modules', self.modules)):
+            state[key] = {'search': view.search.text(), 'only_changes': view.only_changes.isChecked(),
+                          'only_new': view.only_new.isChecked(), 'selected_id': selected_id(view),
+                          'module_id': view.module_choice.currentData()}
+        states = self.services.config.setdefault('view_states', {})
+        states[state['root']] = state
+
+    def restore_view_state(self):
+        root = value(self.services.installation, 'root') or self.root_edit.text().strip()
+        if not root:
+            return
+        state = self.services.config.get('view_states', {}).get(str(Path(root).resolve()), {})
+        if not state:
+            return
+        self.explorer.recursive.setChecked(bool(state.get('explorer_recursive', False)))
+        self.explorer.ab_only.setChecked(bool(state.get('explorer_ab', False)))
+        self.explorer.search.setText(state.get('explorer_search', ''))
+        folder = str(state.get('explorer_folder', ''))
+        if (self.explorer.root / folder).resolve().is_relative_to(self.explorer.root.resolve()):
+            self.explorer.folder = folder
+            self.explorer.refresh()
+            self.explorer.breadcrumb.setText(str(self.explorer.root / folder))
+        self.updates.mode.setCurrentIndex(max(0, min(3, int(state.get('update_mode', 2)))))
+        self.updates.ab_only.setChecked(bool(state.get('update_ab', False)))
+        self.updates.search.setText(state.get('update_search', ''))
+        for key, view in (('operators', self.operators), ('modules', self.modules)):
+            saved = state.get(key, {})
+            view.search.setText(saved.get('search', ''))
+            view.only_changes.setChecked(bool(saved.get('only_changes', False)))
+            view.only_new.setChecked(bool(saved.get('only_new', False)))
+            for index, row in enumerate(view.model.rows):
+                if str(row['id']) == saved.get('selected_id'):
+                    if key == 'operators' and saved.get('module_id'):
+                        self._restored_module_choices[(key, str(row['id']))] = saved['module_id']
+                    view.table.selectRow(index)
+                    break
+        self.tabs.setCurrentIndex(max(0, min(self.tabs.count() - 1, int(state.get('tab', 0)))))
 
     def show_status(self, message):
         self.statusBar().showMessage(str(message)[-450:])
@@ -191,6 +300,7 @@ class MainWindow(QMainWindow):
         if not Path(root).is_dir():
             self.show_status('游戏目录不存在或无法访问：' + root)
             return
+        self.remember_view_state()
         hours, strict = self.hours.value(), self.strict.isChecked()
         self.services.config.update(game_root=root, hours=hours)
         self.services.save_config()
@@ -224,6 +334,9 @@ class MainWindow(QMainWindow):
         self._monitor_stamp = self.manifest_stamp()
         self.refresh_history()
         self.refresh_entities()
+        self.refresh_session_label()
+        self.restore_view_state()
+        self._view_state_ready = True
         self.show_status(f'扫描{"完成" if value(snapshot, "complete") else "存在未完成项"}：{len(value(snapshot, "files", [])):,} 个文件。')
 
     def _hours_changed(self):
@@ -240,6 +353,7 @@ class MainWindow(QMainWindow):
             self.show_status('核心数据解析已在队列中。')
             return
         self.settings.commit()
+        self.remember_view_state()
         self._load_pending = True
         self._load_job = self.queue.submit('解析核心数据', lambda **kw: self.services.load_data(root, **kw), self.data_loaded,
                                           request={'operation': 'load_data', 'root': root, 'locale': self.services.config.get('data_locale', 'unknown')})
@@ -267,13 +381,23 @@ class MainWindow(QMainWindow):
                     self.updates.empty.clear()
         self.refresh_entities()
         self.refresh_history()
+        self.refresh_session_label()
+        self.restore_view_state()
+        self._view_state_ready = True
         self.show_status('核心资料已解析。首次快照的历史状态未知；可导入完整历史基线比较。')
 
     def refresh_entities(self):
         if self.services.gamedata is None:
             self.operators.clear_data()
             self.modules.clear_data()
+            self._display_data_identity = None
             return
+        identity = (value(self.services.installation, 'profile_id'), value(self.services.gamedata, 'snapshot_id'))
+        if identity != self._display_data_identity:
+            self.operators.clear_data()
+            self.modules.clear_data()
+            self._restored_module_choices.clear()
+        self._display_data_identity = identity
         changes = self.services.entity_changes
         self.operators.set_rows(self.services.operators(), changes, self.services.gamedata)
         self.modules.set_rows(self.services.modules(), changes, self.services.gamedata)
@@ -293,6 +417,11 @@ class MainWindow(QMainWindow):
             rows = selected_records(view.table)
             if len(rows) == 1 and str(rows[0]['id']) == entity_id and view.module_choice.currentData() == spec.module_id:
                 view.set_profile(result)
+                module_id = self._restored_module_choices.pop((kind, entity_id), None)
+                if module_id:
+                    index = view.module_choice.findData(module_id)
+                    if index >= 0:
+                        view.module_choice.setCurrentIndex(index)
         job = self.queue.submit('查看资料 · ' + entity_id, call, done)
         def cleanup():
             if job.status not in ('运行中', '排队中', '正在取消'):
@@ -311,12 +440,12 @@ class MainWindow(QMainWindow):
             return None
         return str(output)
 
-    def extract(self, paths, object_ids=None, preview_dialog=None):
+    def extract(self, paths, object_ids=None, preview_dialog=None, *, kinds=None, mode=None):
         output = str(Path(self.services.data_root) / 'preview' / uuid.uuid4().hex) if preview_dialog else self.output_root()
         if output is None:
             return
-        kinds = [key for key, check in self.settings.kinds.items() if check.isChecked()]
-        mode = self.settings.mode.currentData()
+        kinds = list(kinds) if kinds is not None else [key for key, check in self.settings.kinds.items() if check.isChecked()]
+        mode = mode if mode is not None else self.settings.mode.currentData()
         if not kinds:
             self.show_status('请在设置中至少选择一种资源类型。')
             return
@@ -342,9 +471,10 @@ class MainWindow(QMainWindow):
                         break
                 else:
                     preview_dialog.status.setText('未生成可预览文件。请在任务页查看失败或跳过原因。')
-        self.queue.submit(('预览对象' if preview_dialog else '解包所选') + f' · {len(paths)} 个文件',
+        title = '预览对象' if preview_dialog else '导出包内原图' if kinds == ['image'] and mode == 'auto' else '解包所选'
+        self.queue.submit(title + f' · {len(paths)} 个文件',
                           lambda **kw: self.services.extract(paths, output, kinds=kinds, object_ids=object_ids, mode=mode, **kw), done, output,
-                          request={'operation': 'extract', 'root': self.root_edit.text().strip(), 'paths': list(paths),
+                          request={'operation': 'extract', 'root': str(value(self.services.installation, 'root') or self.root_edit.text().strip()), 'paths': list(paths),
                                    'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode})
 
     def objects(self, path):
@@ -532,13 +662,15 @@ class MainWindow(QMainWindow):
         self._monitor_stamp = stamp
 
     def closeEvent(self, event: QCloseEvent):
+        self._closing = True
+        self.monitor_timer.stop()
+        self.queue.shutdown()
         if self.queue.busy:
-            self._closing = True
-            self.queue.shutdown()
             self.show_status('正在取消任务并等待工作进程退出，完成后将自动关闭。')
             event.ignore()
             return
-        self.settings.commit()
+        self.remember_view_state()
         self.services.config.update(game_root=self.root_edit.text().strip(), hours=self.hours.value())
-        self.services.save_config()
+        # commit emits changed -> save_settings once, including the view state.
+        self.settings.commit()
         event.accept()

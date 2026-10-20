@@ -1,8 +1,8 @@
 # 实际工程结构
 
-更新：2026-10-19。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新：2026-10-20。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
-GitHub源码采用 `main`／`test`；Windows二进制放在 `v0.1.0` Release附件，`dist/`和`artifacts/`不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
+GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
 ```text
 ArknightsUnpacker/
@@ -11,13 +11,14 @@ ArknightsUnpacker/
 │  ├─ application.py              AppServices 用例集成，负责所选安装与输出保护
 │  ├─ contracts.py                共享模型、取消标记、进度与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
-│  ├─ paths.py                    数据／资源路径与原子写入
+│  ├─ paths.py                    程序旁数据路径、旧版非破坏迁入和原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  ├─ reports/                    语义块、PNG 排版、独立 HTML 与批次清单
-│  └─ ui/                         Qt 六页工作台、持久任务队列／手动恢复、对象／报告预览
-├─ resources/                     文件夹规则及设计参考配置、HTML 模板资料
+│  └─ ui/                         Qt 浅色六页工作台、启动恢复、更新批量导图、原图预览保存
+├─ resources/                     文件夹规则、HTML 模板资料、ui/ 主题矢量图标
+├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ vendor/                        固定 CN FlatBuffers schemas、LZ4AK 和来源摘要
 ├─ tests/
 │  ├─ app/                        worker IPC、写入边界、服务导出取消
@@ -43,6 +44,7 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 主要调用链：
 
 ```text
+MainWindow → AppServices.restore → CatalogStore → 上次文件／资料及变化结果
 MainWindow → AppServices.scan → library → CatalogStore
 MainWindow → AppServices.load_data → WorkerRunner → extraction.tables
                                      ↓

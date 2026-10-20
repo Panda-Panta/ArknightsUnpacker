@@ -4,16 +4,18 @@ from __future__ import annotations
 from dataclasses import fields, replace
 import json
 from pathlib import Path
+import sqlite3
 import time
 import uuid
 
 from .contracts import (BuildSpec, CancelToken, DecodedTable, EntityChangeSet,
                         ExportFormat, ExtractionRequest, ExtractionResult,
-                        GameDataSnapshot, ReportOptions, ReportSelection,
+                        GameDataSnapshot, ReportOptions, ReportSelection, ResourceCatalog,
                         ScanOptions, SourceRef, TableSourceSet, as_jsonable,
                         null_progress)
 from .jobs import WorkerRunner
-from .paths import atomic_json, default_data_root, validate_data_root, validate_output
+from .paths import (atomic_json, default_data_root, migrate_legacy_data,
+                    validate_data_root, validate_output)
 
 
 def _dataclass_from_dict(cls, value):
@@ -37,7 +39,18 @@ class AppServices:
     def __init__(self, data_root: str | Path | None = None):
         from .library import CatalogStore
         self.data_root = validate_data_root(Path(data_root) if data_root else default_data_root())
-        self.data_root.mkdir(parents=True, exist_ok=True)
+        try:
+            if data_root is None:
+                migrate_legacy_data(self.data_root)
+            self.data_root.mkdir(parents=True, exist_ok=True)
+            probe = self.data_root / ('.write-test-' + uuid.uuid4().hex)
+            with probe.open('xb'):
+                pass
+            probe.unlink()
+            self.store = CatalogStore(self.data_root / "catalog.sqlite3")
+            self.runner = WorkerRunner(self.data_root / "jobs")
+        except (OSError, sqlite3.Error) as error:
+            raise PermissionError(f"无法读写运行数据目录 {self.data_root}：{error}。请将程序放在可写目录，或使用 --data-dir 指定可写目录。") from error
         self.config_file = self.data_root / "settings.json"
         self.config = {"game_root": "", "output_root": str(Path.home() / "Documents" / "ArknightsExports"),
                        "hours": 24.0, "report_width": 1200, "report_font_size": 28,
@@ -50,8 +63,6 @@ class AppServices:
                 self.config.update(json.loads(self.config_file.read_text(encoding="utf-8")))
             except (ValueError, OSError):
                 pass
-        self.store = CatalogStore(self.data_root / "catalog.sqlite3")
-        self.runner = WorkerRunner(self.data_root / "jobs")
         self.installation = None
         self.scan_snapshot = None
         self.file_changes = None
@@ -61,20 +72,56 @@ class AppServices:
         self.baseline = None
 
     def save_config(self):
-        atomic_json(self.config_file, self.config)
+        try:
+            atomic_json(self.config_file, self.config)
+        except OSError as error:
+            raise PermissionError(f"无法保存运行数据到 {self.data_root}：{error}。请使用可写目录或 --data-dir。") from error
 
-    def _installation(self, root):
-        from .library import discover_installation
-        installation = discover_installation(Path(root))
+    def _select_installation(self, installation):
         validate_output(self.data_root, installation.root)
-        if self.installation and self.installation.profile_id != installation.profile_id:
+        if self.installation is None or self.installation.profile_id != installation.profile_id:
+            self.scan_snapshot = None
+            self.file_changes = None
+            self.catalog = None
             self.gamedata = None
             self.entity_changes = None
             self.baseline = None
         self.installation = installation
+        self.store.save_installation(installation)
         self.config["game_root"] = str(installation.root)
         self.save_config()
         return installation
+
+    def _installation(self, root):
+        from .library import discover_installation
+        return self._select_installation(discover_installation(Path(root)))
+
+    def restore(self, root, emit=null_progress, cancel=None):
+        """Restore the last visible observation and diff without scanning/decoding.
+
+        Complete baseline queries remain separate, so reopening a partial result
+        cannot make it the reference for the next scan or table read.
+        """
+        from .library import discover_installation, resolve_resources
+        cancel = cancel or CancelToken()
+        cancel.check()
+        emit({"type": "progress", "message": "正在恢复已保存的扫描与解析结果…"})
+        installation = self.store.get_installation(root)
+        if installation is None:
+            installation = discover_installation(Path(root))
+        snapshot, changes = self.store.latest_scan_result(installation.profile_id)
+        cancel.check()
+        data, entity_changes, baseline = self.store.latest_data_result(installation.profile_id)
+        cancel.check()
+        catalog = resolve_resources(snapshot) if snapshot is not None else ResourceCatalog(installation)
+        catalog.installation = installation
+        cancel.check()
+        self._select_installation(installation)
+        self.scan_snapshot, self.file_changes, self.catalog = snapshot, changes, catalog
+        self.gamedata, self.entity_changes, self.baseline = data, entity_changes, baseline
+        emit({"type": "progress", "message": "已恢复保存结果；重新扫描时将与完整基线比较。"})
+        return {"snapshot": snapshot, "changes": changes, "catalog": catalog,
+                "gamedata": data, "entity_changes": entity_changes}
 
     def scan(self, root, hours=24.0, strict=False, emit=null_progress, cancel=None):
         from .library import scan_installation, compare_files, resolve_resources
@@ -84,7 +131,7 @@ class AppServices:
         snapshot = scan_installation(installation, ScanOptions(float(hours), bool(strict)), emit, cancel, baseline=previous)
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
-        self.store.save_scan(snapshot)
+        self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
         self.config["hours"] = float(hours)
         self.save_config()
@@ -110,7 +157,8 @@ class AppServices:
             data.created_at = time.time()
         changes = compare_entities(previous, data)
         cancel.check()
-        self.store.save_data_snapshot(installation.profile_id, data)
+        data = self.store.save_data_snapshot(installation.profile_id, data, changes, baseline=self.baseline)
+        changes = replace(changes, current_id=data.snapshot_id)
         self.gamedata, self.entity_changes = data, changes
         self.catalog = load_catalog(installation)
         emit({"type": "progress", "message": f"核心数据已读取：{len(self.operators())} 名干员，{len(self.modules())} 个模组"})
@@ -242,6 +290,9 @@ class AppServices:
                                sources={**baseline.sources, "_locale_evidence": "user_declared_import"})
         self.baseline = baseline
         self.entity_changes = compare_entities(baseline, self._need_data())
+        if self.installation:
+            self.store.save_data_changes(self.installation.profile_id, self.gamedata,
+                                         self.entity_changes, baseline=baseline)
         return self.entity_changes
 
     def export_snapshot(self, path):
@@ -263,6 +314,9 @@ class AppServices:
             raise ValueError("找不到该历史快照。")
         self.baseline = baseline
         self.entity_changes = compare_entities(baseline, self._need_data())
+        if self.installation:
+            self.store.save_data_changes(self.installation.profile_id, self.gamedata,
+                                         self.entity_changes, baseline=baseline)
         return self.entity_changes
 
     def shutdown(self):

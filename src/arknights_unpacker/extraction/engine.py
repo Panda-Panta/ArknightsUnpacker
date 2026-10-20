@@ -10,7 +10,7 @@ from pathlib import Path
 from arknights_unpacker.contracts import ExtractionResult, CancelledError, null_progress
 from .unity import load_bundle, raw_text
 from .decoder import decode_text_bytes
-from .images import material_alpha_pairs, texture_image
+from .images import full_texture_sprite_aliases, material_alpha_pairs, texture_image
 
 def safe_component(name):
     name=re.sub(r'[<>:"/\\|?*\x00-\x1f]','_',str(name)).strip(' .')
@@ -62,9 +62,9 @@ def run_extraction(request,emit=null_progress,cancel=None):
     def complete_source(source):
         check()
         emit({'kind':'source_complete','source':str(source)})
-    def save(source,obj_id,name,suffix,content,kind,*,group=None,metadata=None):
+    def save(source,obj_id,name,suffix,content,kind,*,group=None,metadata=None,flat=False):
         check()
-        bucket=output/(safe_component(source.stem)+'_'+hashlib.sha256(str(source.resolve()).encode()).hexdigest()[:10])
+        bucket=output if flat and not group else output/(safe_component(source.stem)+'_'+hashlib.sha256(str(source.resolve()).encode()).hexdigest()[:10])
         if group: bucket=bucket/safe_component(group)
         bucket.mkdir(parents=True,exist_ok=True)
         target=bucket/(safe_component(name)+suffix if group else safe_component(name)+'__'+safe_component(obj_id)+suffix)
@@ -115,6 +115,15 @@ def run_extraction(request,emit=null_progress,cancel=None):
                 env=load_bundle(source)
                 pairs=material_alpha_pairs(env,lambda message:result.skipped.append({'source':str(source),'reason':message})) if 'image' in kinds and request.mode=='auto' else {}
                 selected=set(request.object_ids.get(raw_path,request.object_ids.get(str(source),[])))
+                # Decide paths before the first output event. Count only selected
+                # decoded picture candidates, not Material/text dependencies. A
+                # later decode failure or cancellation must never relocate files
+                # already recorded in progress events and recovery checkpoints.
+                selected_image_object_count=sum(1 for obj in env.objects if obj.type.name in {'Texture2D','Sprite'} and (not selected or str(obj.path_id) in selected)) if 'image' in kinds and request.mode=='auto' else 0
+                # Object selection is explicit: preserve every requested object.
+                # Only automatic whole-package images collapse proven aliases.
+                image_aliases,aliased_objects=full_texture_sprite_aliases(env,pairs,check) if selected_image_object_count and not selected else ({},set())
+                selected_image_count=selected_image_object_count-len(aliased_objects)
                 if 'spine' in kinds and request.mode!='raw':
                     from .spine import iter_spine_groups
                     for group in iter_spine_groups(env,check):
@@ -139,6 +148,7 @@ def run_extraction(request,emit=null_progress,cancel=None):
                     check()
                     obj_id=str(obj.path_id)
                     if selected and obj_id not in selected: continue
+                    if id(obj) in aliased_objects:continue
                     typ=obj.type.name
                     if typ not in {'Texture2D','Sprite','TextAsset','AudioClip'}: continue
                     try:
@@ -148,7 +158,13 @@ def run_extraction(request,emit=null_progress,cancel=None):
                             if request.mode=='raw':
                                 save(source,obj_id,name,'.'+typ+'.bin',obj.get_raw_data(),'image_serialized');complete_object(source,obj_id);continue
                             image,pairing=texture_image(obj,data,env,pairs) if typ=='Texture2D' else (data.image,None)
-                            save(source,obj_id,name,'.png',lambda p:image.save(p,format='PNG'),'image',metadata={'image_pairing':pairing} if pairing else None)
+                            # Resource pixels come directly from Unity's decoded
+                            # texture / cropped Sprite; report and preview sizes
+                            # are display settings and never enter this path.
+                            metadata={'image_size':list(image.size),'image_layout':'flat' if selected_image_count==1 else 'package','selected_image_count':selected_image_count,'selected_image_object_count':selected_image_object_count}
+                            if pairing:metadata['image_pairing']=pairing
+                            if id(obj) in image_aliases:metadata['image_aliases']=image_aliases[id(obj)]
+                            save(source,obj_id,name,'.png',lambda p,img=image:img.save(p,format='PNG'),'image',metadata=metadata,flat=selected_image_count==1)
                         elif typ=='TextAsset' and ('text' in kinds or 'spine' in kinds):
                             raw=raw_text(data)
                             spine=any(x in name.lower() for x in ('.atlas','.skel','.spine'))
@@ -178,7 +194,9 @@ def run_extraction(request,emit=null_progress,cancel=None):
                                 raw=bytes(data.m_AudioData)
                                 save(source,obj_id,name,'.audio',raw,'audio_source')
                                 result.skipped.append({'source':str(source),'object_id':obj_id,'reason':'保留音频源，播放格式解码失败: '+str(e)})
-                        if len(result.outputs)>output_start:complete_object(source,obj_id)
+                        if len(result.outputs)>output_start:
+                            completed_ids=image_aliases.get(id(obj))
+                            complete_object(source,obj_id,**({'object_ids':sorted([obj_id,*completed_ids])} if completed_ids else {}))
                     except CancelledError: raise
                     except Exception as e: result.errors.append({'source':str(source),'object_id':obj_id,'error':f'{type(e).__name__}: {e}'})
             except CancelledError: raise

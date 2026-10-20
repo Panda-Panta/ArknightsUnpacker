@@ -253,7 +253,8 @@ def test_v1_migration_preserves_data_and_creates_readable_backup(tmp_path):
         assert db.execute('PRAGMA user_version').fetchone()[0] == 1
         assert db.execute('SELECT profile_id FROM data_snapshots').fetchall() == [('A',)]
     with sqlite3.connect(path) as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 2
+        from arknights_unpacker.library.store import SCHEMA_VERSION
+        assert db.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
     CatalogStore(path)
     assert len(list(tmp_path.glob('existing.sqlite.v1-backup-*.sqlite'))) == 1
 

@@ -100,7 +100,19 @@ def main() -> int:
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     from .application import AppServices
-    services = AppServices(args.data_dir)
+    try:
+        services = AppServices(args.data_dir)
+    except (OSError, ValueError) as error:
+        if args.smoke_test or args.headless_verify:
+            if sys.stderr is not None:
+                print(str(error), file=sys.stderr)
+        else:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+            from .ui.styles import apply_theme
+            app = QApplication.instance() or QApplication(sys.argv[:1])
+            apply_theme(app)
+            QMessageBox.critical(None, '无法读取或保存程序数据', str(error))
+        return 1
     if args.output_dir:
         services.config["output_root"] = str(Path(args.output_dir).resolve())
     if args.headless_verify:
@@ -129,9 +141,16 @@ def main() -> int:
     app.aboutToQuit.connect(services.shutdown)
     window.show()
     if args.smoke_test:
+        from PySide6.QtGui import QPixmap
+        from .paths import resource_root
         receipt = validate_output(validate_data_root(Path(args.smoke_test)),
                                   args.game_root or services.config.get("game_root"))
+        smoke_started = time.monotonic()
         def record():
+            if window.queue.busy or window._restore_pending:
+                if time.monotonic() - smoke_started < 25:
+                    QTimer.singleShot(100, record)
+                    return
             try:
                 image_path = receipt.with_suffix(".png")
                 image_path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,9 +158,18 @@ def main() -> int:
                 atomic_json(receipt, {"version": __version__, "qt_version": qVersion(),
                                       "visible": window.isVisible(), "width": window.width(), "height": window.height(),
                                       "tabs": [window.tabs.tabText(i) for i in range(window.tabs.count())],
-                                      "screenshot": str(image_path), "frozen": bool(getattr(sys, "frozen", False))})
+                                      "screenshot": str(image_path), "frozen": bool(getattr(sys, "frozen", False)),
+                                      "qt_platform": app.platformName(), "data_root": str(services.data_root),
+                                      "queue_idle": not window.queue.busy,
+                                      "scan_id": getattr(services.scan_snapshot, 'snapshot_id', None),
+                                      "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),
+                                      "operators": len(services.operators()), "modules": len(services.modules()),
+                                      "palette_window": app.palette().window().color().name(),
+                                      "theme_icons": {name: not QPixmap(str(resource_root() / 'resources/ui' / name)).isNull()
+                                                      for name in ('arrow-down.svg', 'arrow-up.svg', 'check.svg')},
+                                      "jobs": [{"title": job.title, "status": job.status} for job in window.queue.jobs]})
             finally:
                 window.close()
         QTimer.singleShot(1800, record)
-        QTimer.singleShot(30000, app.quit)
+        QTimer.singleShot(30000, lambda: app.exit(1))
     return app.exec()
