@@ -6,7 +6,15 @@
 
 模板2.0.0按真实技能／模组父项及模组1—3级组织，默认显示最高可用级，选择后定位正文并反馈；搜索支持命中、高亮、无结果和清除后恢复；折叠保持选项；打印完整内容且结束恢复筛选／折叠。纯空模组天赋占位不显示，有实际效果的未命名条目保留中文回退，JSON原始数据不改。运行资产为resources/html的模板／CSS／JS，由渲染器读取后内联为单文件。
 
-已完成：模型分组新增案例先7 failed；纯空占位案例先1 failed，修复后报告回归20 passed／2.50秒；报告与GUI集成67 passed／31.45秒（1条既有pytest缓存权限警告）。丰川真实HTML通过Edge离线9项行为检查：父层级、折叠、键盘与定位、模组等级内容、跨隐藏内容搜索／恢复、打印状态、390窄屏局部表格滚动、无JS完整阅读、零网络请求及零JS错误；最终证据在 `.work/html-report-20261020/browser/final-candidate/`。打印检查使用真实按钮及事件／DOM状态，不表示已操作原生打印对话框或纸张。正式构建、冻结服务和安装证据在取得后补录。
+已完成：模型分组新增案例先7 failed；纯空占位案例先1 failed，修复后报告回归20 passed／2.50秒；报告与GUI集成67 passed／31.45秒（1条既有pytest缓存权限警告）。丰川真实HTML通过Edge离线9项行为检查：父层级、折叠、键盘与定位、模组等级内容、跨隐藏内容搜索／恢复、打印状态、390窄屏局部表格滚动、无JS完整阅读、零网络请求及零JS错误；最终证据在 `.work/html-report-20261020/browser/final-candidate/`。打印检查使用真实按钮及事件／DOM状态，不表示已操作原生打印对话框或纸张。正式制品、冻结服务及安装验证已完成，具体记录如下。
+
+正式构建任务 `20261020-130102-935c34cd`，来源为干净提交 `9af79e1d646532b5bee43e027eaf649b3541c507`，147项源输入逐一匹配；507个程序文件共184,389,628字节，目录清单及ZIP每项SHA／CRC通过。冻结EXE原生Windows Qt启动4.06秒；隔离的正式EXE生产服务链50.58秒，真实扫描16,886文件、解析434干员／513模组并完成PNG／HTML及资源解包。另对该EXE实际生成的干员页和模组页运行离线Edge行为检查通过，证据为 `frozen-services-and-html.json` 和 `browser/frozen-exe/summary.json`；服务检查与浏览器检查分别取得，不将源码示例冒充冻结产物。
+
+安装到 `D:\Tools\ArknightsUnpacker`：507项旧0.1.2程序先完整备份并核验，替换11项、保持496项，无新增／删除；同步时138个目标未托管／旧AppData文件不变。实际Tools EXE默认启动5.45秒、关闭后重启5.19秒，均正常退出并恢复同一扫描／资料ID、434／513项资料；3个扫描和1个资料快照payload不变，未重扫重解析，其他设置及默认exports保留。GUI正常写入之外的86个受保护文件及507项程序再次核验通过。旧程序备份为 `.work/html-report-20261020/backup-0.1.2/`；安装收据为该任务目录下的 `sync-result.json`、`installed-verification.json`。
+
+新版丰川祥子HTML／JSON另存 `D:\Tools\ArknightsUnpacker\exports\HTML示例_v0.1.3`，不覆盖旧报告；最终交付路径再次通过离线浏览器检查，见 `preview-delivery.json` 与 `browser/delivered-example/summary.json`。该示例由保存的本机快照及与构建相同的渲染输入生成；旧静态HTML须重新导出才有新版界面。
+
+EXE SHA-256：`cfd3bca462b07c3df68ad5163e6b6d30cba0ac3d3952b54158e294b91579702d`。ZIP `ArknightsUnpacker-0.1.3-win64.zip` 为73,586,051字节，SHA-256：`7ac8c9bdc591163dbeae5836286f07fcdf7a9a288072f91bc5e1b55d28e294d5`。交付沿用私有仓库的 [v0.1.3 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.3)，远端main／test／标签及附件状态／大小／摘要由 `verify_remote.py` 核验后写入 `release-result.json`；保留旧Release和用户数据。验收后仅补本文与主计划，不改变147项构建输入。
 
 ## v0.1.2 · 默认导出目录（2026-10-20）
 
