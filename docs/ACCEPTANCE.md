@@ -8,7 +8,15 @@
 
 最终 `scripts/verify.ps1`：**353 passed，1 local deselected，86.96秒**。两包分别从红灯转绿（任务包23项、预览包21项），根集成验证真实QThread晚到结果、提前关窗、排队取消、部分结果保留与正式产物重开。两位独立审查确认并复验历史报告关窗竞态、快照存入缓存后被删除、部分资料误作成功三个问题；根另补正式报告向其他缓存另存原图的同类红／绿用例。存储最终39项及UI独立生命周期／配置读写探针通过，末次保存边界4项通过，无未解决阻塞。首轮350、352及审查夹具长路径失败、一次save_config WinError5现场保留；短路径与该6项隔离复验通过，不将一次访问错误归为稳定产品缺陷。
 
-原生Windows Qt以Tools数据库只读备份和真实Unity工作进程验收：434干员／513模组恢复，阿米娅AB内512×512 Texture2D实际预览，缩放25%后保存原图SHA一致，关闭对象窗口后临时目录消失；真实能天使资料四格式预览关闭后缓存消失。游戏源AB和原Tools数据库SHA不变，隔离库原3扫描／1资料快照保留，输出设置和保存副本保留；截图已查看。证据为 `.work/task-cleanup-20261020/` 的 `live/receipt.json`、`source-final-candidate.xml`、`task-list/`、`preview/`、`review-storage/`、`review-ui/` 与 `formal-copy-{red,green}.log`。此为源码宿主验收，正式构建、冻结／安装／远端结果另补，不冒称冻结EXE或服务器更新证据。
+原生Windows Qt以Tools数据库只读备份和真实Unity工作进程验收：434干员／513模组恢复，阿米娅AB内512×512 Texture2D实际预览，缩放25%后保存原图SHA一致，关闭对象窗口后临时目录消失；真实能天使资料四格式预览关闭后缓存消失。游戏源AB和原Tools数据库SHA不变，隔离库原3扫描／1资料快照保留，输出设置和保存副本保留；截图已查看。证据为 `.work/task-cleanup-20261020/` 的 `live/receipt.json`、`source-final-candidate.xml`、`task-list/`、`preview/`、`review-storage/`、`review-ui/` 与 `formal-copy-{red,green}.log`。此为源码宿主验收，正式交付另记如下，不冒称服务器更新证据。
+
+正式构建 `20261020-192811-033c6695`，干净来源 `c3b7c923131199baec8f19894bc91ab6040a7a52`，153源输入与提交逐项一致；507程序文件共184,461,735字节，清单及ZIP逐项SHA／CRC通过。冻结EXE原生Windows Qt默认启动3.98秒；再以45条受控旧任务、两类真实格式旧缓存及带标记孤立缓存启动4.03秒，成功剩20条，3条失败／部分解析／中断保留，事件元数据同步修剪；3个确认归属缓存回收，未知user-notes与正式exports哨兵原字节保留，旧缓存输出路径恢复为EXE旁exports。证据为 `frozen-verification.json`、`frozen-cleanup-verification.json`、`frozen-cleanup-launch.png`；种子内容不是Unity导出。
+
+实际冻结服务链首次在阿米娅整包提取1个PNG原子替换遇WinError5，保存 `frozen-service/failure.json`、部分产物和两个worker目录，未改IO代码。在新 `frozen-service-retry1/` 有限完整复验118.77秒通过，扫描16,891文件、434／513资料解析、dark/light报告、透明图片／Spine组／WAV／视频流全部完成；四个实际EXE输出HTML各10项离线Edge及两目录通过。收据为 `frozen-services-and-html.json`、`browser/frozen-exe/`、`index-frozen.json`；不将一次复验通过说成偶发拒绝访问已消失。153构建输入及原始游戏不因复验更改。
+
+已普通快进私有main/test后同步 `D:\Tools\ArknightsUnpacker`：先备份核验507旧0.1.8托管文件，仅替换8项、499不变、零新增／删除，229用户／旧AppData文件在同步时保持。原生安装EXE启动6.92秒、关闭重启5.86秒均退出0；启动前额外备份核验136个queue／预览相关文件至 `runtime-cleanup-backup/`。成功历史127→20，两次正常启动新增4个恢复／查看任务，111个旧成功ID被移除；实际旧记录全为成功，失败／部分解析保留由前述冻结种子及真实队列测试证明。正式exports与其他91个GUI演进外保护文件原大小／SHA保留，原3扫描／1资料payload及434／513资料、dark主题／查看状态／其余设置保持，未重扫重解析。安装启动前preview/previews无文件，不声称自动删除了旧用户预览；507项程序再次匹配，截图已查看。证据为 `sync-preview.json`、`backup-verified.json`、`sync-result.json`、`runtime-cleanup-backup.json`、`queue-before-runtime.json` 与 `installed-verification.json`，旧程序回退为 `backup-0.1.8/`。
+
+EXE SHA-256：`7b154b74e3bfd406d3a2d5ad2df069b8d379a308493e9eadf0ae56eaf13bc5b6`。ZIP `ArknightsUnpacker-0.1.9-win64.zip` 为73,650,233字节，SHA-256：`db1f5712c7fe97c85d7fc623847b2881bef5f7bb6eb88eee993fdb0870dd09cf`。沿用私有 [v0.1.9 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.9)，远端main/test/tag、新附件上传状态／大小／GitHub摘要和旧Release保留由 `verify_remote.py` 最终核验，写 `release-result.json`；后补本文与主计划不改153构建输入。当前构建已验证实际路径后清理pyinstaller／tmp两目录17文件26,449,069字节，pyinstaller-cache本来不存在；来源／安装／回退1521程序文件及ZIP清理后再次核验，日志 `cleanup-{preflight,result}.json`。旧发布、回退、用户元数据备份、真实样本和未结IO证据保留，不遍历其他任务或用户目录清理。
 
 ## v0.1.8 · 分类横向对照与全部资料紧凑展示（2026-10-20）
 
