@@ -17,7 +17,7 @@ ArknightsUnpacker/
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  ├─ reports/                    语义块、PNG 排版、独立 HTML 与批次清单
 │  └─ ui/                         Qt 浅色六页工作台、启动恢复、更新批量导图、原图预览保存
-├─ resources/                     文件夹规则、HTML 模板资料、ui/ 主题矢量图标
+├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ exports/                       启动自动创建的默认输出，不随源码或程序打包
 ├─ vendor/                        固定 CN FlatBuffers schemas、LZ4AK 和来源摘要
@@ -30,7 +30,7 @@ ArknightsUnpacker/
 │  ├─ gui/                        Qt 交互、身份保持、可读预览和队列
 │  └─ integration/                显式启用的本机真实 Qt 全流程
 ├─ packaging/                     PyInstaller、来源／文件清单、许可证和预检入口
-├─ scripts/                       dev.ps1、verify.ps1、build.ps1
+├─ scripts/                       dev.ps1、verify.ps1、build.ps1、verify-html.cjs
 ├─ docs/                          游戏目录、用户指南、第三方声明
 ├─ artifacts/                     里程碑样本、审查报告与 M9 验收，不随程序打包
 ├─ dist/<版本>/ArknightsUnpacker/ 最终目录式 Windows 便携包
@@ -54,6 +54,8 @@ MainWindow → AppServices.extract → WorkerRunner → extraction.engine
 MainWindow → AppServices.export → build_operator/build_module → reports.export_report
 ```
 
-运行时 HTML 样式／脚本的权威实现是 `reports/html_render.py`；`resources/html` 为随源码保留的模板资料，修改模板资料不会直接改变运行输出。PNG 主题实现位于 `reports/render.py`。folder_rules.json 是目录用途分类的实际运行输入。
+`reports/html_render.py` 负责生成资料与选择结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.0.0，修改会直接影响新报告。`reports/model.py` 的 entry_id／entry_title／stage 将模组简介与各级属性、天赋归为同一条目，PNG／TXT 继续共用资料。PNG 主题实现位于 `reports/render.py`。folder_rules.json 是目录用途分类的实际运行输入。
+
+`scripts/verify-html.cjs` 是真实浏览器验收入口：`node scripts/verify-html.cjs --html <产物路径> --output <证据目录>`。开发环境需提供 Node.js 和 Playwright，可用 `NODE_PATH` 指向已有 Playwright 安装的 `node_modules`；这些工具不属于产品运行依赖。旧 HTML 为静态快照，需重新导出才使用新资产，不迁改已有报告。
 
 构建只收集明确的源码依赖、资源、vendor、Qt 动态库与许可证；不收集游戏原文件、整个项目、测试夹具、应用历史数据库或用户配置。新增格式适配应修改对应 extraction 模块并更新真实样本证据；领域数值只在 gamedata 修改，界面与两个渲染器不得各自重算。

@@ -1,0 +1,150 @@
+"""Semantic entry boundaries used by HTML controls, without changing raw data."""
+from copy import deepcopy
+
+from arknights_unpacker.contracts import ModuleProfile, OperatorProfile, ReportDocument
+from arknights_unpacker.reports.model import Block, semantic_blocks, text_report
+
+
+def module_data(**overrides):
+    value = {'equip_id': 'equip_main', 'char_id': 'char_owner', 'char_name': '干员甲',
+             'type_name': 'X', 'name': '完整模组', 'diagnostics': ['模组来源已保留'],
+             'phases': [
+                 {'level': 1, 'trait': '阶段一特性',
+                  'attributes': [{'label': '攻击', 'value': 12}],
+                  'talents': [{'name': None, 'description': '阶段一天赋内容',
+                               'potential_delta': '+2', 'scope': {'isToken': True, 'tokenKey': 'token_one'}}],
+                  'token_effects': [{'name': None, 'description': '召唤物阶段一强化',
+                                     'potential_delta': '+3', 'scope': {'game_tag_meta': '限定玩法'}}],
+                  'token_attributes': {'token_one': {'max_hp': 50}},
+                  'scope': {'validInMapTag': 'map-one'}},
+                 {'level': '3', 'trait': '阶段三特性',
+                  'attributes': [{'label': '生命上限', 'value': 250}],
+                  'talents': [{'name': '', 'description': '阶段三天赋内容', 'potential_delta': '+4'}]},
+             ]}
+    value.update(overrides)
+    return value
+
+
+def test_block_adds_optional_entry_fields_without_breaking_legacy_construction():
+    block = Block('旧标题', [('内容', '旧格式')], ['列'], [['值']], '技能')
+    assert block.entry_id == ''
+    assert block.entry_title == ''
+    assert block.stage is None
+
+
+def test_skill_and_unresolved_parameters_form_one_entry_per_real_skill():
+    operator = OperatorProfile('char_owner', '干员甲', skills=[
+        {'index': 1, 'id': 'skill_one', 'name': '主技能甲', 'description': '倍率 {ratio}',
+         'blackboard': {'ratio': 2.5}, 'diagnostics': ['unresolved placeholder ratio']},
+        {'index': 2, 'id': 'skill_two', 'name': '主技能乙', 'description': '技能乙内容'},
+    ])
+    blocks = [block for block in semantic_blocks(ReportDocument('资料', [operator])) if block.group == '技能']
+    assert len(blocks) == 3
+    assert blocks[0].entry_id == blocks[1].entry_id
+    assert blocks[0].entry_id != blocks[2].entry_id
+    assert blocks[0].entry_id and 'char_owner' in blocks[0].entry_id and 'skill_one' in blocks[0].entry_id
+    assert [block.entry_title for block in blocks] == ['主技能甲', '主技能甲', '主技能乙']
+    assert all(block.stage is None for block in blocks)
+    assert blocks[1].rows == [('未解析参数 ratio', '2.5')]
+
+
+def test_module_children_share_main_entry_and_numeric_stage_without_losing_content():
+    data = module_data()
+    original = deepcopy(data)
+    profile = ModuleProfile(**data)
+    document = ReportDocument('资料', modules=[profile])
+    blocks = [block for block in semantic_blocks(document) if block.group == '模组']
+    assert len(blocks) == 9
+    assert len({block.entry_id for block in blocks}) == 1
+    assert blocks[0].entry_id and 'char_owner' in blocks[0].entry_id and 'equip_main' in blocks[0].entry_id
+    assert {block.entry_title for block in blocks} == {blocks[0].title}
+    assert [block.stage for block in blocks] == [None, 1, 1, 1, 1, 1, 3, 3, 3]
+    assert '完整模组' in blocks[0].entry_title
+    assert all('None' not in block.title for block in blocks)
+    assert profile.phases == original['phases'], 'formatting must not rename raw talents or alter game values'
+    text = text_report(document)
+    for phrase in ('阶段一特性', '阶段三特性', '阶段一天赋内容', '阶段三天赋内容',
+                   '召唤物阶段一强化', '限定玩法', 'map-one', 'token_one', '+2', '+3', '+4', '50', '250', '模组来源已保留'):
+        assert phrase in text
+
+
+def test_embedded_modules_fall_back_to_owner_and_keep_distinct_entries():
+    operator = OperatorProfile('char_embedded', '嵌入干员', modules=[
+        module_data(char_id='', equip_id='equip_first', name='第一模组'),
+        module_data(char_id='', equip_id='equip_second', name='第二模组'),
+    ])
+    blocks = [block for block in semantic_blocks(ReportDocument('资料', [operator])) if block.group == '模组']
+    entries = {block.entry_id for block in blocks}
+    assert len(entries) == 2
+    assert all('char_embedded' in entry for entry in entries)
+    assert any('equip_first' in entry for entry in entries)
+    assert any('equip_second' in entry for entry in entries)
+    assert all('阶段属性' not in block.entry_title and '天赋：' not in block.entry_title for block in blocks)
+
+
+def test_missing_names_have_chinese_player_fallbacks_and_do_not_mutate_input():
+    operator = OperatorProfile('char_names', None, skills=[{'index': 1, 'id': 'skill_names', 'name': None}],
+                               talents=[{'name': None, 'description': '天赋仍有内容'}],
+                               building_skills=[{'name': '   ', 'description': '后勤仍有内容'}],
+                               modules=[module_data(char_name=None, type_name=None, name=None)])
+    original = deepcopy(operator)
+    blocks = semantic_blocks(ReportDocument('资料', [operator]))
+    assert all('None' not in block.title and block.title.strip() for block in blocks)
+    assert any('未命名技能' in block.title for block in blocks)
+    assert any('未命名天赋' in block.title or '天赋调整' in block.title for block in blocks)
+    assert any('未命名后勤技能' in block.title for block in blocks)
+    assert any('未命名模组' in block.title for block in blocks)
+    assert operator == original
+
+
+def test_entry_keys_are_stable_when_unrelated_entries_are_added():
+    first = OperatorProfile('char_stable', '干员', skills=[{'id': 'stable_skill', 'name': '原技能'}],
+                            modules=[module_data(equip_id='stable_module')])
+    before = semantic_blocks(ReportDocument('资料', [first]))
+    modified = deepcopy(first)
+    modified.skills.insert(0, {'id': 'other_skill', 'name': '新技能'})
+    modified.modules.insert(0, module_data(equip_id='other_module', name='新模组'))
+    after = semantic_blocks(ReportDocument('资料', [modified]))
+    for title in ('原技能', '干员甲 · X · 完整模组'):
+        assert {block.entry_id for block in before if block.entry_title == title} == {
+            block.entry_id for block in after if block.entry_title == title}
+        assert {block.entry_id for block in before if block.entry_title == title}
+
+
+def test_missing_skill_and_module_state_blocks_have_no_synthetic_selectable_entries():
+    blocks = semantic_blocks(ReportDocument('资料', [OperatorProfile('empty', '无条目')]))
+    states = [block for block in blocks if block.group in {'技能', '模组'}]
+    assert len(states) == 2
+    assert all(block.entry_id == '' and block.stage is None for block in states)
+
+
+def test_missing_ids_use_distinct_repeatable_index_fallbacks():
+    operator = OperatorProfile('char_fallback', '回退干员',
+                               skills=[{'name': '同名技能', 'index': ''}, {'name': '同名技能', 'index': None}],
+                               modules=[module_data(equip_id=None), module_data(equip_id=None)])
+    document = ReportDocument('资料', [operator])
+    blocks = semantic_blocks(document)
+    for group in ('技能', '模组'):
+        first = {block.entry_id for block in blocks if block.group == group}
+        second = {block.entry_id for block in semantic_blocks(document) if block.group == group}
+        assert len(first) == 2 and first == second
+
+
+def test_empty_module_talent_stub_is_not_displayed_but_source_records_remain():
+    empty = {'name': None, 'description': '', 'potential_delta': {}, 'talent_index': -1,
+             'blackboard': [], 'scope': {'validModeIndices': None, 'tokenKey': None},
+             'unlock_condition': {'level': 60, 'phase': 'PHASE_2'}}
+    talents = [empty,
+               {**empty, 'description': '未命名但有实际天赋效果'},
+               {**empty, 'potential_delta': {'atk': {'before': 1, 'after': 2, 'delta': 1}}},
+               {**empty, 'blackboard': [{'key': 'unresolved_parameter', 'value': 4}]}]
+    module = ModuleProfile(**module_data(phases=[{'level': 3, 'trait': '已有特性', 'talents': talents}]))
+    original = deepcopy(module)
+    blocks = semantic_blocks(ReportDocument('资料', modules=[module]))
+    talent_blocks = [block for block in blocks if block.group == '模组' and block.title.startswith('天赋：')]
+    assert len(talent_blocks) == 3
+    assert all('None' not in block.title and '未命名天赋' in block.title for block in talent_blocks)
+    assert any(('说明', '未命名但有实际天赋效果') in block.rows for block in talent_blocks)
+    assert any('潜能增量 1' in value for block in talent_blocks for _, value in block.rows)
+    assert module == original
+    assert module.phases[0]['talents'][0] == empty

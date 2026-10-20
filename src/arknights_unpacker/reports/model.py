@@ -66,6 +66,9 @@ class Block:
     columns: list[str] = field(default_factory=list)
     cells: list[list[str]] = field(default_factory=list)
     group: str = ''
+    entry_id: str = ''
+    entry_title: str = ''
+    stage: int | None = None
 
 
 def _source_summary(value: Any) -> str:
@@ -129,33 +132,52 @@ def _missing(profile, name: str, keys: tuple[str, ...]) -> str:
     return f'{name}数据缺失或未解析；请查看诊断' if any(k.lower() in issues for k in keys) else f'无{name}（当前快照无条目）'
 
 
-def _module_blocks(module: dict[str, Any], prefix: str = '') -> list[Block]:
+def _player_name(value: Any, fallback: str) -> str:
+    text = plain(value).strip() if value is not None else ''
+    return text or fallback
+
+
+def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = '', fallback_id: str = 'module') -> list[Block]:
     module = as_jsonable(module)
-    title = f"{prefix}{module.get('char_name', '')} · {module.get('type_name', '')} · {module.get('name', '未命名模组')}"
-    blocks = [Block(title, _rows(module, {'phases'}), group='模组')]
+    name = _player_name(module.get('name'), '未命名模组')
+    title = f"{prefix}{_player_name(module.get('char_name'), '未标明干员')} · {_player_name(module.get('type_name'), '类型未提供')} · {name}"
+    owner = _player_name(module.get('char_id') or owner_id, '未标明干员')
+    key = _player_name(module.get('equip_id') or module.get('id'), fallback_id)
+    entry = {'entry_id': f'module:{owner}:{key}', 'entry_title': title}
+    blocks = [Block(title, _rows(module, {'phases'}), group='模组', **entry)]
     for phase in module.get('phases', []):
-        blocks.append(Block(f"{module.get('name', '模组')} · {phase.get('level', '?')}级",
-            _complete_rows({k:v for k,v in phase.items() if k not in {'attributes','talents'}}, ('level','trait')) + _scope_rows(phase.get('scope')), group='模组'))
+        level = str(phase.get('level', '')).strip()
+        stage = int(level) if level in {'1', '2', '3'} else None
+        phase_title = f'{level}级' if level and phase.get('level') is not None else '阶段未标明'
+        phase_entry = {**entry, 'stage': stage}
+        blocks.append(Block(f'{name} · {phase_title}',
+            _complete_rows({k:v for k,v in phase.items() if k not in {'attributes','talents'}}, ('level','trait')) + _scope_rows(phase.get('scope')), group='模组', **phase_entry))
         attrs = phase.get('attributes', [])
         if attrs:
             blocks.append(Block('阶段属性', columns=['项目', '数值'], cells=[
-                [plain(a.get('label', a.get('key'))), plain(a.get('value'))] for a in attrs], group='模组'))
+                [plain(a.get('label', a.get('key'))), plain(a.get('value'))] for a in attrs], group='模组', **phase_entry))
         for talent in phase.get('talents', []):
-            blocks.append(Block(f"天赋：{talent.get('name', '未命名')}", _complete_rows(talent, ('name','description','potential_delta')) + _scope_rows(talent.get('scope')), group='模组'))
+            # Some module stages carry an empty implementation stub (index -1).
+            # Keep raw records in JSON, and retain unresolved parameter records;
+            # only a wholly empty player entry is omitted from display blocks.
+            if not (_player_name(talent.get('name'), '') or _player_name(talent.get('description'), '')
+                    or talent.get('potential_delta') or talent.get('blackboard')):
+                continue
+            blocks.append(Block('天赋：' + _player_name(talent.get('name'), '未命名天赋'), _complete_rows(talent, ('name','description','potential_delta')) + _scope_rows(talent.get('scope')), group='模组', **phase_entry))
         for effect in phase.get('token_effects', []):
             if not str(effect.get('description') or '').strip():
                 continue
-            blocks.append(Block('召唤物效果 · ' + (effect.get('name') or '模组强化'),
-                _complete_rows(effect, ('description','potential_delta','unlock_condition')) + _scope_rows(effect.get('scope')), group='模组'))
+            blocks.append(Block('召唤物效果 · ' + _player_name(effect.get('name'), '模组强化'),
+                _complete_rows(effect, ('description','potential_delta','unlock_condition')) + _scope_rows(effect.get('scope')), group='模组', **phase_entry))
         token_attributes = phase.get('token_attributes') or {}
         if isinstance(token_attributes, dict):
             for token, board in token_attributes.items():
                 entries = board.items() if isinstance(board,dict) else ((x.get('key'),x.get('value')) for x in board if isinstance(x,dict)) if isinstance(board,list) else []
                 rows = [(ATTRIBUTE_LABELS.get(k, str(k)),plain(v)) for k,v in entries]
                 if rows:
-                    blocks.append(Block('召唤物属性 · ' + str(token), rows, group='模组'))
+                    blocks.append(Block('召唤物属性 · ' + _player_name(token, '未命名召唤物'), rows, group='模组', **phase_entry))
     if not module.get('phases'):
-        blocks.append(Block('模组阶段', [('状态', '阶段数据未提供，请查看来源及诊断')], group='模组'))
+        blocks.append(Block('模组阶段', [('状态', '阶段数据未提供，请查看来源及诊断')], group='模组', **entry))
     return blocks
 
 
@@ -183,15 +205,17 @@ def _draft(profile) -> bool:
 def semantic_blocks(document: ReportDocument) -> list[Block]:
     version_rows = _rows(document.metadata, {'changes'})
     for profile in [*document.operators, *document.modules]:
-        version_rows.extend((f'{profile.name} · {label(key)}', present(key,profile.metadata.get(key)))
+        profile_name = _player_name(profile.name, '未命名模组' if hasattr(profile, 'equip_id') else '未命名干员')
+        version_rows.extend((f'{profile_name} · {label(key)}', present(key,profile.metadata.get(key)))
                             for key in ('version', 'resource_version', 'source'))
     blocks = [Block('资料口径与版本', version_rows)]
-    drafts = [profile.name for profile in [*document.operators,*document.modules] if _draft(profile)]
+    drafts = [_player_name(profile.name, '未命名模组' if hasattr(profile, 'equip_id') else '未命名干员')
+              for profile in [*document.operators,*document.modules] if _draft(profile)]
     if document.metadata.get('complete') is False or drafts:
         blocks.insert(0,Block('数据未完整解析 · 草稿', [('受影响资料','、'.join(drafts) or '当前资料'),
             ('阅读提示','部分必要数据缺失或未能解析。下方保留已确认内容，缺项不表示无技能或无效果，请同时查看诊断。')],group='草稿警告'))
     for profile in document.operators:
-        blocks.append(Block(f'{profile.name} · {profile.char_id}', _complete_rows(profile.summary,
+        blocks.append(Block(f'{_player_name(profile.name, "未命名干员")} · {_player_name(profile.char_id, "未标明干员ID")}', _complete_rows(profile.summary,
             ('profession','sub_profession','rarity','phase','level','potential','trust','obtainable','appellation')) + [('干员ID', profile.char_id)], group='概览'))
         blocks.append(Block('特性', [('说明', plain(profile.trait) or '特性未提供')], group='特性'))
         attrs = profile.attributes
@@ -199,47 +223,52 @@ def semantic_blocks(document: ReportDocument) -> list[Block]:
             [plain(a.get('label', a.get('key')))] + [plain(a.get(k)) for k in ('value','base','trust','potential','module','unit')]
             for a in attrs] if attrs else [['属性数据未提供', '', '', '', '', '', '']], group='属性'))
         for i, skill in enumerate(profile.skills, 1):
-            blocks.append(Block(f"技能{skill.get('index', i)} · {skill.get('name', '未命名')}", _complete_rows(skill,
-                ('index','id','name','level','sp_type','trigger','init_sp','sp_cost','duration','duration_type','description')), group='技能'))
+            index = _player_name(skill.get('index'), str(i))
+            name = _player_name(skill.get('name'), '未命名技能')
+            key = _player_name(skill.get('id'), f'index-{index}')
+            owner = _player_name(profile.char_id, '未标明干员')
+            entry = {'entry_id': f'skill:{owner}:{key}', 'entry_title': name}
+            blocks.append(Block(f'技能{index} · {name}', _complete_rows(skill,
+                ('index','id','name','level','sp_type','trigger','init_sp','sp_cost','duration','duration_type','description')), group='技能', **entry))
             issues='\n'.join(str(d) for d in skill.get('diagnostics',[]))
             if any(marker in issues for marker in ('unresolved placeholder','non-numeric format','unsupported format')):
                 board=skill.get('blackboard') or {}
                 entries=board.items() if isinstance(board,dict) else ((item.get('key'),item.get('value')) for item in board if isinstance(item,dict))
                 related=[(f'未解析参数 {key}',plain(value)) for key,value in entries if key and str(key) in issues]
                 if related:
-                    blocks.append(Block('未解析技能参数（关联诊断）',related,group='技能'))
+                    blocks.append(Block('未解析技能参数（关联诊断）',related,group='技能', **entry))
         if not profile.skills:
             blocks.append(Block('技能', [('状态', _missing(profile, '技能', ('skill', '技能')))], group='技能'))
         for talent in profile.talents:
-            blocks.append(Block(f"天赋 · {talent.get('name', '未命名')}", _complete_rows(talent, ('name','description','potential_delta','unlock_condition')), group='天赋'))
+            blocks.append(Block('天赋 · ' + _player_name(talent.get('name'), '未命名天赋'), _complete_rows(talent, ('name','description','potential_delta','unlock_condition')), group='天赋'))
         if not profile.talents:
             blocks.append(Block('天赋', [('状态', _missing(profile, '天赋', ('talent','天赋')))], group='天赋'))
         for skill in profile.building_skills:
-            blocks.append(Block(f"后勤 · {skill.get('name', '未命名')}", _complete_rows(skill, ('name','description','room','unlock')), group='后勤'))
+            blocks.append(Block('后勤 · ' + _player_name(skill.get('name'), '未命名后勤技能'), _complete_rows(skill, ('name','description','room','unlock')), group='后勤'))
         if not profile.building_skills:
             blocks.append(Block('后勤技能', [('状态', _missing(profile, '后勤技能', ('building','后勤','基建')))], group='后勤'))
         blocks.append(Block('潜能提升', [(f'潜能{i + 2}', plain(value)) for i, value in enumerate(profile.potentials)]
             or [('状态', _missing(profile, '潜能提升', ('potential','潜能')))], group='潜能'))
-        for module in profile.modules:
-            blocks.extend(_module_blocks(module))
+        for index, module in enumerate(profile.modules, 1):
+            blocks.extend(_module_blocks(module, owner_id=profile.char_id, fallback_id=f'index-{index}'))
         if not profile.modules:
             blocks.append(Block('模组', [('状态', _missing(profile, '模组', ('module', 'equip', '模组')))], group='模组'))
         blocks.append(Block('来源与诊断', _complete_rows(profile.metadata, ('version','resource_version','source')) + [('诊断', plain(profile.diagnostics) if profile.diagnostics else '无已报告诊断')], group='来源与诊断'))
-    for module in document.modules:
-        blocks.extend(_module_blocks(as_jsonable(module)))
+    for index, module in enumerate(document.modules, 1):
+        blocks.extend(_module_blocks(as_jsonable(module), fallback_id=f'index-{index}'))
     if document.metadata.get('changes'):
         changes = document.metadata['changes']
         blocks.append(Block('更新对照基准', _rows(changes, {'operators','modules'}), group='更新对照'))
         for category in ('operators','modules'):
             for index, change in enumerate(changes.get(category, []), 1):
-                name = change.get('name', change.get('id', change.get('char_id', change.get('equip_id', index))))
+                name = _player_name(change.get('name') or change.get('id') or change.get('char_id') or change.get('equip_id'), f'未命名条目{index}')
                 rows = _rows(change, {'before','after','changes','difference_type'})
                 for side in ('before','after'):
                     if side in change:
                         rows.append((label(side), _readable_tree(change[side])))
                 blocks.append(Block(f'{label(category)} · {name}', rows, group='更新对照'))
                 for field_change in change.get('changes', []):
-                    field_name = field_change.get('field','未标明字段')
+                    field_name = _player_name(field_change.get('field'), '未标明字段')
                     if field_name in RAW_KEYS:
                         continue
                     blocks.append(Block(f'{name} · {label(field_name)}更新', [
