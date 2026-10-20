@@ -704,4 +704,6 @@ Release附现有已验收ZIP和 `.zip.sha256`；上传前再次核验ZIP、EXE�
 
 复用的真实Qt测试第一轮在最后页签断言失败：导出会主动切换“导出任务”，测试却预期“模组更新”；修正为核对关闭前实际页签后完整重跑通过。一次快速关窗测试出现 Windows 原子替换访问错误，独立重跑通过；关闭时已合并成单次配置保存，相关8项再次通过，不将单次访问失败称为稳定复现。
 
-交付阶段：正在固定0.1.1候选、构建和冻结验收；沿用已授权的私有 GitHub 与 main/test，保留0.1.0回退，不改旧附件。正式EXE、远端和ZIP另验后补结果，未用源码通过推定冻结通过。
+0.1.1 正式构建和冻结验收已完成：候选 `32a935c7fe3259a0157ead65768b2fd99f2d8c61`，构建任务 `20261020-094705-ff405ce6`，146 个源输入均与干净提交一致；507 个程序文件与 ZIP 逐项 SHA／CRC 核对。冻结服务链46.38秒通过，默认程序旁data与实际Windows窗口重启5.22秒通过，相同快照／资料数及克莱门莎选择恢复、无重扫重解析，SVG图标可渲染且已查看截图。详见 [验收摘要](docs/ACCEPTANCE.md)。后补文档不改变构建输入，区分制品来源提交与最终文档提交。
+
+本机正式程序为 `dist/0.1.1/ArknightsUnpacker/ArknightsUnpacker.exe`；ZIP为 `dist/ArknightsUnpacker-0.1.1-win64.zip`（73,577,456字节），SHA-256 `01708a508578dbf51264f1d0c23c9b1749eeb5867e43ab4fba9a0262efd402d3`。交付沿用私有 GitHub main/test 及 [v0.1.1 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)，保留0.1.0、不改旧附件；远端refs、上传附件大小及GitHub摘要另核并保留本机收据。用户data、原始游戏和导出样本不进入源码／程序ZIP。
