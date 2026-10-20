@@ -84,9 +84,9 @@ def test_selected_theme_reaches_complete_single_file_html(theme):
     page = Page(output)
     assert_theme(page, theme)
     assert page.sections == [anchor for _, anchor, _, _ in ordered_groups(report)]
-    assert page.stages == ['1', '2', '3']
-    assert any(button.get('data-tab') == 'all' for button in page.buttons)
-    assert [button['data-stage'] for button in page.buttons if 'data-stage' in button] == ['all', '1', '2', '3']
+    assert page.stages == []
+    assert not any('data-tab' in button for button in page.buttons)
+    assert not any('data-stage' in button for button in page.buttons)
     assert all(phrase in output for phrase in ('完整技能正文', '1级完整效果', '2级完整效果', '3级完整效果'))
     assert 'fetch(' not in output and 'http://' not in output and 'https://' not in output
     assert '<link' not in output and '<script src=' not in output
@@ -124,8 +124,7 @@ def test_report_surfaces_and_print_use_shared_tokens_without_fixed_light_cards()
     before_print = layout_css.split('@media print', 1)[0]
     assert not re.search(r'#[0-9a-fA-F]{3,8}\b', before_print)
     assert 'background: var(--header)' in before_print
-    assert 'background: var(--selected-bg)' in before_print
-    assert 'color: var(--selected-ink)' in before_print
+    assert 'color: var(--header-ink)' in before_print
     assert 'font-family: var(--body-family)' in before_print
     assert 'var(--title-scale)' in before_print and 'var(--section-scale)' in before_print
     print_css = page.css[page.css.index('@media print'):]
@@ -134,12 +133,13 @@ def test_report_surfaces_and_print_use_shared_tokens_without_fixed_light_cards()
     assert 'color: var(--ink)' in print_css
 
 
-def test_no_script_controls_stay_hidden_until_script_initializes():
-    css = Page(render_html(document('dark'))).css
+def test_no_script_search_actions_stay_hidden_without_selection_controls():
+    output = render_html(document('dark'))
+    css = Page(output).css
     assert re.search(r'\.js-only\s*\{\s*display:\s*none', css)
     assert re.search(r'\.js \.js-only\s*\{\s*display:\s*flex', css)
-    controls = re.search(r'\.controls,\s*\.stage-controls\s*\{([^}]+)\}', css).group(1)
-    assert 'display:' not in controls
+    assert 'data-tab' not in output and 'data-stage' not in output
+    assert 'report-tools js-only' in output
 
 
 def test_html_uses_shared_grouping_including_additional_report_blocks(monkeypatch):

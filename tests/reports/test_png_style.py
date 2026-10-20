@@ -1,5 +1,7 @@
 """Actual PNG surfaces and glyph positions follow the shared report design."""
 from collections import Counter
+import json
+from pathlib import Path
 
 from PIL import Image, ImageColor, ImageDraw
 import pytest
@@ -112,3 +114,32 @@ def test_large_font_on_minimum_width_keeps_full_title_and_content(tmp_path, monk
     title_size = round(document.options.font_size * typography()['title_scale'])
     assert ''.join(text for text, size in drawn if size == title_size) == document.title
     assert '技能内容' in ''.join(line.text for page in render.layout_pages(document) for line in page)
+
+
+@pytest.mark.parametrize('theme', ['light', 'dark'])
+def test_real_operator_uses_compact_cards_and_keeps_all_skill_content_at_same_font(tmp_path, monkeypatch, theme):
+    from arknights_unpacker.contracts import ReportSelection
+    from arknights_unpacker.reports import compose_report
+    from arknights_unpacker.reports.model import semantic_blocks
+    profile = OperatorProfile(**json.loads((Path(__file__).parent / 'fixtures/clem_actual_profile.json').read_text('utf-8')))
+    document = compose_report(ReportSelection([profile]), ReportOptions(theme=theme))
+    drawn = []
+    original = ImageDraw.ImageDraw.text
+
+    def capture(draw, xy, text, *args, **kwargs):
+        drawn.append((str(text), kwargs['font'].size))
+        return original(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, 'text', capture)
+    path, = render.render_png(document, tmp_path, f'compact-operator-{theme}')
+    with Image.open(path) as image:
+        # The same actual fixture was 1200x7278 in the retained 0.1.7 samples.
+        assert image.width == 1200 and image.height < 7278 * .9
+    actual = ''.join(text for text, _ in drawn)
+    for block in semantic_blocks(document):
+        for key, value in block.rows:
+            assert f'{key}：{value}'.replace('\n', '') in actual
+    skill_lines = [line.text for page in render.layout_pages(document) for line in page
+                   if line.group == '技能' and line.kind == 'body']
+    body_sizes = {size for text, size in drawn if text in skill_lines and text}
+    assert body_sizes == {28}

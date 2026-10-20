@@ -36,14 +36,7 @@ function slug(value) {
 async function stateOf(page) {
   return page.evaluate(() => ({
     query: document.querySelector('#report-search')?.value ?? '',
-    groups: [...document.querySelectorAll('.controls[data-group]')].map(control => ({
-      group: control.dataset.group,
-      selected: [...control.querySelectorAll('button[aria-pressed="true"]')].map(button => button.dataset.tab)
-    })),
-    stages: [...document.querySelectorAll('[data-module]')].map(module => ({
-      module: module.getAttribute('data-module') || module.id,
-      selected: [...module.querySelectorAll('[data-stage-controls] button[aria-pressed="true"]')].map(button => button.dataset.stage)
-    })),
+    entries: [...document.querySelectorAll('[data-skill],[data-module],[data-report-block]')].map(node => ({id: node.id, hidden: node.hidden})),
     details: [...document.querySelectorAll('details.block')].map((details, index) => ({id: details.id || index, open: details.open}))
   }));
 }
@@ -89,16 +82,7 @@ async function verifyReport(browser, filename, directory) {
     }
     fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   }
-  const groupControls = group => page.locator(`.controls[data-group="${group}"]`);
   const panels = group => page.locator(group === '技能' ? '[data-skill]' : '[data-module]');
-  async function targetFor(group, button) {
-    const key = await button.getAttribute('data-tab');
-    const attribute = group === '技能' ? 'data-skill' : 'data-module';
-    const index = await panels(group).evaluateAll((elements, {key, attribute}) =>
-      elements.findIndex(element => element.id === key || element.getAttribute(attribute) === key), {key, attribute});
-    assert(index >= 0, `${group} tab ${key} must point to an actual parent entry`);
-    return panels(group).nth(index);
-  }
   try {
     await page.goto(result.fileUrl, {waitUntil: 'load', timeout: 20000});
     await capture('desktop-1450');
@@ -126,22 +110,20 @@ async function verifyReport(browser, filename, directory) {
       assert(actual.font.includes('Microsoft YaHei'), 'Report body does not use the shared CJK font stack');
       return actual;
     });
-    await check('semantic-parent-markup', async () => {
+    await check('semantic-parent-markup-and-no-selection-controls', async () => {
       const structure = await page.evaluate(() => ({
         sections: document.querySelectorAll('[data-report-section]').length,
         skills: [...document.querySelectorAll('[data-skill]')].map(element => ({id: element.id, entry: element.getAttribute('data-skill')})),
-        modules: [...document.querySelectorAll('[data-module]')].map(element => ({id: element.id, entry: element.getAttribute('data-module'),
-          stages: [...element.querySelectorAll('[data-module-stage]')].map(stage => stage.dataset.moduleStage)})),
-        moduleButtons: [...document.querySelectorAll('.controls[data-group="模组"] button[data-tab]:not([data-tab="all"])')].map(button => button.textContent.trim()),
+        modules: [...document.querySelectorAll('[data-module]')].map(element => ({id: element.id, entry: element.getAttribute('data-module')})),
+        selectionControls: document.querySelectorAll('[data-tab],[data-stage],[data-stage-controls],[data-module-stage]').length,
         duplicateIds: [...document.querySelectorAll('[id]')].map(element => element.id).filter((id, index, all) => all.indexOf(id) !== index),
         noneText: /\bNone\b|\[object Object\]/.test(document.querySelector('main')?.innerText || '')
       }));
-      assert(structure.sections > 0, 'Missing [data-report-section] parent sections');
+      assert(structure.sections > 0, 'Missing report sections');
       assert(structure.skills.length > 0 || structure.modules.length > 0, 'No skill or actual module entry to verify');
       assert(!structure.duplicateIds.length, 'Duplicate HTML IDs: ' + structure.duplicateIds.join(', '));
       assert(!structure.noneText, 'Visible None/[object Object] placeholder');
-      assert(structure.moduleButtons.length === structure.modules.length, 'Each module control must represent one actual module, not stage/attribute/talent sub-blocks');
-      assert(!structure.moduleButtons.some(text => /^(?:阶段属性|天赋[:：])/.test(text)), 'Technical module child-block leaked into parent tabs');
+      assert(structure.selectionControls === 0, 'Skills/modules/levels must be shown directly, with no selection controls');
       return structure;
     });
     await check('collapse-expand-report-only', async () => {
@@ -158,68 +140,52 @@ async function verifyReport(browser, filename, directory) {
       await page.locator('#expand-all').click();
       assert(await page.locator('details.block[open]').count() === total, 'Expand must open every report block');
       const after = await stateOf(page);
-      assert(JSON.stringify(before.groups) === JSON.stringify(after.groups), 'Expand/collapse changed parent tabs');
-      assert(JSON.stringify(before.stages) === JSON.stringify(after.stages), 'Expand/collapse changed stage selections');
+      assert(JSON.stringify(before.entries) === JSON.stringify(after.entries), 'Expand/collapse changed which entries are present');
       return {reportDetails: total, directoryBefore, directoryAfter};
     });
-    await check('skill-parent-tabs-keyboard-and-location', async () => {
+    await check('all-skills-visible-and-keyboard-anchor-navigation', async () => {
       const count = await panels('技能').count();
       if (!count) return {notApplicable: 'Module-only report'};
-      const buttons = groupControls('技能').locator('button[data-tab]:not([data-tab="all"])');
-      assert(await buttons.count() === count, 'Skill tabs must correspond to complete skill panels');
-      assert(await groupControls('技能').locator('button[data-tab="all"]').count() === 1, 'Missing all-skills parent tab');
-      const selected = buttons.nth(Math.min(1, count - 1));
-      await selected.click();
-      const target = await targetFor('技能', selected);
-      assert(await selected.getAttribute('aria-pressed') === 'true', 'Clicked skill tab lacks selected state');
-      assert(await panels('技能').locator('visible=true').count() === 1, 'Skill selection must show one complete panel');
-      assert((await target.innerText()).trim().length > 20, 'Selected skill panel is empty');
-      assert((await target.boundingBox()).y < 1050, 'Selected skill body did not scroll into view');
-      assert((await page.locator('#search-status').innerText()).trim(), 'Skill selection feedback missing');
-      await groupControls('技能').locator('button[data-tab="all"]').click();
-      assert(await panels('技能').locator('visible=true').count() === count, 'All-skills tab lost one or more skill panels');
-      await buttons.first().focus();
-      await page.keyboard.press('Enter');
-      assert(await buttons.first().getAttribute('aria-pressed') === 'true', 'Skill tab cannot be activated by keyboard');
-      await capture('skill-selected');
-      return {skillPanels: count, selectedText: await buttons.first().innerText()};
+      assert(await panels('技能').locator('visible=true').count() === count, 'Every skill must be visible without selecting a tab');
+      const links = page.locator('.skill-directory a');
+      if (count > 1) {
+        assert(await links.count() === count, 'Skill anchor directory must represent every skill');
+        const targetId = (await links.last().getAttribute('href')).slice(1);
+        await links.last().focus();
+        await page.keyboard.press('Enter');
+        const geometry = await page.evaluate(id => { const node = document.getElementById(id); return {text: node?.innerText, y: node?.getBoundingClientRect().y}; }, targetId);
+        assert(geometry.text && geometry.text.trim().length > 20, 'Skill anchor points to incomplete content');
+        assert(geometry.y >= 0 && geometry.y < 1050, 'Skill anchor did not scroll into view');
+        assert(await panels('技能').locator('visible=true').count() === count, 'Navigating to a skill hid another skill');
+      }
+      await capture('skills-all-visible');
+      return {skillPanels: count, anchorLinks: await links.count()};
     });
-    await check('actual-module-retains-stages-attributes-talents', async () => {
+    await check('all-modules-visible-with-four-state-category-matrices', async () => {
       const count = await panels('模组').count();
       if (!count) return {notApplicable: 'Operator has no upgradable module'};
-      const buttons = groupControls('模组').locator('button[data-tab]:not([data-tab="all"])');
-      assert(await buttons.count() === count, 'Module controls contain child stages instead of actual modules');
-      if (count > 1) {
-        assert(await groupControls('模组').locator('button[data-tab="all"]').count() === 1, 'Multiple actual modules require an all-modules tab');
-        await groupControls('模组').locator('button[data-tab="all"]').click();
-        assert(await panels('模组').locator('visible=true').count() === count, 'All-modules tab lost actual module parents');
+      assert(await panels('模组').locator('visible=true').count() === count, 'All modules must be visible together');
+      const matrices = await page.locator('[data-module-matrix]').evaluateAll(nodes => nodes.map(table => ({
+        title: table.getAttribute('aria-label'),
+        columns: [...table.querySelectorAll('thead th')].map(cell => cell.textContent.trim()),
+        rows: [...table.querySelectorAll('tbody tr')].map(row => [...row.children].map(cell => cell.textContent.trim()))
+      })));
+      assert(matrices.length >= count, 'Actual module comparison matrices are missing');
+      for (const table of matrices) {
+        assert(JSON.stringify(table.columns.slice(0, 5)) === JSON.stringify(['项目','未装备','1级','2级','3级']), 'Module matrix must compare baseline and all levels side by side');
+        assert(table.rows.length > 0 && table.rows.every(row => row.length === table.columns.length && row.every(value => value.length > 0)), 'Matrix contains missing cells or dropped levels');
       }
-      const selected = buttons.first();
-      await selected.click();
-      const target = await targetFor('模组', selected);
-      assert(await selected.getAttribute('aria-pressed') === 'true', 'Clicked module button lacks selected state');
-      assert(await panels('模组').locator('visible=true').count() === 1, 'Module selection must keep one complete module parent');
-      const stages = target.locator('[data-module-stage]');
-      const levels = await stages.evaluateAll(nodes => nodes.map(node => Number(node.dataset.moduleStage)));
-      assert(levels.length > 0 && levels.every(level => [1, 2, 3].includes(level)), 'Module stages are missing or invalid');
-      const maximum = Math.max(...levels);
-      assert(await stages.locator('visible=true').count() === 1, 'Default module stage must be one highest available level');
-      assert(await target.locator(`[data-module-stage="${maximum}"]`).isVisible(), 'Highest module level is not visible');
-      const maximumText = await target.locator(`[data-module-stage="${maximum}"]`).innerText();
-      assert(await target.locator(`[data-module-stage="${maximum}"] table`).count() > 0, 'Selected module level lost its attribute/effect table');
-      assert(maximumText.trim().length > 30, 'Selected module level lost body data');
-      if ((await page.title()).includes('丰川祥子')) assert(maximumText.includes('天赋'), 'Togawa Sakiko highest module level lost its talent blocks');
-      await capture('module-highest-selected');
-      await target.locator('[data-stage-controls] button[data-stage="all"]').click();
-      assert(await stages.locator('visible=true').count() === levels.length, 'All-levels control must expose every module stage');
-      await capture('module-all-levels');
-      await target.locator(`[data-stage-controls] button[data-stage="${Math.min(...levels)}"]`).click();
-      assert(await stages.locator('visible=true').count() === 1, 'Selecting a module level must show exactly its complete stage');
-      await target.locator(`[data-stage-controls] button[data-stage="${maximum}"]`).click();
-      return {actualModules: count, levels, defaultLevel: maximum, highestText: maximumText.slice(0, 1500)};
+      const links = page.locator('.module-directory a');
+      if (count > 1) {
+        assert(await links.count() === count, 'Module anchor directory must represent every module');
+        await links.last().click();
+        assert(await panels('模组').locator('visible=true').count() === count, 'Module navigation hid another module');
+      }
+      await capture('modules-all-levels-together');
+      return {actualModules: count, matrices};
     });
     let searchQuery = '';
-    await check('search-cross-tabs-highlights-empty-clear-restores', async () => {
+    await check('search-all-entries-and-matrix-cells-clear-restores', async () => {
       assert(await page.locator('#clear-search').count(), 'Missing #clear-search');
       const available = await panels('技能').count() ? panels('技能') : panels('模组');
       assert(await available.count() > 0, 'No searchable business entries');
@@ -233,24 +199,22 @@ async function verifyReport(browser, filename, directory) {
       assert(await page.locator('[data-report-section] mark:visible').count() > 0, 'Search must highlight visible matches');
       assert((await page.locator('#search-status').innerText()).trim(), 'Search feedback missing');
       assert(!await page.locator('#search-empty').isVisible(), 'Successful search must not show no-match feedback');
-      let stageQuery = '';
-      if (await page.locator('[data-module-stage]').count()) {
-        const hiddenStage = page.locator('[data-module-stage]').first();
-        stageQuery = (await hiddenStage.locator('h2,h3,h4').first().textContent()).trim();
-        await input.fill(stageQuery);
-        assert(await hiddenStage.isVisible(), 'Search must reach a module stage hidden by the prior level selection');
-        assert(await hiddenStage.locator('mark:visible').count() > 0, 'Hidden module-stage search did not highlight matching text');
+      let matrixQuery = '';
+      const cells = page.locator('[data-module-matrix] tbody td');
+      if (await cells.count()) {
+        matrixQuery = (await cells.last().textContent()).trim();
+        await input.fill(matrixQuery);
+        assert(await page.locator('[data-module-matrix] mark:visible').count() > 0, 'Matrix values must be searchable');
       }
       await input.fill('__AK_REPORT_NO_MATCH_20261020__');
       assert(await page.locator('#search-empty').isVisible(), 'Unmatched search must show #search-empty');
       await page.locator('#clear-search').click();
       const after = await stateOf(page);
       assert(after.query === '', 'Clear button did not clear the search input');
-      assert(JSON.stringify(before.groups) === JSON.stringify(after.groups), 'Clearing search did not restore prior tabs');
-      assert(JSON.stringify(before.stages) === JSON.stringify(after.stages), 'Clearing search did not restore prior module levels');
+      assert(JSON.stringify(before) === JSON.stringify(after), 'Clearing search did not restore all entries and fold states');
       assert(!await page.locator('#search-empty').isVisible(), 'Cleared search still displays no-match feedback');
       assert(await page.locator('mark').count() === 0, 'Cleared search left stale match highlights');
-      return {query: searchQuery, stageQuery, before, after};
+      return {query: searchQuery, matrixQuery, before, after};
     });
     await check('print-events-expose-all-and-restore-state', async () => {
       assert(await page.locator('#print-report').count(), 'Missing #print-report');
@@ -264,7 +228,7 @@ async function verifyReport(browser, filename, directory) {
             open: document.querySelectorAll('details.block[open]').length,
             total: document.querySelectorAll('details.block').length,
             query: document.querySelector('#report-search').value,
-            hidden: [...document.querySelectorAll('[data-report-section],[data-skill],[data-module],[data-module-stage]')].filter(node =>
+            hidden: [...document.querySelectorAll('[data-report-section],[data-report-block],[data-skill],[data-module]')].filter(node =>
               node.hidden || getComputedStyle(node).display === 'none').map(node => node.id || node.outerHTML.slice(0, 80))
           };
           window.dispatchEvent(new Event('afterprint'));
@@ -315,7 +279,7 @@ async function verifyReport(browser, filename, directory) {
         await fallback.goto(result.fileUrl, {waitUntil: 'load', timeout: 20000});
         const details = await fallback.locator('details.block').count();
         const open = await fallback.locator('details.block[open]').count();
-        const selectors = ['[data-report-section]', '[data-skill]', '[data-module]', '[data-module-stage]'];
+        const selectors = ['[data-report-section]', '[data-report-block]', '[data-skill]', '[data-module]'];
         const counts = {};
         for (const selector of selectors) {
           counts[selector] = {total: await fallback.locator(selector).count(), visible: await fallback.locator(selector).locator('visible=true').count()};

@@ -48,17 +48,19 @@ def test_skill_and_unresolved_parameters_form_one_entry_per_real_skill():
     assert blocks[1].rows == [('未解析参数 ratio', '2.5')]
 
 
-def test_module_children_share_main_entry_and_numeric_stage_without_losing_content():
+def test_module_categories_share_main_entry_and_compare_stages_without_losing_content():
     data = module_data()
     original = deepcopy(data)
     profile = ModuleProfile(**data)
     document = ReportDocument('资料', modules=[profile])
     blocks = [block for block in semantic_blocks(document) if block.group == '模组']
-    assert len(blocks) == 9
+    assert len(blocks) < 9
     assert len({block.entry_id for block in blocks}) == 1
     assert blocks[0].entry_id and 'char_owner' in blocks[0].entry_id and 'equip_main' in blocks[0].entry_id
     assert {block.entry_title for block in blocks} == {blocks[0].title}
-    assert [block.stage for block in blocks] == [None, 1, 1, 1, 1, 1, 3, 3, 3]
+    assert all(block.stage is None for block in blocks)
+    assert {'module-info', 'module-attributes', 'module-effects', 'module-summons'} <= {block.kind for block in blocks}
+    assert all(block.columns == ['项目', '未装备', '1级', '2级', '3级'] for block in blocks if block.columns)
     assert '完整模组' in blocks[0].entry_title
     assert all('None' not in block.title for block in blocks)
     assert profile.phases == original['phases'], 'formatting must not rename raw talents or alter game values'
@@ -141,10 +143,11 @@ def test_empty_module_talent_stub_is_not_displayed_but_source_records_remain():
     module = ModuleProfile(**module_data(phases=[{'level': 3, 'trait': '已有特性', 'talents': talents}]))
     original = deepcopy(module)
     blocks = semantic_blocks(ReportDocument('资料', modules=[module]))
-    talent_blocks = [block for block in blocks if block.group == '模组' and block.title.startswith('天赋：')]
-    assert len(talent_blocks) == 3
-    assert all('None' not in block.title and '未命名天赋' in block.title for block in talent_blocks)
-    assert any(('说明', '未命名但有实际天赋效果') in block.rows for block in talent_blocks)
-    assert any('潜能增量 1' in value for block in talent_blocks for _, value in block.rows)
+    effects, = [block for block in blocks if block.kind == 'module-effects']
+    talents = [row for row in effects.cells if '未命名天赋' in row[0]]
+    assert len(talents) == 1  # One category row retains these unnamed records together.
+    assert '未命名但有实际天赋效果' in talents[0][4]
+    assert '未解析' in talents[0][4]
+    assert '潜能增量 1' in text_report(ReportDocument('资料', modules=[module]))
     assert module == original
     assert module.phases[0]['talents'][0] == empty

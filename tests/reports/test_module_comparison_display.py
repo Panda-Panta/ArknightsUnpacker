@@ -24,17 +24,19 @@ def test_stage_effects_are_readable_in_operator_and_module_outputs_without_mutat
     for doc in documents:
         before = deepcopy(doc)
         blocks = semantic_blocks(doc)
-        comparison = next(block for block in blocks if block.title == '属性提升对照' and block.stage == 3)
-        assert comparison.columns == ['项目', '未装备', '本级加成', '装备后', '较2级']
+        comparison, = [block for block in blocks if block.kind == 'module-attributes' and
+                        block.entry_id.endswith(':uniequip_002_angel')]
+        assert comparison.columns == ['项目', '未装备', '1级', '2级', '3级']
         atk = next(row for row in comparison.cells if row[0] == '攻击')
-        assert atk[2] == '+41' and atk[4] == '+6'
+        assert '+27' in atk[2] and '+35' in atk[3] and '+41' in atk[4]
         text = text_report(doc)
-        assert '未装备时' in text and '本级效果' in text and '2级效果' in text
+        assert all(value in text for value in ('未装备', '1级', '2级', '3级'))
+        assert '本级效果' not in text and '较2级变化' not in text
         assert '一名随机友方单位' in text and '两名随机友方单位' in text
-        assert '常驻面板' in text and '潜能增量' in text
+        assert '属性口径' in text and '潜能增量' in text
         html = render_html(doc)
         png_text = ''.join(line.text for page in layout_pages(doc) for line in page)
-        for phrase in ('属性提升对照', '未装备时', '本级效果', '较2级'):
+        for phrase in ('属性对照', '未装备', '3级', '+41'):
             assert phrase in html and phrase in png_text
         assert doc == before
 

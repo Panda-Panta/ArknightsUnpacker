@@ -1,4 +1,4 @@
-"""Offline reference pages with semantic entry/level grouping and inline assets."""
+"""Offline reference pages with continuous skills and compact module matrices."""
 from base64 import b64encode
 from collections import OrderedDict
 from html import escape
@@ -72,21 +72,32 @@ def _header(document: ReportDocument) -> str:
         (f'<p class="snapshot-label">游戏数据版本 {_e(version)}</p>' if version else '') + '</div></header>'
 
 
-def _block(index: int, block: Block, heading: str = 'h3', *, module_intro: bool = False) -> str:
+def _tables(block: Block, *, matrix: bool = False) -> str:
     rows = ''.join(f'<tr><th scope="row" class="key">{_e(key)}</th>'
                    f'<td class="{"potential" if "潜能" in key else ""}">{_e(value)}</td></tr>'
                    for key, value in block.rows)
     table = f'<table><tbody>{rows}</tbody></table>' if rows else ''
     if block.columns:
         heads = ''.join(f'<th scope="col">{_e(column)}</th>' for column in block.columns)
-        cells = ''.join('<tr>' + ''.join(
-            f'<td class="{"potential" if block.columns[column] == "潜能" else ""}">{_e(value)}</td>'
-            for column, value in enumerate(row)) + '</tr>' for row in block.cells)
-        table += f'<div class="table-wrap"><table class="attributes"><thead><tr>{heads}</tr></thead><tbody>{cells}</tbody></table></div>'
-    intro = ' data-module-intro' if module_intro else ''
-    return f'<div class="report-block" data-report-block{intro} id="block-{index}"><details class="block" open>' + \
+        cells = []
+        for row in block.cells:
+            values = []
+            for column, value in enumerate(row):
+                if matrix and column == 0:
+                    values.append(f'<th scope="row">{_e(value)}</th>')
+                else:
+                    potential = 'potential' if block.columns[column] == '潜能' else ''
+                    values.append(f'<td class="{potential}">{_e(value)}</td>')
+            cells.append('<tr>' + ''.join(values) + '</tr>')
+        attributes = f'class="module-matrix" data-module-matrix aria-label="{_e(block.title)}"' if matrix else 'class="attributes"'
+        table += f'<div class="table-wrap"><table {attributes}><thead><tr>{heads}</tr></thead><tbody>{"".join(cells)}</tbody></table></div>'
+    return table
+
+
+def _block(index: int, block: Block, heading: str = 'h3') -> str:
+    return f'<div class="report-block" data-report-block id="block-{index}"><details class="block" open>' + \
         f'<summary><{heading}>{_e(block.title)}</{heading}><span class="fold-label" aria-hidden="true">展开 / 收起</span></summary>' + \
-        f'<div class="block-body">{table}</div></details></div>'
+        f'<div class="block-body">{_tables(block)}</div></details></div>'
 
 
 def _entries(items):
@@ -97,23 +108,21 @@ def _entries(items):
     return entries
 
 
-def _controls(group: str, entries, *, show_all=True) -> str:
-    if not entries:
+def _entry_directory(entries, prefix: str, label: str) -> str:
+    if len(entries) < 2:
         return ''
-    buttons = f'<button type="button" data-tab="all" aria-pressed="true">全部{group}</button>' if show_all else ''
-    for key, items in entries.items():
-        first = items[0][1]
-        title = first.title if group == '技能' else first.entry_title
-        buttons += f'<button type="button" data-tab="{_e(key)}" aria-pressed="false">{_e(title)}</button>'
-    return f'<div class="controls js-only" data-group="{group}" role="group" aria-label="{group}选择">{buttons}</div>'
+    links = ''.join(f'<a href="#{prefix}-{children[0][0]}">{_e(children[0][1].entry_title)}</a>'
+                    for children in entries.values())
+    return f'<nav class="{prefix}-directory" aria-label="{label}目录">{links}</nav>'
 
 
 def _skills(items) -> str:
     entries = _entries(items)
-    output = [_controls('技能', entries)]
+    output = [_entry_directory(entries, 'skill', '技能')]
     for key, children in entries.items():
         title = children[0][1].entry_title
-        output.append(f'<div class="entry-panel skill-panel" data-skill="{_e(key)}" data-entry-title="{_e(title)}">')
+        output.append(f'<div class="entry-panel skill-panel" id="skill-{children[0][0]}" '
+                      f'data-skill="{_e(key)}" data-entry-title="{_e(title)}">')
         output.extend(_block(index, block) for index, block in children)
         output.append('</div>')
     output.extend(_block(index, block) for index, block in items if not block.entry_id)
@@ -122,21 +131,25 @@ def _skills(items) -> str:
 
 def _modules(items) -> str:
     entries = _entries(items)
-    output = [_controls('模组', entries, show_all=len(entries) > 1)]
+    output = [_entry_directory(entries, 'module', '模组')]
     for key, children in entries.items():
+        first_index = children[0][0]
         title = children[0][1].entry_title
-        output.append(f'<div class="entry-panel module-panel" data-module="{_e(key)}" data-entry-title="{_e(title)}">')
-        output.extend(_block(index, block, module_intro=True) for index, block in children if block.stage is None)
-        stages = sorted({block.stage for _, block in children if block.stage is not None})
-        if stages:
-            buttons = '<button type="button" data-stage="all" aria-pressed="true">全部等级</button>' + ''.join(
-                f'<button type="button" data-stage="{level}" aria-pressed="false">{level}级</button>' for level in stages)
-            output.append(f'<div class="stage-controls js-only" data-stage-controls role="group" aria-label="{_e(title)}等级">{buttons}</div>')
-        for level in stages:
-            output.append(f'<div class="module-stage" data-module-stage="{level}">')
-            output.extend(_block(index, block, 'h4') for index, block in children if block.stage == level)
-            output.append('</div>')
-        output.append('</div>')
+        output.append(f'<article class="entry-panel module-panel" id="module-{first_index}" '
+                      f'data-module="{_e(key)}" data-entry-title="{_e(title)}" aria-labelledby="module-title-{first_index}">'
+                      '<details class="block module-details" open><summary>'
+                      f'<h3 id="module-title-{first_index}">{_e(title)}</h3>'
+                      '<span class="fold-label" aria-hidden="true">展开 / 收起</span></summary>')
+        for index, block in children:
+            intro = block.kind == 'module-info' or (not block.kind and block.stage is None and block.title == title)
+            attributes = ' data-module-intro' if intro else ''
+            classes = 'report-block module-block' + (' module-info' if intro else '')
+            output.append(f'<section class="{classes}" data-report-block data-module-kind="{_e(block.kind)}"'
+                          f'{attributes} id="block-{index}">')
+            if not intro:
+                output.append(f'<h4>{_e(block.title)}</h4>')
+            output.append(f'<div class="block-body">{_tables(block, matrix=True)}</div></section>')
+        output.append('</details></article>')
     output.extend(_block(index, block) for index, block in items if not block.entry_id)
     return ''.join(output)
 

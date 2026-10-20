@@ -40,7 +40,7 @@ def test_multiple_modules_render_one_complete_png_beyond_old_page_height(tmp_pat
     original_text = ImageDraw.ImageDraw.text
 
     def capture_text(draw, xy, text, *args, **kwargs):
-        drawn.append((str(text), xy[1]))
+        drawn.append((str(text), xy[1], xy[0]))
         return original_text(draw, xy, text, *args, **kwargs)
 
     monkeypatch.setattr(ImageDraw.ImageDraw, "text", capture_text)
@@ -55,25 +55,30 @@ def test_multiple_modules_render_one_complete_png_beyond_old_page_height(tmp_pat
         assert image.width == 640
         assert image.height > document.options.max_page_height
         assert image.width * image.height <= 80_000_000
-        assert all(0 <= y < image.height for _, y in drawn)
+        assert all(0 <= y < image.height for _, y, _ in drawn)
         # The last semantic content is visibly above the one final footer.
-        body_bottom = max(y for text, y in drawn if "最终尾部" in text or "终点" in text)
-        footer_y = next(y for text, y in drawn if text.startswith("第 1 / 1 页"))
+        body_bottom = max(y for text, y, _ in drawn if "最终尾部" in text or "终点" in text)
+        footer_y = next(y for text, y, _ in drawn if text.startswith("第 1 / 1 页"))
         assert body_bottom < footer_y
-    actual = "".join(text for text, _ in drawn)
+    actual = "".join(text for text, _, _ in drawn)
+    # Wrapped cells paint left-to-right one fragment at a time. Reconstruct
+    # each column rather than mixing adjacent columns into a source cell.
+    columns = {}
+    for text, _, x in drawn:
+        columns[x] = columns.get(x, '') + text
     for block in semantic_blocks(document):
         assert block.title.replace("\n", "") in actual
         for key, value in block.rows:
             assert f"{key}：{value}".replace("\n", "") in actual
         for row in [block.columns, *block.cells]:
             for cell in row:
-                assert str(cell).replace("\n", "") in actual
+                assert any(str(cell).replace("\n", "") in value for value in columns.values())
     for index in range(1, 5):
         for level in (1, 2, 3):
             assert f"阶段终点{index}{level}" in actual
     assert "最终尾部终点" in actual
     assert actual.count(document.title) == 1
-    assert sum(text.startswith("第 ") and " 页" in text for text, _ in drawn) == 1
+    assert sum(text.startswith("第 ") and " 页" in text for text, _, _ in drawn) == 1
 
 
 def test_module_paged_option_keeps_existing_pagination(tmp_path):

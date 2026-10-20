@@ -28,6 +28,7 @@ class DrawLine:
     last: bool = False
     row_index: int = -1
     group: str = ''
+    inset: int = 0
 
 
 def _font(size: int, bold: bool = False):
@@ -80,12 +81,12 @@ class _Layout:
         self.caption = _font(max(10, min(22, round(options.font_size * type_style['caption_scale']))))
         self.margin = min(48, options.width // 14)
         self.width = options.width - self.margin * 2
-        self.padding = min(18, max(8, options.font_size // 2))
-        self.gap = max(10, options.font_size // 2)
+        self.padding = min(14, max(6, round(options.font_size * .35)))
+        self.gap = max(6, round(options.font_size * .22))
         self.chrome_padding = min(24, max(12, options.font_size // 2))
         self.body_height = math.ceil(options.font_size * type_style['line_height'])
-        self.heading_height = math.ceil(self.heading.size * type_style['line_height'])
-        self.section_height = math.ceil(self.section.size * 1.4)
+        self.heading_height = math.ceil(self.heading.size * 1.35)
+        self.section_height = math.ceil(self.section.size * 1.3)
         self.title_height = math.ceil(self.title.size * 1.35)
         self.caption_height = math.ceil(self.caption.size * type_style['line_height'])
         self.header_height = self.caption_height + self.chrome_padding * 2
@@ -94,57 +95,85 @@ class _Layout:
         self.capacity = self.page_height - self.header_height - self.footer_height
 
 
-def _table_widths(width: int, count: int) -> list[int]:
+def _table_widths(width: int, count: int, label_width: int | None = None) -> list[int]:
+    if label_width is not None:
+        state_width, remainder = divmod(width - label_width, count - 1)
+        return [label_width] + [state_width + (index < remainder) for index in range(count - 1)]
     weights = [1.6] + [1] * (count - 1)
     widths = [int(width * weight / sum(weights)) for weight in weights]
     widths[-1] += width - sum(widths)
     return widths
 
 
+def _text_y(font, text: str, y: int, height: int) -> int:
+    bounds = font.getbbox(text, anchor='lt')
+    return y + (height - (bounds[3] - bounds[1])) // 2 - bounds[1]
+
+
 def _block_lines(block, layout: _Layout, cancel) -> list[DrawLine]:
     lines = []
-    heading = wrap_text(block.title, layout.heading, layout.width - layout.padding * 2, cancel=cancel)
+    compact = block.kind.startswith('module-')
+    inset = max(5, min(layout.padding, round(layout.body.size * .28))) if compact else layout.padding
+    padding = max(4, layout.padding // 2)
+    gap = layout.gap
+    body_height = layout.body_height
+    heading_height = layout.heading_height
+
+    def fitted_height(texts, font, minimum):
+        # Compact spacing must still contain the actual glyphs, including Latin
+        # descenders and combining marks, rather than assuming font.size bounds.
+        return max(minimum, max((font.getbbox(text, anchor='lt')[3] -
+                                font.getbbox(text, anchor='lt')[1] for text in texts), default=0) + 4)
+
+    heading = wrap_text(block.title, layout.heading, layout.width - inset * 2, cancel=cancel)
     for index, text in enumerate(heading):
-        top = layout.padding if index == 0 else 0
-        bottom = layout.padding if index == len(heading) - 1 else 0
-        lines.append(DrawLine(text, layout.heading_height + top + bottom,
+        top = padding if index == 0 else 0
+        bottom = padding if index == len(heading) - 1 else 0
+        lines.append(DrawLine(text, fitted_height([text], layout.heading, heading_height) + top + bottom,
             'warning-heading' if block.group == '草稿警告' else 'heading',
             padding_top=top, padding_bottom=bottom, first=index == 0,
-            last=index == len(heading) - 1, group=block.group))
+            last=index == len(heading) - 1, group=block.group, inset=inset))
 
     def add_row(key, value, row_index=-1):
-        wrapped = wrap_text(f'{key}：{value}', layout.body, layout.width - layout.padding * 2, cancel=cancel)
+        wrapped = wrap_text(f'{key}：{value}', layout.body, layout.width - inset * 2, cancel=cancel)
         for index, text in enumerate(wrapped):
-            lines.append(DrawLine(text, layout.body_height,
+            lines.append(DrawLine(text, fitted_height([text], layout.body, body_height),
                 'potential' if '潜能' in key else 'body', index > 0,
                 first=index == 0, last=index == len(wrapped) - 1,
-                row_index=row_index, group=block.group))
+                row_index=row_index, group=block.group, inset=inset))
 
     for row_index, (key, value) in enumerate(block.rows):
         add_row(key, value, row_index)
     if block.columns:
         if layout.width >= (len(block.columns) * 3 + 4) * layout.body.size:
-            widths = _table_widths(layout.width, len(block.columns))
+            label_width = None
+            if compact and len(block.columns) == 5:
+                labels = [block.columns[0], *(str(row[0]) for row in block.cells if row)]
+                measured = max(layout.body.getlength(part) for label in labels for part in label.split('\n'))
+                maximum = round(layout.width * .17)
+                minimum = min(maximum, math.ceil(layout.body.size * 3 + inset * 2))
+                label_width = min(maximum, max(minimum, math.ceil(measured) + inset * 2))
+            widths = _table_widths(layout.width, len(block.columns), label_width)
             for row_index, row in enumerate([block.columns, *block.cells]):
                 font = layout.table_heading if row_index == 0 else layout.body
                 wrapped = [wrap_text(str(row[column]) if column < len(row) else '', font,
-                                     width - layout.padding * 2, cancel=cancel)
+                                     width - inset * 2, cancel=cancel)
                            for column, width in enumerate(widths)]
                 fragments = max(map(len, wrapped), default=1)
                 for part in range(fragments):
                     cells = [values[part] if part < len(values) else '' for values in wrapped]
-                    lines.append(DrawLine(' | '.join(cells), layout.body_height,
+                    lines.append(DrawLine(' | '.join(cells), fitted_height(cells, font, body_height),
                         'table-header' if row_index == 0 else 'table', cells=cells,
                         column_labels=block.columns, column_widths=widths,
                         first=part == 0, last=part == fragments - 1,
-                        row_index=row_index - 1, group=block.group))
+                        row_index=row_index - 1, group=block.group, inset=inset))
         else:
             # Preserve the labeled fallback rather than compressing seven columns.
             for row_index, row in enumerate(block.cells):
                 for column, key in enumerate(block.columns):
                     add_row(key, str(row[column]) if column < len(row) else '', row_index)
-                lines.append(DrawLine('', max(6, layout.gap // 2), 'separator', group=block.group))
-    lines.append(DrawLine('', layout.padding + layout.gap, 'card-end', padding_bottom=layout.gap,
+                lines.append(DrawLine('', max(4, gap // 2), 'separator', group=block.group))
+    lines.append(DrawLine('', padding + gap, 'card-end', padding_bottom=gap,
                           group=block.group))
     return lines
 
@@ -287,8 +316,9 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                         draw.line((margin, y, right, y), fill=border)
                     if line.last:
                         draw.line((margin, bottom - 1, right, bottom - 1), fill=border)
-                    text_y = y + line.padding_top + (layout.heading_height - layout.heading.size) // 2
-                    draw.text((margin + layout.padding, text_y), line.text, font=layout.heading,
+                    text_y = _text_y(layout.heading, line.text, y + line.padding_top,
+                                     line.height - line.padding_top - line.padding_bottom)
+                    draw.text((margin + (line.inset or layout.padding), text_y), line.text, font=layout.heading,
                               fill=colors['warning_ink'] if is_warning else colors['header_ink'], anchor='lt')
                 elif line.kind in {'table','table-header'}:
                     x = margin
@@ -304,8 +334,9 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                             draw.line((x, bottom - 1, x + width, bottom - 1), fill=colors['rule'])
                         is_pot = line.column_labels[column_index] == '潜能'
                         if cell:
-                            draw.text((x + layout.padding, y + (line.height - layout.body.size) // 2), cell,
-                                      font=layout.table_heading if is_h else layout.body,
+                            font = layout.table_heading if is_h else layout.body
+                            draw.text((x + (line.inset or layout.padding), _text_y(font, cell, y, line.height)), cell,
+                                      font=font,
                                       fill=colors['gold'] if is_pot else colors['header_ink'] if is_h else colors['ink'], anchor='lt')
                         x += width
                 elif line.kind == 'card-end':
@@ -332,7 +363,7 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                     if line.first or line_index == 0:
                         draw.line((margin, y, right, y), fill=border)
                     if line.text:
-                        draw.text((margin + layout.padding, y + (line.height - layout.body.size) // 2), line.text,
+                        draw.text((margin + (line.inset or layout.padding), _text_y(layout.body, line.text, y, line.height)), line.text,
                                   font=layout.body, fill=colors['warning_ink'] if warning else colors['gold']
                                   if line.kind == 'potential' else colors['ink'], anchor='lt')
                 if line_index == len(lines) - 1 and line.kind in {'body', 'potential', 'table', 'table-header', 'heading', 'warning-heading'}:

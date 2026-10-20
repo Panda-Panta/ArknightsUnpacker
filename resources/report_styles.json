@@ -1,5 +1,5 @@
 {
-  "style_version": "2.1.0",
+  "style_version": "2.2.0",
   "resource_role": "Shared runtime source for PNG and HTML report styles",
   "themes": {
     "light": {
@@ -28,7 +28,7 @@
     "heading_family": "\"Microsoft YaHei\", \"PingFang SC\", \"Noto Sans CJK SC\", sans-serif",
     "utility_family": "\"Consolas\", \"Microsoft YaHei\", monospace",
     "title_scale": 1.9, "section_scale": 1.4, "heading_scale": 1.12,
-    "caption_scale": 0.78, "line_height": 1.55
+    "caption_scale": 0.78, "line_height": 1.4
   },
   "reference": "PRTS local dossier: dark masthead, cyan sections, themed cards and contribution tables"
 }

@@ -59,9 +59,9 @@ MainWindow → AppServices.extract → WorkerRunner → extraction.engine
 MainWindow → AppServices.export → build_operator/build_module → reports.export_report
 ```
 
-`reports/html_render.py` 负责生成资料与选择结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.1.0，修改会直接影响新报告。`reports/style.py` 读取 `resources/report_styles.json`，提供两种格式共用的调色板、字体层级及 `ordered_groups(document)` 资料分区顺序。HTML 通过 `theme_css(theme)` 内联主题变量，PNG 使用 `theme_colors(theme)` 和 `typography()`；批次目录同样接收 `ReportOptions.theme`。JSON 是正式构建要求的运行资产，纯 JSON／TXT 导出仍不依赖这些样式。
+`reports/html_render.py` 负责生成资料、连续条目与锚点目录结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.2.0，修改会直接影响新报告。`reports/style.py` 读取 `resources/report_styles.json`，提供两种格式共用的调色板、字体层级及 `ordered_groups(document)` 资料分区顺序。HTML 通过 `theme_css(theme)` 内联主题变量，PNG 使用 `theme_colors(theme)` 和 `typography()`；批次目录同样接收 `ReportOptions.theme`。JSON 是正式构建要求的运行资产，纯 JSON／TXT 导出仍不依赖这些样式。
 
-`reports/model.py` 的 entry_id／entry_title／stage 将模组简介与各级属性、天赋归为同一条目，PNG／TXT 继续共用资料。PNG 排版实现位于 `reports/render.py`：`ReportOptions.module_image_layout` 为 `single`（默认）或 `paged`，只控制纯模组合集；`single` 按内容生成一张自适应高度图，超过 8,000 万像素时明确提示改用分页或减少选择。`ui/settings.py` 以 `report_module_image_layout` 保存“模组PNG排版”，以 `report_theme` 保存“资料导出主题（PNG / HTML）”，原有 dark/light 值兼容保留。`modules.html` 仍同页容纳全部模组，干员独立报告分页不变。模组复选框由 `ui/entity_view.py` 内局部模型按稳定ID维护，排序／筛选保留勾选并提示隐藏数量；共享 `RecordsModel` 与干员列表选择不变。folder_rules.json 是目录用途分类的实际运行输入。
+`reports/model.py` 的 entry_id／entry_title 将模组简介与分类横表归为同一条目；Block.kind 标明模组简介、属性、效果、潜能、召唤物与条件，stage 保留兼容字段、新横表统一为空。列为项目／未装备／1级／2级／3级，属性直接读取领域比较结果，文本引用首次相同原文，JSON保留原数据。PNG／HTML／TXT与GUI预览共用这些语义块。PNG 排版实现位于 `reports/render.py`：`ReportOptions.module_image_layout` 为 `single`（默认）或 `paged`，只控制纯模组合集；`single` 按内容生成一张自适应高度图，超过 8,000 万像素时明确提示改用分页或减少选择。`ui/settings.py` 以 `report_module_image_layout` 保存“模组PNG排版”，以 `report_theme` 保存“资料导出主题（PNG / HTML）”，原有 dark/light 值兼容保留。`modules.html` 仍同页容纳全部模组，干员独立报告分页不变。模组复选框由 `ui/entity_view.py` 内局部模型按稳定ID维护，排序／筛选保留勾选并提示隐藏数量；共享 `RecordsModel` 与干员列表选择不变。folder_rules.json 是目录用途分类的实际运行输入。
 
 `scripts/verify-html.cjs` 是真实浏览器验收入口：`node scripts/verify-html.cjs --html <产物路径> --output <证据目录>`。开发环境需提供 Node.js 和 Playwright，可用 `NODE_PATH` 指向已有 Playwright 安装的 `node_modules`；这些工具不属于产品运行依赖。旧 HTML 为静态快照，需重新导出才使用新资产，不迁改已有报告。
 
@@ -72,3 +72,5 @@ MainWindow → AppServices.export → build_operator/build_module → reports.ex
 报告公共入口仍为 `compose_report`／`export_report`。`reports/export.py` 负责任务目录、来源路径保护、取消与失败清单；`reports/exporters.py` 的有序格式表负责对应输出，HTML／PNG 渲染器在被选择时才导入。纯资料组合和 JSON／TXT 不要求 HTML 资产。`gamedata/module_comparison.py` 用已有 `panel()` 算法对照同一培养条件，保留未解析值，不混入召唤物或条件战斗效果；派生 `comparison` 不参与业务差分。`reports/model.py` 将对照转为统一语义块，供 GUI 预览、PNG、HTML、TXT 共用；JSON 保留原字段及新对照。旧资料缺少新字段时仍可展示。
 
 显式 `--headless-verify` 在一次真实扫描／解析后分别以 dark/light 导出同一组选定干员和模组，`verification.json` 的 `report_runs` 记录两种结果；该入口不代表浏览器检查。浏览器脚本另从实际导出 HTML 检查主题颜色、离线交互、窄屏和打印状态；打印媒体使用共享亮色变量，结束后恢复屏幕主题。`--smoke-test` 原生窗口收据包含当前主题与可选值，用于冻结／安装设置保留验证。
+
+HTML 所有技能与模组连续显示，移除技能／模组页签和等级控件；每个模组只用一个 details 折叠，分类为带行表头的横表。原生锚点用于跳转，JS仅处理搜索、清除、折叠、打印与锚点展开。共享正文行高为1.4，PNG按实测首列宽度为四状态列留等宽空间，窄图保留带标签回退。旧静态HTML不受影响，需重新导出。

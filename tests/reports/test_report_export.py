@@ -191,7 +191,8 @@ def test_draft_badge_and_module_recipient_sections():
                          'scope':{'isToken':True,'validInGameTag':'特定玩法'}}],
         'token_attributes':{'token_1':[{'key':'max_hp','value':50}]},'scope':{'game_tag_meta':'限定模式'},'talents':[]}])
     text=text_report(compose_report(ReportSelection(modules=[module]),ReportOptions()))
-    assert '召唤物效果' in text and '召唤物属性' in text and '生命上限：50' in text
+    assert '召唤物效果' in text and '生命上限' in text and '+50（加成）' in text
+    assert '召唤物1：token_1' in text
     assert '限定模式' in text and '特定玩法' in text
     assert 'hidden_effects' not in text and 'blackboard' not in text and '不应重复显示' not in text
 
