@@ -14,7 +14,7 @@ from .contracts import (BuildSpec, CancelToken, DecodedTable, EntityChangeSet,
                         ScanOptions, SourceRef, TableSourceSet, as_jsonable,
                         null_progress)
 from .jobs import WorkerRunner
-from .paths import (atomic_json, default_data_root, migrate_legacy_data,
+from .paths import (atomic_json, default_data_root, default_output_root, migrate_legacy_data,
                     validate_data_root, validate_output)
 
 
@@ -36,7 +36,7 @@ def table_sources_from_dict(value):
 
 
 class AppServices:
-    def __init__(self, data_root: str | Path | None = None):
+    def __init__(self, data_root: str | Path | None = None, output_root: str | Path | None = None):
         from .library import CatalogStore
         self.data_root = validate_data_root(Path(data_root) if data_root else default_data_root())
         try:
@@ -52,7 +52,7 @@ class AppServices:
         except (OSError, sqlite3.Error) as error:
             raise PermissionError(f"无法读写运行数据目录 {self.data_root}：{error}。请将程序放在可写目录，或使用 --data-dir 指定可写目录。") from error
         self.config_file = self.data_root / "settings.json"
-        self.config = {"game_root": "", "output_root": str(Path.home() / "Documents" / "ArknightsExports"),
+        self.config = {"game_root": "", "output_root": str(default_output_root()),
                        "hours": 24.0, "report_width": 1200, "report_font_size": 28,
                        "report_theme": "dark", "monitor": False,
                        "formats": ["png", "html"], "extraction_mode": "auto",
@@ -63,6 +63,21 @@ class AppServices:
                 self.config.update(json.loads(self.config_file.read_text(encoding="utf-8")))
             except (ValueError, OSError):
                 pass
+        saved_output = self.config.get("output_root")
+        default_output = default_output_root()
+        legacy_output = Path.home() / "Documents" / "ArknightsExports"
+        if output_root is not None:
+            self.config["output_root"] = str(Path(output_root).expanduser().resolve())
+        elif not saved_output or not str(saved_output).strip() or Path(saved_output).expanduser().resolve() == legacy_output.resolve():
+            self.config["output_root"] = str(default_output)
+        if Path(self.config["output_root"]).expanduser().resolve() == default_output.resolve():
+            output = validate_output(validate_data_root(default_output), self.config.get("game_root"))
+            try:
+                output.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                raise PermissionError(f"无法创建默认输出目录 {output}：{error}。请将程序放在可写目录。") from error
+        if self.config.get("output_root") != saved_output:
+            self.save_config()
         self.installation = None
         self.scan_snapshot = None
         self.file_changes = None

@@ -3,6 +3,7 @@ from PySide6.QtCore import Signal, QUrl, Qt
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QLabel, QSpinBox, QComboBox, QCheckBox, QGroupBox
 from arknights_unpacker.contracts import ExportFormat, ReportOptions
+from arknights_unpacker.paths import default_output_root
 
 
 class SettingsView(QWidget):
@@ -15,14 +16,14 @@ class SettingsView(QWidget):
         output_group = QGroupBox('文件与输出')
         form = QFormLayout(output_group)
         output_row = QHBoxLayout()
-        self.output = QLineEdit(str(config.get('output_root', str(data_root / 'exports'))))
+        self.output = QLineEdit(str(config.get('output_root') or default_output_root()))
         self.output.setObjectName('outputRoot')
         choose = QPushButton('选择…')
         choose.clicked.connect(self.choose_output)
         output_row.addWidget(self.output, 1)
         output_row.addWidget(choose)
         form.addRow('输出目录', output_row)
-        note = QLabel('游戏目录仅作为只读输入。请将输出保存在独立目录，避免放入游戏安装目录。')
+        note = QLabel('默认输出到程序旁的 exports 文件夹，不存在时自动创建；也可自行选择目录。\n游戏目录仅作为只读输入，输出不得放入游戏安装目录。')
         note.setWordWrap(True)
         form.addRow(note)
         self.mode = QComboBox()

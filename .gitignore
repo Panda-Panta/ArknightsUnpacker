@@ -8,5 +8,6 @@ build/
 dist/
 artifacts/
 data/
+/exports/
 *.egg-info/
 

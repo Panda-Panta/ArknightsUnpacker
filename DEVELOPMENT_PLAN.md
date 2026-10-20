@@ -717,3 +717,11 @@ Release附现有已验收ZIP和 `.zip.sha256`；上传前再次核验ZIP、EXE�
 同步已完成：只读预览确认替换8项、新增3个SVG、删除0项、496项未变。旧0.1.0的504个文件已复制到 `.work/tools-sync-20261020/backup-0.1.0/` 并逐项核验；安装后507项大小／SHA全部与0.1.1发布包匹配。目标EXE SHA-256为 `55fe2fb79fbb8fc693da822d257361d691433a0996d2147bc356902181fae266`。未知文件和用户导出不参与覆盖，邻近工具未操作。
 
 实际 `D:\Tools\ArknightsUnpacker\ArknightsUnpacker.exe` 在Windows原生Qt平台默认启动11.34秒、关闭后重启6.47秒，均退出0；截图已查看，浅色palette及3个SVG正常。从旧AppData非破坏迁入并恢复16,886个文件的历史扫描、434项干员／513项模组，前后scan_id／gamedata_id一致；旧库3个扫描及1个资料快照的payload完整保留，未重扫重解析。程序当前数据位置为 `D:\Tools\ArknightsUnpacker\data`，其中自动保留旧schema2的数据库升级备份；原AppData的85个文件均无增删且大小／SHA不变。运行后再次验证507项安装文件匹配，无遗留程序进程。证据：`sync-preview.json`、`backup-verified.json`、`sync-result.json`、`installed-verification.json` 和两次原生窗口截图，均在上述工作目录。只补本次交付日志，结构索引与程序源码无需改变。
+
+### 14.5 默认输出改为程序旁 exports（2026-10-20）
+
+用户要求默认输出与程序放在同一文件夹的 `exports/`，不存在自动创建。已查到 AppServices 默认写入 Documents/ArknightsExports，SettingsView 还有 data/exports 回退。统一由 paths 的程序位置计算 data 与 exports，独立于工作目录、PyInstaller的_internal及显式--data-dir；旧文档默认配置迁为新默认，其他自定义目录保留，旧导出文件不移动。创建默认目录前沿用游戏路径保护，失败显示实际输出路径。
+
+本轮沿用个人main/test交付及D:\Tools\ArknightsUnpacker，版本0.1.2；复用scripts/verify.ps1、build.ps1、清单同步和原生EXE启动验证。主agent独占paths/application/界面入口/版本/计划/验收/构建/Git及安装；feedback_persistence并行独占tests/app/test_output_defaults.py；github_docs并行独占用户指南、README、便携说明及结构索引。独立产物在 `.work/output-defaults-20261020/`。检查新默认与旧默认迁移、目录创建和已有文件、自定义路径、换cwd及打包路径；安装保护data和既有导出，再从实际EXE核对启动／重启和资料恢复。执行与结果随后记录。
+
+源码实现及两包集成完成；AppServices新增可选output_root让原有CLI覆盖先于默认目录创建，不因默认目录不可写阻止合法自定义输出。服务／GUI85项通过；最终默认路径13项及启动提示1项通过，独立只读核对无阻塞发现；README、用户指南、便携说明、结构索引及忽略规则已更新。当前Tools0.1.1共507托管文件均匹配，37个未托管用户文件及旧AppData85个文件基线已保存；构建前固定干净候选，后续只补冻结／安装／远端结果。

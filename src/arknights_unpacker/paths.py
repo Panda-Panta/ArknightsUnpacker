@@ -19,10 +19,17 @@ def resource_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def program_root() -> Path:
+    """Use the executable's folder (or source root), never the launch cwd."""
+    return Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+
+
 def default_data_root() -> Path:
-    """Keep portable state beside the program, independent of its launch cwd."""
-    program_root = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
-    return program_root / "data"
+    return program_root() / "data"
+
+
+def default_output_root() -> Path:
+    return program_root() / "exports"
 
 
 def legacy_data_root() -> Path:

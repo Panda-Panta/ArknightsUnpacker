@@ -2,20 +2,20 @@
 
 Windows 原生 GUI：浏览《明日方舟》PC 资源、扫描最近更新、解包选中文件，并生成干员／模组 PNG 长图与 PRTS 风格离线 HTML。
 
-**版本 0.1.1。** 新增启动恢复扫描／解析／查看状态、程序旁便携数据、统一浅色工作台，以及更新列表批量原图导出。单图平铺，多图按包建目录。验收使用的本机数据为 **78.2.0**，具体回归、真实流程及证据边界见 [验收摘要](docs/ACCEPTANCE.md)。
+**版本 0.1.2。** 默认输出改为程序旁 `exports/`，启动自动创建，保留自定义输出路径。支持启动恢复扫描／解析／查看状态、程序旁便携数据、统一浅色工作台，以及更新列表批量原图导出。单图平铺，多图按包建目录。验收使用的本机数据为 **78.2.0**，具体回归、真实流程及证据边界见 [验收摘要](docs/ACCEPTANCE.md)。
 
 ## 直接运行
 
-Release 入口：[v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.1/ArknightsUnpacker-0.1.1-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.1/ArknightsUnpacker-0.1.1-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留。
+Release 入口：[v0.1.2](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.2) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.2/ArknightsUnpacker-0.1.2-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.2/ArknightsUnpacker-0.1.2-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)／[v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留。
 
 解压完整 ZIP 后，双击其中的 `ArknightsUnpacker.exe`。无需安装 Python，保留同目录的 `_internal` 文件夹。本机已交付目录中的程序也可直接运行；源码仓库不保存 `dist/` 构建产物。
 
-1. 选择游戏目录，在设置中选择独立输出目录。
+1. 选择游戏目录。默认输出为程序旁的 `exports/`，启动时自动创建；也可在设置中自定义输出目录。
 2. 扫描后浏览目录、查看用途，按需启用“仅 .ab”。最近时间默认 24 小时，可修改。
 3. 选中文件解包；双击包可浏览内部对象并选择提取。
 4. 在“干员资料”／“模组更新”点击“解析核心数据”，选择资料，预览或导出 PNG、HTML。JSON 和 TXT 同步保存，完整字段来源保留于 JSON。
 
-再次启动直接读取保存结果，无需重新解析。设置、快照、变化记录与查看状态位于程序旁 `data/`；升级时保留此目录。首次升级可非覆盖迁入旧 `%LOCALAPPDATA%\ArknightsUnpacker` 数据，原文件保留。游戏文件始终只读。
+再次启动直接读取保存结果，无需重新解析。设置、快照、变化记录与查看状态位于程序旁 `data/`；输出默认位于同级 `exports/`，源码运行时位于项目根。两者不随启动工作目录改变，显式 `--data-dir` 只改变数据目录。旧版 `Documents/ArknightsExports` 默认配置自动改用新默认，其他自定义输出路径保留，旧导出文件不搬动。升级时保留 `data/` 与已有输出。首次升级可非覆盖迁入旧 `%LOCALAPPDATA%\ArknightsUnpacker` 数据，原文件保留。游戏文件始终只读。
 
 ## 已实现
 

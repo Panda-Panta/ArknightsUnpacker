@@ -101,7 +101,7 @@ def main() -> int:
     args = parser.parse_args()
     from .application import AppServices
     try:
-        services = AppServices(args.data_dir)
+        services = AppServices(args.data_dir, output_root=args.output_dir)
     except (OSError, ValueError) as error:
         if args.smoke_test or args.headless_verify:
             if sys.stderr is not None:
@@ -113,8 +113,6 @@ def main() -> int:
             apply_theme(app)
             QMessageBox.critical(None, '无法读取或保存程序数据', str(error))
         return 1
-    if args.output_dir:
-        services.config["output_root"] = str(Path(args.output_dir).resolve())
     if args.headless_verify:
         safe_target = None
         try:
@@ -160,6 +158,9 @@ def main() -> int:
                                       "tabs": [window.tabs.tabText(i) for i in range(window.tabs.count())],
                                       "screenshot": str(image_path), "frozen": bool(getattr(sys, "frozen", False)),
                                       "qt_platform": app.platformName(), "data_root": str(services.data_root),
+                                      "output_root": services.config.get("output_root"),
+                                      "output_directory_exists": Path(services.config["output_root"]).is_dir(),
+                                      "settings_output": window.settings.output.text(),
                                       "queue_idle": not window.queue.busy,
                                       "scan_id": getattr(services.scan_snapshot, 'snapshot_id', None),
                                       "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),
