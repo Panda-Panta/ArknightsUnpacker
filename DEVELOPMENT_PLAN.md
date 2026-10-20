@@ -707,3 +707,13 @@ Release附现有已验收ZIP和 `.zip.sha256`；上传前再次核验ZIP、EXE�
 0.1.1 正式构建和冻结验收已完成：候选 `32a935c7fe3259a0157ead65768b2fd99f2d8c61`，构建任务 `20261020-094705-ff405ce6`，146 个源输入均与干净提交一致；507 个程序文件与 ZIP 逐项 SHA／CRC 核对。冻结服务链46.38秒通过，默认程序旁data与实际Windows窗口重启5.22秒通过，相同快照／资料数及克莱门莎选择恢复、无重扫重解析，SVG图标可渲染且已查看截图。详见 [验收摘要](docs/ACCEPTANCE.md)。后补文档不改变构建输入，区分制品来源提交与最终文档提交。
 
 本机正式程序为 `dist/0.1.1/ArknightsUnpacker/ArknightsUnpacker.exe`；ZIP为 `dist/ArknightsUnpacker-0.1.1-win64.zip`（73,577,456字节），SHA-256 `01708a508578dbf51264f1d0c23c9b1749eeb5867e43ab4fba9a0262efd402d3`。交付沿用私有 GitHub main/test 及 [v0.1.1 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)，保留0.1.0、不改旧附件；远端refs、上传附件大小及GitHub摘要另核并保留本机收据。用户data、原始游戏和导出样本不进入源码／程序ZIP。
+
+### 14.4 D:\Tools 程序同步（2026-10-20）
+
+用户明确要求同步到 D:\Tools，已核实具体目标为 `D:\Tools\ArknightsUnpacker`，当前0.1.0；旁边的 `Arknights Unpack` 是另一工具。来源为已发布且运行验证的0.1.1目录包，远端main/test/tag为 `3cd1fda35578d60932c16865e5531c108f662709`，构建来源仍为32a935c，不修改已发布制品。
+
+本轮仅安装同步：主agent唯一写入Tools；`feedback_images` 只读核验源507文件／146输入与提交，`feedback_persistence` 并行只读盘点目标及旧用户数据并保存摘要。工程暂无安装同步入口，按已有file-manifest与SHA256SUMS生成差异预览，备份旧托管文件后按清单更新，不镜像删除、不覆盖用户data或输出。操作脚本／预览／备份与结果置于 `.work/tools-sync-20261020/`；程序源码未变，无需重建或重发Release。
+
+同步已完成：只读预览确认替换8项、新增3个SVG、删除0项、496项未变。旧0.1.0的504个文件已复制到 `.work/tools-sync-20261020/backup-0.1.0/` 并逐项核验；安装后507项大小／SHA全部与0.1.1发布包匹配。目标EXE SHA-256为 `55fe2fb79fbb8fc693da822d257361d691433a0996d2147bc356902181fae266`。未知文件和用户导出不参与覆盖，邻近工具未操作。
+
+实际 `D:\Tools\ArknightsUnpacker\ArknightsUnpacker.exe` 在Windows原生Qt平台默认启动11.34秒、关闭后重启6.47秒，均退出0；截图已查看，浅色palette及3个SVG正常。从旧AppData非破坏迁入并恢复16,886个文件的历史扫描、434项干员／513项模组，前后scan_id／gamedata_id一致；旧库3个扫描及1个资料快照的payload完整保留，未重扫重解析。程序当前数据位置为 `D:\Tools\ArknightsUnpacker\data`，其中自动保留旧schema2的数据库升级备份；原AppData的85个文件均无增删且大小／SHA不变。运行后再次验证507项安装文件匹配，无遗留程序进程。证据：`sync-preview.json`、`backup-verified.json`、`sync-result.json`、`installed-verification.json` 和两次原生窗口截图，均在上述工作目录。只补本次交付日志，结构索引与程序源码无需改变。
