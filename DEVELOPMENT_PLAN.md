@@ -722,6 +722,8 @@ Release附现有已验收ZIP和 `.zip.sha256`；上传前再次核验ZIP、EXE�
 
 用户要求默认输出与程序放在同一文件夹的 `exports/`，不存在自动创建。已查到 AppServices 默认写入 Documents/ArknightsExports，SettingsView 还有 data/exports 回退。统一由 paths 的程序位置计算 data 与 exports，独立于工作目录、PyInstaller的_internal及显式--data-dir；旧文档默认配置迁为新默认，其他自定义目录保留，旧导出文件不移动。创建默认目录前沿用游戏路径保护，失败显示实际输出路径。
 
-本轮沿用个人main/test交付及D:\Tools\ArknightsUnpacker，版本0.1.2；复用scripts/verify.ps1、build.ps1、清单同步和原生EXE启动验证。主agent独占paths/application/界面入口/版本/计划/验收/构建/Git及安装；feedback_persistence并行独占tests/app/test_output_defaults.py；github_docs并行独占用户指南、README、便携说明及结构索引。独立产物在 `.work/output-defaults-20261020/`。检查新默认与旧默认迁移、目录创建和已有文件、自定义路径、换cwd及打包路径；安装保护data和既有导出，再从实际EXE核对启动／重启和资料恢复。执行与结果随后记录。
+本轮沿用个人main/test交付及D:\Tools\ArknightsUnpacker，版本0.1.2；复用scripts/verify.ps1、build.ps1、清单同步和原生EXE启动验证。主agent独占paths/application/界面入口/版本/计划/验收/构建/Git及安装；feedback_persistence并行独占tests/app/test_output_defaults.py；github_docs并行独占用户指南、README、便携说明及结构索引。独立产物在 `.work/output-defaults-20261020/`。检查新默认与旧默认迁移、目录创建和已有文件、自定义路径、换cwd及打包路径；安装保护data和既有导出，再从实际EXE核对启动／重启和资料恢复。
 
 源码实现及两包集成完成；AppServices新增可选output_root让原有CLI覆盖先于默认目录创建，不因默认目录不可写阻止合法自定义输出。服务／GUI85项通过；最终默认路径13项及启动提示1项通过，独立只读核对无阻塞发现；README、用户指南、便携说明、结构索引及忽略规则已更新。当前Tools0.1.1共507托管文件均匹配，37个未托管用户文件及旧AppData85个文件基线已保存；构建前固定干净候选，后续只补冻结／安装／远端结果。
+
+0.1.2已构建并安装：候选 `5faade8be701cc26b9e16ff2a4e6e674dc939f00`，构建任务 `20261020-121824-5fe3b1bd`，146输入与干净提交一致；507文件／ZIP逐项摘要与CRC通过，独立冻结GUI4.27秒确认从无关工作目录仍创建EXE旁exports。候选已普通快进推送main/test后才同步Tools：507旧文件备份核验，更新8项，其余499项一致，未增删程序文件。实际Tools GUI默认启动6.75秒、重启5.84秒，默认路径及设置均为 `D:\Tools\ArknightsUnpacker\exports`，目录由EXE创建；保存3次扫描／1次资料快照、434／513项资料且未重扫重解析，其他设置不变。同步时37个用户文件和旧AppData85个文件均保留，原生GUI运行演进后再次核验受保护文件及507程序项。备份／预览／运行收据在该任务目录；完整摘要见docs/ACCEPTANCE.md。ZIP73,579,521字节，SHA `fdc25f08c4f3570557e77537aaa11088e11b55e5322cefa3cfb71097fea160c6`，沿用私有GitHub v0.1.2发布新附件，实际远端refs与附件摘要由verify_remote.py另核；不改旧Release。当前仅补验收与交付记录，不重建相同程序。
