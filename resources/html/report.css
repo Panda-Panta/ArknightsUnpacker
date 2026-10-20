@@ -224,7 +224,7 @@ h1 { font-size: 32px; line-height: 1.25; font-weight: 800; color: #111a24; margi
 .search-status { margin: 6px 0 0; min-height: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 /* Filter Controls */
-.controls, .stage-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 20px; }
+.controls, .stage-controls { flex-wrap: wrap; gap: 8px; margin: 16px 0 20px; }
 .controls button, .stage-controls button { font-size: 13px; }
 .stage-controls { padding: 12px 0; margin: 0 0 12px; border-bottom: 1px solid var(--rule); }
 .stage-controls button { min-width: 64px; }

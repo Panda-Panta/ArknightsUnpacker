@@ -15,8 +15,12 @@ ArknightsUnpacker/
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
+│  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器
+│  │  └─ module_comparison.py    同培养条件的模组各级属性、原效果与前一级对照
 │  ├─ reports/                    语义块、模组单张／分页PNG、独立HTML与批次清单
-│  └─ ui/                         Qt 浅色六页工作台、启动恢复、更新批量导图、原图预览保存
+│  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
+│  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
+│     └─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
 ├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ exports/                       启动自动创建的默认输出，不随源码或程序打包
@@ -59,3 +63,7 @@ MainWindow → AppServices.export → build_operator/build_module → reports.ex
 `scripts/verify-html.cjs` 是真实浏览器验收入口：`node scripts/verify-html.cjs --html <产物路径> --output <证据目录>`。开发环境需提供 Node.js 和 Playwright，可用 `NODE_PATH` 指向已有 Playwright 安装的 `node_modules`；这些工具不属于产品运行依赖。旧 HTML 为静态快照，需重新导出才使用新资产，不迁改已有报告。
 
 构建只收集明确的源码依赖、资源、vendor、Qt 动态库与许可证；不收集游戏原文件、整个项目、测试夹具、应用历史数据库或用户配置。新增格式适配应修改对应 extraction 模块并更新真实样本证据；领域数值只在 gamedata 修改，界面与两个渲染器不得各自重算。
+
+页面增删入口为 `ui/pages.py` 的 `PAGE_DEFINITIONS`：控制器负责创建视图、信号连接、状态保存／恢复和刷新。新增页面使用唯一且稳定的 `page_id`；移除资源浏览、更新记录、干员或模组的清单项后，其余功能仍可使用。四个可选页缺失具体模块时跳过该页，其内部依赖错误正常报出。`jobs` 和 `settings` 是必要基础设施。主窗口通过 `PageComposition` 调度，任务标签按实际控件定位，不依赖页签下标；新保存状态按 ID，旧数字状态按原六页顺序兼容。PyInstaller 显式收集 UI 子模块以支持延迟导入。
+
+报告公共入口仍为 `compose_report`／`export_report`。`reports/export.py` 负责任务目录、来源路径保护、取消与失败清单；`reports/exporters.py` 的有序格式表负责对应输出，HTML／PNG 渲染器在被选择时才导入。纯资料组合和 JSON／TXT 不要求 HTML 资产。`gamedata/module_comparison.py` 用已有 `panel()` 算法对照同一培养条件，保留未解析值，不混入召唤物或条件战斗效果；派生 `comparison` 不参与业务差分。`reports/model.py` 将对照转为统一语义块，供 GUI 预览、PNG、HTML、TXT 共用；JSON 保留原字段及新对照。旧资料缺少新字段时仍可展示。`resources/report_styles.json` 仍是设计参考，实际样式入口为 CSS 和 PNG 渲染器。

@@ -1,13 +1,14 @@
 """Module stage totals and explicit effect scope, including hidden implementation records."""
 from ..contracts import BuildSpec, ModuleProfile
 from .attributes import ATTRIBUTES, attribute_key
+from .build import build_state, metadata
 from .candidates import choose, condition, potential_delta
 from .descriptions import blackboard_map, render_description
 from .repository import equipment, is_badge
+from .module_comparison import add_comparisons
 
 
 def build_module(data, equip_id, spec=None):
-    from .operators import build_state, metadata
     spec = spec or BuildSpec()
     equip = equipment(data.tables).get(equip_id)
     if not equip or is_badge(equip):
@@ -86,4 +87,6 @@ def build_module(data, equip_id, spec=None):
         p.diagnostics.extend(stage['diagnostics'])
     if not p.phases:
         p.diagnostics.append('no module phases parsed')
+    else:
+        add_comparisons(data, ch, spec, p, base_trait)
     return p

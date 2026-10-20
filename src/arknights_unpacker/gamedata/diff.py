@@ -7,7 +7,7 @@ from .repository import equipment, is_badge, stable_digest
 
 def _business(value):
     if isinstance(value, dict):
-        return {key:_business(item) for key,item in value.items() if key not in ('metadata', 'source', 'sources', 'diagnostics')}
+        return {key:_business(item) for key,item in value.items() if key not in ('metadata', 'source', 'sources', 'diagnostics', 'comparison')}
     if isinstance(value, list):
         return [_business(x) for x in value]
     return value

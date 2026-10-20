@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import partial
 from dataclasses import replace
 from pathlib import Path
 import uuid
@@ -9,15 +8,11 @@ from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent, QFontDatabase, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox, QCheckBox, QTabWidget,
-    QComboBox, QMessageBox, QScrollArea)
+    QComboBox)
 from arknights_unpacker.contracts import BuildSpec, ExportFormat, ReportOptions, ExtractionResult, as_jsonable
-from .models import value, selected_records
-from .explorer import ExplorerView
-from .updates import UpdatesView
-from .operator_view import OperatorView
-from .module_view import ModuleView
-from .jobs import JobQueue, JobsView
-from .settings import SettingsView
+from .models import value
+from .jobs import JobQueue
+from .pages import PageComposition
 from .report_preview import ObjectsDialog, ReportArtifactsDialog
 from .styles import apply_theme
 from .job_history import remaining_extraction
@@ -25,7 +20,7 @@ from .job_history import remaining_extraction
 
 class MainWindow(QMainWindow):
     """Native workbench; all expensive services run in a serial cancellable queue."""
-    def __init__(self, services, initial_root: str = ''):
+    def __init__(self, services, initial_root: str = '', *, page_definitions=None):
         super().__init__()
         apply_theme(QApplication.instance())
         self.services = services
@@ -33,12 +28,9 @@ class MainWindow(QMainWindow):
         self._load_pending = False
         self._monitor_stamp = None
         self._dialogs = []
-        self._profile_pending = set()
-        self._restored_module_choices = {}
         self._closing = False
         self._restore_pending = False
         self._view_state_ready = False
-        self._display_data_identity = None
         if not QFontDatabase.families():
             # The offscreen Qt platform has no system font discovery on Windows.
             font_path = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts/msyh.ttc'
@@ -126,19 +118,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(baseline_row)
         self.tabs = QTabWidget()
         self.tabs.setObjectName('mainTabs')
-        self.explorer = ExplorerView()
-        self.updates = UpdatesView()
-        self.operators = OperatorView()
-        self.modules = ModuleView()
-        self.jobs = JobsView(self.queue)
-        self.settings = SettingsView(services.config, Path(services.data_root))
-        settings_scroll = QScrollArea()
-        settings_scroll.setWidgetResizable(True)
-        settings_scroll.setWidget(self.settings)
-        for view, name in [(self.explorer, '资源浏览'), (self.updates, '更新记录'),
-                           (self.operators, '干员资料'), (self.modules, '模组更新'),
-                           (self.jobs, '导出任务'), (settings_scroll, '设置')]:
-            self.tabs.addTab(view, name)
+        self.pages = PageComposition(self, page_definitions)
         layout.addWidget(self.tabs, 1)
         footer = QHBoxLayout()
         self.output_label = QLabel('输出：' + self.settings.output.text())
@@ -153,21 +133,7 @@ class MainWindow(QMainWindow):
         footer.addWidget(self.cancel_button)
         layout.addLayout(footer)
         self.statusBar().showMessage('选择游戏目录开始，或读取上次保存的扫描与资料。')
-        self.explorer.extract_requested.connect(self.extract)
-        self.updates.extract_requested.connect(self.extract)
-        self.updates.images_requested.connect(lambda paths: self.extract(paths, kinds=['image'], mode='auto'))
-        self.explorer.objects_requested.connect(self.objects)
-        self.settings.changed.connect(self.save_settings)
-        self.settings.output.textChanged.connect(lambda text: self.output_label.setText('输出：' + text))
-        self.operators.load_requested.connect(self.load_data)
-        self.modules.load_requested.connect(self.load_data)
-        self.operators.profile_requested.connect(partial(self.profile, 'operators'))
-        self.modules.profile_requested.connect(partial(self.profile, 'modules'))
-        self.operators.export_requested.connect(partial(self.export, 'operators'))
-        self.modules.export_requested.connect(partial(self.export, 'modules'))
-        self.operators.preview_requested.connect(partial(self.preview_reports, 'operators'))
-        self.modules.preview_requested.connect(partial(self.preview_reports, 'modules'))
-        self.jobs.artifacts_requested.connect(self.show_report_artifacts)
+        self.pages.connect()
         self.monitor_timer = QTimer(self)
         self.monitor_timer.setInterval(15000)
         self.monitor_timer.timeout.connect(self.check_manifests)
@@ -229,20 +195,11 @@ class MainWindow(QMainWindow):
         root = value(self.services.installation, 'root') or self.root_edit.text().strip()
         if not root:
             return
-        def selected_id(view):
-            rows = selected_records(view.table)
-            return str(rows[0]['id']) if len(rows) == 1 else None
-        state = {'root': str(Path(root).resolve()), 'tab': self.tabs.currentIndex(),
-                 'explorer_folder': self.explorer.folder, 'explorer_recursive': self.explorer.recursive.isChecked(),
-                 'explorer_ab': self.explorer.ab_only.isChecked(), 'explorer_search': self.explorer.search.text(),
-                 'update_mode': self.updates.mode.currentIndex(), 'update_ab': self.updates.ab_only.isChecked(),
-                 'update_search': self.updates.search.text()}
-        for key, view in (('operators', self.operators), ('modules', self.modules)):
-            state[key] = {'search': view.search.text(), 'only_changes': view.only_changes.isChecked(),
-                          'only_new': view.only_new.isChecked(), 'selected_id': selected_id(view),
-                          'module_id': view.module_choice.currentData()}
         states = self.services.config.setdefault('view_states', {})
-        states[state['root']] = state
+        root = str(Path(root).resolve())
+        state = self.pages.save_state(states.get(root, {}))
+        state['root'] = root
+        states[root] = state
 
     def restore_view_state(self):
         root = value(self.services.installation, 'root') or self.root_edit.text().strip()
@@ -251,29 +208,7 @@ class MainWindow(QMainWindow):
         state = self.services.config.get('view_states', {}).get(str(Path(root).resolve()), {})
         if not state:
             return
-        self.explorer.recursive.setChecked(bool(state.get('explorer_recursive', False)))
-        self.explorer.ab_only.setChecked(bool(state.get('explorer_ab', False)))
-        self.explorer.search.setText(state.get('explorer_search', ''))
-        folder = str(state.get('explorer_folder', ''))
-        if (self.explorer.root / folder).resolve().is_relative_to(self.explorer.root.resolve()):
-            self.explorer.folder = folder
-            self.explorer.refresh()
-            self.explorer.breadcrumb.setText(str(self.explorer.root / folder))
-        self.updates.mode.setCurrentIndex(max(0, min(3, int(state.get('update_mode', 2)))))
-        self.updates.ab_only.setChecked(bool(state.get('update_ab', False)))
-        self.updates.search.setText(state.get('update_search', ''))
-        for key, view in (('operators', self.operators), ('modules', self.modules)):
-            saved = state.get(key, {})
-            view.search.setText(saved.get('search', ''))
-            view.only_changes.setChecked(bool(saved.get('only_changes', False)))
-            view.only_new.setChecked(bool(saved.get('only_new', False)))
-            for index, row in enumerate(view.model.rows):
-                if str(row['id']) == saved.get('selected_id'):
-                    if key == 'operators' and saved.get('module_id'):
-                        self._restored_module_choices[(key, str(row['id']))] = saved['module_id']
-                    view.table.selectRow(index)
-                    break
-        self.tabs.setCurrentIndex(max(0, min(self.tabs.count() - 1, int(state.get('tab', 0)))))
+        self.pages.restore_state(state)
 
     def show_status(self, message):
         self.statusBar().showMessage(str(message)[-450:])
@@ -282,8 +217,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(self.queue.busy)
         self.root_edit.setEnabled(not self.queue.busy)
         self.choose_root_button.setEnabled(not self.queue.busy)
-        waiting = sum(j.status == '排队中' for j in self.queue.jobs)
-        self.tabs.setTabText(4, f'导出任务 ({waiting + int(self.queue.busy)})' if self.queue.busy or waiting else '导出任务')
+        self.pages.queue_changed()
         if self._closing and not self.queue.busy:
             QTimer.singleShot(0, self.close)
 
@@ -308,7 +242,7 @@ class MainWindow(QMainWindow):
         hours, strict = self.hours.value(), self.strict.isChecked()
         self.services.config.update(game_root=root, hours=hours)
         self.services.save_config()
-        self.explorer.set_root(root)
+        self.pages.set_root(root)
         self._scan_pending = True
         self.scan_button.setEnabled(False)
         job = self.queue.submit('扫描游戏目录' + ('（严格校验）' if strict else ''),
@@ -331,10 +265,7 @@ class MainWindow(QMainWindow):
         normalized_root = value(snapshot, 'root')
         if normalized_root:
             self.root_edit.setText(str(normalized_root))
-            if self.explorer.root != Path(normalized_root):
-                self.explorer.set_root(str(normalized_root))
-        self.explorer.set_data(snapshot, changes, catalog)
-        self.updates.set_data(snapshot, changes, self.hours.value())
+        self.pages.scanned(snapshot, changes, catalog)
         self._monitor_stamp = self.manifest_stamp()
         self.refresh_history()
         self.refresh_entities()
@@ -344,9 +275,7 @@ class MainWindow(QMainWindow):
         self.show_status(f'扫描{"完成" if value(snapshot, "complete") else "存在未完成项"}：{len(value(snapshot, "files", [])):,} 个文件。')
 
     def _hours_changed(self):
-        if self.updates.snapshot:
-            self.updates.hours = self.hours.value()
-            self.updates.refresh()
+        self.pages.hours_changed()
 
     def load_data(self):
         root = self.root_edit.text().strip()
@@ -372,17 +301,7 @@ class MainWindow(QMainWindow):
         installation_root = value(self.services.installation, 'root')
         if installation_root:
             self.root_edit.setText(str(installation_root))
-            if self.explorer.root != Path(installation_root):
-                self.explorer.set_root(str(installation_root))
-                physical = self.services.scan_snapshot
-                matches = physical is not None and Path(value(physical, 'root', '')) == Path(installation_root)
-                self.explorer.set_data(physical if matches else None,
-                                       self.services.file_changes if matches else None, self.services.catalog)
-                if not matches:
-                    self.updates.snapshot = self.updates.changes = None
-                    self.updates.model.replace([])
-                    self.updates.summary.setText('当前安装的核心数据已解析；文件更新记录需要重新扫描。')
-                    self.updates.empty.clear()
+        self.pages.data_loaded()
         self.refresh_entities()
         self.refresh_history()
         self.refresh_session_label()
@@ -391,46 +310,10 @@ class MainWindow(QMainWindow):
         self.show_status('核心资料已解析。首次快照的历史状态未知；可导入完整历史基线比较。')
 
     def refresh_entities(self):
-        if self.services.gamedata is None:
-            self.operators.clear_data()
-            self.modules.clear_data()
-            self._display_data_identity = None
-            return
-        identity = (value(self.services.installation, 'profile_id'), value(self.services.gamedata, 'snapshot_id'))
-        if identity != self._display_data_identity:
-            self.operators.clear_data()
-            self.modules.clear_data()
-            self._restored_module_choices.clear()
-        self._display_data_identity = identity
-        changes = self.services.entity_changes
-        self.operators.set_rows(self.services.operators(), changes, self.services.gamedata)
-        self.modules.set_rows(self.services.modules(), changes, self.services.gamedata)
+        self.pages.refresh_entities()
 
     def profile(self, kind, entity_id, spec):
-        key = (kind, entity_id, spec.module_id)
-        if key in self._profile_pending:
-            return
-        self._profile_pending.add(key)
-        view = self.operators if kind == 'operators' else self.modules
-        method = self.services.operator_profile if kind == 'operators' else self.services.module_profile
-        def call(**kw):
-            kw['cancel'].check()
-            return method(entity_id, spec)
-        def done(result):
-            self._profile_pending.discard(key)
-            rows = selected_records(view.table)
-            if len(rows) == 1 and str(rows[0]['id']) == entity_id and view.module_choice.currentData() == spec.module_id:
-                view.set_profile(result)
-                module_id = self._restored_module_choices.pop((kind, entity_id), None)
-                if module_id:
-                    index = view.module_choice.findData(module_id)
-                    if index >= 0:
-                        view.module_choice.setCurrentIndex(index)
-        job = self.queue.submit('查看资料 · ' + entity_id, call, done)
-        def cleanup():
-            if job.status not in ('运行中', '排队中', '正在取消'):
-                self._profile_pending.discard(key)
-        self.queue.changed.connect(cleanup)
+        self.pages.profile(kind, entity_id, spec)
 
     def output_root(self):
         text = self.settings.output.text().strip()
@@ -504,7 +387,7 @@ class MainWindow(QMainWindow):
             return
         operators, modules = (ids, []) if kind == 'operators' else ([], ids)
         # A single chosen module may enter the static panel; never combine modules.
-        spec = report_spec or (BuildSpec(module_id=self.operators.module_choice.currentData()) if kind == 'operators' and len(ids) == 1 else BuildSpec())
+        spec = report_spec or self.pages.report_spec(kind, ids)
         options = report_options or self.settings.report_options()
         if kind == 'modules' and only_new and not options.title:
             options = replace(options, title='本次新增模组')
@@ -522,7 +405,7 @@ class MainWindow(QMainWindow):
                           'snapshot_id': value(self.services.gamedata, 'snapshot_id'), 'operators': operators, 'modules': modules,
                           'output': output, 'formats': [fmt.value for fmt in formats], 'spec': as_jsonable(spec),
                           'options': as_jsonable(options), 'preview': preview})
-        self.tabs.setCurrentWidget(self.jobs)
+        self.pages.select('jobs')
 
     def preview_reports(self, kind, ids):
         self.export(kind, ids, preview=True)

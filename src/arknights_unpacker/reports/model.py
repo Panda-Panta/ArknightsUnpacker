@@ -1,5 +1,6 @@
 """A small semantic view shared by text, HTML and PNG renderers."""
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 import re
 from typing import Any
 
@@ -29,7 +30,8 @@ RAW_KEYS = {'metadata','field_evidence','field_sources','getter','blackboard','s
     'input_root','game_root','installation_root','source_roots','input_roots','effects','hidden_effects',
     'token_effects','token_attributes','scope','raw_key','target','operation','talent_index','token_key',
     'raw_changed','categories','fields','numeric_level','snapshot_id','path_id','decoder_version',
-    'format','states','state','dictionary','enumRepresentation','resourceVerification'}
+    'format','states','state','dictionary','enumRepresentation','resourceVerification',
+    'comparison','comparison_build'}
 PROFESSIONS = {'WARRIOR':'近卫','SNIPER':'狙击','TANK':'重装','MEDIC':'医疗','SUPPORT':'辅助',
     'CASTER':'术师','SPECIAL':'特种','PIONEER':'先锋','TOKEN':'召唤物','TRAP':'装置'}
 ROOMS = {'CONTROL':'控制中枢','POWER':'发电站','MANUFACTURE':'制造站','DORMITORY':'宿舍',
@@ -137,6 +139,52 @@ def _player_name(value: Any, fallback: str) -> str:
     return text or fallback
 
 
+def _number(value: Any, *, signed: bool = False, unit: str = '') -> str:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return plain(value)
+    number = format(value, '+.12g' if signed and value else '.12g')
+    return number + unit
+
+
+def _text_change(before: Any, after: Any) -> str:
+    """Quote changed clauses; never infer mechanics from parameter names."""
+    if before is None:
+        return ''
+    old, new = plain(before).strip(), plain(after).strip()
+    if old == new:
+        return '无额外变化，沿用原有效果'
+    old_clauses = [part.strip() for part in re.split(r'(?<=[，。；\n])', old) if part.strip()]
+    new_clauses = [part.strip() for part in re.split(r'(?<=[，。；\n])', new) if part.strip()]
+    changes = []
+    for kind, a, b, c, d in SequenceMatcher(None, old_clauses, new_clauses, autojunk=False).get_opcodes():
+        if kind == 'replace':
+            changes.append(''.join(old_clauses[a:b]) + ' → ' + ''.join(new_clauses[c:d]))
+        elif kind == 'insert':
+            changes.append('新增：' + ''.join(new_clauses[c:d]))
+        elif kind == 'delete':
+            changes.append('移除文字：' + ''.join(old_clauses[a:b]))
+    return '\n'.join(changes)
+
+
+def _effect_rows(effect: dict[str, Any], previous_level: Any) -> list[tuple[str, str]]:
+    comparison = effect.get('comparison')
+    if not isinstance(comparison, dict):
+        return _complete_rows(effect, ('name','description','potential_delta'))
+    original, previous, current = (comparison.get(key) for key in ('original','previous','current'))
+    rows = [('名称', _player_name(effect.get('name'), '未命名效果'))]
+    if original is not None:
+        rows.append(('未装备时', plain(original)))
+    if previous_level and previous is not None and previous != original:
+        rows.append((f'{previous_level}级效果', plain(previous)))
+    rows.append(('本级效果', plain(current)))
+    change = _text_change(previous, current)
+    if change:
+        rows.append((f'较{previous_level}级变化' if previous_level else '强化变化', change))
+    rows.append(('潜能增量', present('potential_delta', effect.get('potential_delta', {}))))
+    rows.extend(_rows(effect, {'name','description','potential_delta'}))
+    return rows
+
+
 def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = '', fallback_id: str = 'module') -> list[Block]:
     module = as_jsonable(module)
     name = _player_name(module.get('name'), '未命名模组')
@@ -144,18 +192,49 @@ def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = 
     owner = _player_name(module.get('char_id') or owner_id, '未标明干员')
     key = _player_name(module.get('equip_id') or module.get('id'), fallback_id)
     entry = {'entry_id': f'module:{owner}:{key}', 'entry_title': title}
-    blocks = [Block(title, _rows(module, {'phases'}), group='模组', **entry)]
+    intro = _rows(module, {'phases'})
+    build = module.get('metadata', {}).get('comparison_build')
+    if isinstance(build, dict):
+        intro.extend([('对照培养', f'精英{plain(build.get("phase"))} · Lv.{plain(build.get("level"))} · 潜能{plain(build.get("potential"))} · 信赖{plain(build.get("trust"))}'),
+                      ('常驻面板', '下方仅对照模组基础属性；战斗中生效的特性、天赋和召唤物效果另列。')])
+    blocks = [Block(title, intro, group='模组', **entry)]
     for phase in module.get('phases', []):
         level = str(phase.get('level', '')).strip()
         stage = int(level) if level in {'1', '2', '3'} else None
         phase_title = f'{level}级' if level and phase.get('level') is not None else '阶段未标明'
         phase_entry = {**entry, 'stage': stage}
-        blocks.append(Block(f'{name} · {phase_title}',
-            _complete_rows({k:v for k,v in phase.items() if k not in {'attributes','talents'}}, ('level','trait')) + _scope_rows(phase.get('scope')), group='模组', **phase_entry))
+        comparison = phase.get('comparison')
+        phase_rows = _complete_rows({k:v for k,v in phase.items() if k not in {'attributes','talents'}},
+                                    ('level',) if isinstance(comparison, dict) else ('level','trait'))
+        if isinstance(comparison, dict):
+            phase_rows = [(key, value) for key, value in phase_rows if key != '特性']
+            reason = comparison.get('reason')
+            if reason:
+                phase_rows.append(('面板适用', {'locked':'当前培养条件尚未解锁，装备后面板不计入。',
+                                               'conditional':'限定模组，需满足适用条件；不计入常驻面板。'}.get(reason, plain(reason))))
+        blocks.append(Block(f'{name} · {phase_title}', phase_rows + _scope_rows(phase.get('scope')), group='模组', **phase_entry))
         attrs = phase.get('attributes', [])
-        if attrs:
+        if isinstance(comparison, dict) and comparison.get('attributes'):
+            previous_level = comparison.get('previous_level', 0)
+            after_missing = {'locked':'尚未解锁', 'conditional':'需满足限定条件'}.get(comparison.get('reason'))
+            blocks.append(Block('属性提升对照', columns=['项目','未装备','本级加成','装备后',
+                                                         f'较{previous_level}级' if previous_level else '较未装备'], cells=[
+                [plain(a.get('label', a.get('key'))), _number(a.get('before'), unit=a.get('unit','')),
+                 _number(a.get('bonus'), signed=True, unit=a.get('unit','')),
+                 after_missing or _number(a.get('after'), unit=a.get('unit','')),
+                 _number(a.get('delta'), signed=True, unit=a.get('unit',''))]
+                for a in comparison['attributes']], group='模组', **phase_entry))
+        elif attrs:
             blocks.append(Block('阶段属性', columns=['项目', '数值'], cells=[
                 [plain(a.get('label', a.get('key'))), plain(a.get('value'))] for a in attrs], group='模组', **phase_entry))
+        if isinstance(comparison, dict) and isinstance(comparison.get('trait'), dict):
+            trait = comparison['trait']
+            previous_level = comparison.get('previous_level', 0)
+            rows = [('未装备时', plain(trait.get('original')))] if not previous_level else []
+            rows.append(('本级效果', plain(trait.get('current'))))
+            rows.append((f'较{previous_level}级变化' if previous_level else '强化变化',
+                         _text_change(trait.get('previous'), trait.get('current'))))
+            blocks.append(Block('特性变化', rows, group='模组', **phase_entry))
         for talent in phase.get('talents', []):
             # Some module stages carry an empty implementation stub (index -1).
             # Keep raw records in JSON, and retain unresolved parameter records;
@@ -163,12 +242,14 @@ def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = 
             if not (_player_name(talent.get('name'), '') or _player_name(talent.get('description'), '')
                     or talent.get('potential_delta') or talent.get('blackboard')):
                 continue
-            blocks.append(Block('天赋：' + _player_name(talent.get('name'), '未命名天赋'), _complete_rows(talent, ('name','description','potential_delta')) + _scope_rows(talent.get('scope')), group='模组', **phase_entry))
+            blocks.append(Block('天赋：' + _player_name(talent.get('name'), '未命名天赋'),
+                _effect_rows(talent, comparison.get('previous_level', 0) if isinstance(comparison, dict) else 0) + _scope_rows(talent.get('scope')), group='模组', **phase_entry))
         for effect in phase.get('token_effects', []):
             if not str(effect.get('description') or '').strip():
                 continue
             blocks.append(Block('召唤物效果 · ' + _player_name(effect.get('name'), '模组强化'),
-                _complete_rows(effect, ('description','potential_delta','unlock_condition')) + _scope_rows(effect.get('scope')), group='模组', **phase_entry))
+                (_effect_rows(effect, comparison.get('previous_level', 0)) if isinstance(comparison, dict) else
+                 _complete_rows(effect, ('description','potential_delta','unlock_condition'))) + _scope_rows(effect.get('scope')), group='模组', **phase_entry))
         token_attributes = phase.get('token_attributes') or {}
         if isinstance(token_attributes, dict):
             for token, board in token_attributes.items():

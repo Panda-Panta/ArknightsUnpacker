@@ -8,8 +8,7 @@ from uuid import uuid4
 
 from ..contracts import ExportFormat, ReportArtifact, ReportDocument, as_jsonable, CancelToken, CancelledError, null_progress
 from .compose import validate_options, restrict_changes
-from .html_render import render_html, render_index
-from .model import plain, text_report
+from .exporters import ExportContext, dispatch_exports
 
 
 def safe_filename(value: str, maximum: int = 96) -> str:
@@ -79,7 +78,6 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
         emit({'kind':'progress','stage':'report_export','format':artifact.format,'status':'succeeded',
               'path':artifact.path,'message':artifact.title})
     stem = safe_filename(document.title, min(48, name_budget))
-    payload = as_jsonable(document)
     documents = []
     for index, operator in enumerate(document.operators, 1):
         single = deepcopy(document)
@@ -96,40 +94,9 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
         restrict_changes(single)
         documents.append((single, 'modules' if document.modules else 'report', '', '', ''))
     try:
-        if ExportFormat.JSON in requested:
-            cancel.check()
-            path = directory / f'{stem}.json'
-            _write(path, json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
-            record(ReportArtifact(str(path), 'json', document.title))
-        if ExportFormat.TXT in requested:
-            cancel.check()
-            path = directory / f'{stem}.txt'
-            _write(path, text_report(document))
-            record(ReportArtifact(str(path), 'txt', document.title))
-        if ExportFormat.HTML in requested:
-            entries = []
-            for single, name, profession, version, identifier in documents:
-                cancel.check()
-                path = directory / f'{name}.html'
-                _write(path, render_html(single))
-                record(ReportArtifact(str(path), 'html', single.title))
-                entry_status = '当前快照'
-                changes = document.metadata.get('changes') or {}
-                for change in changes.get('operators', []):
-                    if change.get('id', change.get('char_id')) == identifier:
-                        entry_status = plain(change.get('kind', change.get('status', '变化')))
-                entries.append({'path':path.name, 'title':single.title, 'profession':plain(profession), 'version':plain(version), 'status':entry_status})
-            if len(documents) > 1:
-                cancel.check()
-                path = directory / 'index.html'
-                _write(path, render_index(entries, document.title))
-                record(ReportArtifact(str(path), 'html', document.title + ' · 目录'))
-        if ExportFormat.PNG in requested:
-            from .render import render_png
-            for single, name, _, _, _ in documents:
-                cancel.check()
-                render_png(single, directory, name, cancel=cancel, emit=emit,
-                    on_page=lambda path,pages:record(ReportArtifact(str(path),'png',single.title,pages)))
+        context = ExportContext(document=document, directory=directory, stem=stem, documents=documents,
+                                cancel=cancel, emit=emit, record=record, write=_write)
+        dispatch_exports(context, requested)
         cancel.check()
     except Exception as error:
         status = 'cancelled' if isinstance(error,CancelledError) else 'failed'

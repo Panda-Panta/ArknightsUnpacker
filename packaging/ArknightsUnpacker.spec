@@ -58,6 +58,8 @@ if python_license.is_file():
 fmod_root = Path(next(iter(find_spec("fmod_toolkit").submodule_search_locations)))
 os.environ.setdefault("PYFMODEX_DLL_PATH", str(fmod_root / "libfmod/Windows/x64/fmod.dll"))
 hiddenimports = collect_submodules("UnityPy") + collect_submodules("pyfmodex")
+# Page factories import optional views by name so the shell can omit them.
+hiddenimports += collect_submodules("arknights_unpacker.ui")
 hiddenimports += ["PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.BmpImagePlugin", "PIL.TgaImagePlugin", "Crypto.Cipher.AES", "bson", "flatbuffers", "numpy", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"]
 preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
 entrypoint = root / "packaging" / ("preflight.py" if preflight else "entrypoint.py")
