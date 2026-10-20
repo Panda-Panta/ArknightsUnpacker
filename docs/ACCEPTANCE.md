@@ -8,7 +8,13 @@
 
 首次多模组渲染回归证实现版低页高输出17张，修复后恰好一张640×7191；56语义块、275行、1—3级、最后对照内容及单次页眉／页脚均逐项检查。新增GUI选项／勾选回归先复现缺口后通过。主集成标题及真实GUI→生产服务新增导出3项先失败、修复后通过；该新增范围使用受控差异，不冒充观察到服务器更新。统一 `scripts/verify.ps1`：**237 passed，1 deselected，46.73秒**，一条既有pytest缓存权限警告。
 
-原生Windows Qt以只读备份的78.2.0快照操作全选、手动勾选、排序、隐藏筛选、清空及合并导出，实际2模组输出1张1200×5230 PNG和1个HTML；精确ID、完整JSON和预览均核对，生成HTML另在Edge离线验证通过。证据为 `.work/module-merge-20261020/native-selection-result.json`、原生截图及 `browser/native/`；该源码验收收据的version为Python宿主默认Qt版本字段，产品版本另在native-selection-context.json明确为0.1.4，不将其冒称冻结EXE运行。独立报告审查26项回归及2项探针通过，核对旧任务缺字段恢复、混合批次分页与变化范围；GUI独立审查12项通过，核对稳定ID、隐藏勾选、全选清空、跨安装／快照清空，未发现确认阻塞缺陷。正式构建、安装及远端结果取得后另补。
+原生Windows Qt以只读备份的78.2.0快照操作全选、手动勾选、排序、隐藏筛选、清空及合并导出，实际2模组输出1张1200×5230 PNG和1个HTML；精确ID、完整JSON和预览均核对，生成HTML另在Edge离线验证通过。证据为 `.work/module-merge-20261020/native-selection-result.json`、原生截图及 `browser/native/`；该源码验收收据的version为Python宿主默认Qt版本字段，产品版本另在native-selection-context.json明确为0.1.4，不将其冒称冻结EXE运行。独立报告审查26项回归及2项探针通过，核对旧任务缺字段恢复、混合批次分页与变化范围；GUI独立审查12项通过，核对稳定ID、隐藏勾选、全选清空、跨安装／快照清空，未发现确认阻塞缺陷。正式制品与安装结果如下。
+
+构建任务 `20261020-135128-6207a32b`，干净来源提交 `e197598d4ecf329446cdbda08805e670cae637ca`，147源输入逐一核对；507程序文件共184,399,277字节，程序目录及ZIP每项SHA／CRC通过。独立冻结EXE原生启动4.41秒；真实生产服务链58.36秒，扫描16,886文件、解析434干员／513模组并完成资源与资料导出。实际EXE手动选择当前4模组输出一张1200×10669 PNG和一个modules.html；干员页及模组页另经真实Edge离线行为检查通过，不将手动样本声称为服务器新增事件。证据为任务目录下 `package-receipt.json`、`frozen-verification.json`、`frozen-services-and-html.json` 与 `browser/frozen-exe/`。
+
+首次安装预检发现盘点后设置与部分导出发生变化，在备份／替换前已停止；原盘点保留为*-initial收据，重新只读盘点当前状态后继续，不恢复已移除的输出。最终同步先备份核验507项旧0.1.3程序，再替换8项、保留499项，无新增／删除；当时目标未托管67项与旧AppData85项共152文件同步不变。安装位置 `D:\Tools\ArknightsUnpacker`，实际EXE默认启动4.97秒、关闭重启4.98秒，均正常退出；恢复同一扫描／资料ID、434／513项资料和single默认排版，原3次扫描／1次资料快照payload完整保留，无重扫重解析，其余既有设置与现存exports保留。运行后507项程序及GUI正常演进外86文件再次核验。截图已查看，复选框与合并入口在真实安装界面可见。旧程序备份为 `.work/module-merge-20261020/backup-0.1.3/`；另见 `sync-preflight-stopped.json`、`sync-result.json` 和 `installed-verification.json`。
+
+EXE SHA-256：`d6c91fa8c8619323076f716830aaa821e150cfd477fc0312a451f11561762d36`。ZIP `ArknightsUnpacker-0.1.4-win64.zip` 为73,595,216字节，SHA-256：`0ff36a5923045494ad6c35944769d71b4e0e22ff0725aaf7c919b2cd3868ce55`。交付沿用私有仓库 [v0.1.4 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.4)，远端main／test／标签和两附件大小／上传状态／GitHub摘要由verify_remote.py另核写release-result.json；旧Release与用户数据保留。验收后仅补主计划和本文，147构建输入不变。
 
 ## v0.1.3 · HTML 交互与现行PRTS布局（2026-10-20）
 
