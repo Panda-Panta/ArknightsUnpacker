@@ -12,6 +12,14 @@
 
 独立 HTML／共享主题审查：24 项回归通过，另以两干员／四模组真实输出逐项核对各主题 115／115 语义块、唯一 ID、目录相对链接与离线资源，未发现确认阻塞问题。PNG 独立审查 64 项回归及 12 个探针通过：四张真实来源图片重渲染后逐像素一致，双主题四组宽度／字号边界的 23,504 个源字符、656 次表格单元格绘制未发现缺失、越行、越单元格或遮挡页脚。证据位于 `.work/report-style-20261020/` 的 `source-final.xml`、`source-acceptance.json`、`browser/source/summary.json`、`index-source.json`、`review-html/` 及 `review-png/review.json`。固定源码候选后的正式构建、安装与远端结果在取得后补记，以上不替代正式 EXE 验收。
 
+正式构建任务 `20261020-173009-466cac36`，来源为干净候选 `ee09e7b79a91b085be877ddaeea1712c192db93a`，152 个程序构建输入逐一与提交核对；507 项程序文件共 184,435,522 字节，目录清单、ZIP 全项 SHA／CRC 均通过。冻结 EXE 原生 Windows Qt 启动 4.00 秒，收据确认 dark 默认值与 dark/light 两种选项。实际 EXE 从游戏目录一次扫描／解析后分别导出两种主题，两个四模组合集均为一张 1200×17128 PNG；实际像素、PNG 主题／样式元数据与包内样式 JSON 对应。两主题的四份真实 HTML 各通过离线 Edge 10 项检查，两个目录另核主题、本地链接、窄屏及打印颜色。
+
+首次扩展资源提取中，一个 PNG 原子替换发生 `PermissionError: WinError 5`，其余 30 项已保留；`frozen-service/failure.json` 和提取清单记录具体路径。没有在缺乏复现证据时修改提取代码或归因于特定软件。在独立 `frozen-service-retry1/` 有限复验通过，完整真实服务链 98.31 秒，扫描 16,889 文件、解析 434／513 资料、完成图片／Spine／音频／视频提取及双主题报告；该次未再发生替换拒绝访问，不声称已根治间歇文件访问问题。新扫描文件数量与安装库旧快照不同，旧快照未被重扫替换；不据此认定服务器新增。收据为 `frozen-services-and-html.json`、`browser/frozen-exe/summary.json`、`index-frozen.json`。
+
+已验收候选普通快进既有私有 main／test 后，按差异清单同步 `D:\Tools\ArknightsUnpacker`：先完整备份核验旧 0.1.6 的 507 托管文件，再替换 11 项、零新增／删除、496 项不变；同步时 115 个用户未托管文件及旧 AppData 的 85 项共 200 文件均无变化。安装 EXE 原生启动 5.30 秒、关闭重启 4.97 秒，均退出 0；原 3 扫描／1 资料快照 payload 及相同 scan_id／gamedata_id、434／513 项资料恢复，无重扫重解析。旧 dark 设置、全部主题选项、查看状态、其余设置及现存 exports 保留；GUI 正常状态演进后再次核对 507 程序项与 92 保护文件。截图已查看，备份为本任务 `backup-0.1.6/`；收据为 `sync-preview.json`、`backup-verified.json`、`sync-result.json`、`installed-verification.json`。
+
+EXE SHA-256：`db09ee2aef0f74cc70d666d125ca86ffc4aa31fd150ffd4e7def344de90934cb`。ZIP `ArknightsUnpacker-0.1.7-win64.zip` 为 73,624,363 字节，SHA-256：`203799bb6a282bc45382bb8aa18a60f371f621022719aa0b47c393737c2feaba`。沿用私有仓库 [v0.1.7 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.7)，远端 main／test／标签及两附件状态、大小与 GitHub 摘要由 `verify_remote.py` 核验并写 `release-result.json`，旧发布及本机版本保留。已清理本任务确认过期的 3 个中间目录、25 文件共 32,544,564 字节，实际删除文件见 `cleanup-result.json`；最终制品、必要回退、原始失败、真实报告／截图／日志保留，含链接的 pytest 临时夹具未处理。后补本文与主计划不改变 152 个程序输入，不重建相同制品。
+
 ## v0.1.6 · 页面装配与模组效果对照（2026-10-20）
 
 以另一 AI 已交付的 0.1.5（55f51d4）为基线，保留工作台、HTML 和 PNG 美化。页面清单使用稳定 ID 与各页控制器，四个可选页面可独立移除，任务标签按控件定位；旧数字 tab 和原筛选／资料状态兼容，缺页状态仍保留。导出格式统一由有序适配器分派，HTML／PNG 按所选格式加载；报告公共入口、旧文件名、取消及失败清单保持。共享培养条件／来源函数已独立，不再由模组反向导入干员实现。
