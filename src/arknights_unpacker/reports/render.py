@@ -130,9 +130,18 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
     single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
     pages = layout_pages(document, cancel=cancel, emit=emit)
     dark = options.theme == 'dark'
-    colors = dict(bg='#20252b' if dark else '#ffffff', fg='#f1f3f5' if dark else '#20252b',
-                  header='#343d48' if dark else '#eef0f2', muted='#aeb9c7' if dark else '#5c6875',
-                  accent='#ffd187' if dark else '#895300', border='#586574' if dark else '#c8ced5')
+    if dark:
+        colors = dict(
+            bg='#15191e', fg='#f1f4f8', header='#212832', header_border='#323e4e',
+            muted='#7a8c9e', accent='#ffb830', accent_marker='#00c2d6',
+            border='#2d3744', warning_header='#451e11', warning_marker='#f59e0b', warning_fg='#fed7aa'
+        )
+    else:
+        colors = dict(
+            bg='#ffffff', fg='#16222c', header='#edf3f7', header_border='#d3dee7',
+            muted='#5e7182', accent='#b45309', accent_marker='#0093a2',
+            border='#d2dce6', warning_header='#fef3c7', warning_marker='#d97706', warning_fg='#92400e'
+        )
     margin = min(48, options.width // 14)
     body = _font(options.font_size)
     heading = _font(round(options.font_size * 1.12), True)
@@ -164,26 +173,38 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                 raise
             draw = ImageDraw.Draw(image)
             # A short repeated title cannot run beyond the right edge.
-            title = wrap_text(document.title, heading, options.width - margin * 2, cancel=cancel)[0]
+            title = wrap_text(document.title, heading, options.width - margin * 2 - 16, cancel=cancel)[0]
             if title != document.title:
                 title = title[:-1] + '…'
-            draw.text((margin, margin), title, font=heading, fill=colors['fg'])
+            draw.rectangle((margin, margin + 2, margin + 5, margin + heading_height - 6), fill=colors['accent_marker'])
+            draw.text((margin + 12, margin), title, font=heading, fill=colors['fg'])
+            y_title_line = margin + heading_height - 4
+            draw.line((margin, y_title_line, options.width - margin, y_title_line), fill=colors['border'])
+            draw.line((margin, y_title_line, margin + min(72, (options.width - margin * 2) // 4), y_title_line), fill=colors['accent_marker'], width=2)
             y = margin + heading_height
             for line in lines:
                 if cancel:
                     cancel.check()
                 if line.kind in {'heading','warning-heading'}:
-                    draw.rectangle((margin - 8, y, options.width - margin + 8, y + line.height - 4),
-                                   fill='#6b3b23' if line.kind == 'warning-heading' else colors['header'])
-                    draw.text((margin, y + 3), line.text, font=heading, fill=colors['fg'])
+                    is_warning = line.kind == 'warning-heading'
+                    h_bg = colors['warning_header'] if is_warning else colors['header']
+                    h_marker = colors['warning_marker'] if is_warning else colors['accent_marker']
+                    h_fg = colors['warning_fg'] if is_warning else colors['fg']
+                    draw.rectangle((margin - 6, y, options.width - margin + 6, y + line.height - 4),
+                                   fill=h_bg, outline=colors['header_border'])
+                    draw.rectangle((margin - 6, y, margin - 1, y + line.height - 4), fill=h_marker)
+                    draw.text((margin + 6, y + 3), line.text, font=heading, fill=h_fg)
                 elif line.kind in {'table','table-header'}:
                     weights = [1.6] + [1] * (len(line.cells)-1)
                     widths = [int((options.width-margin*2) * weight / sum(weights)) for weight in weights]
-                    x=margin
+                    x = margin
                     for column_index,(cell,width) in enumerate(zip(line.cells,widths)):
-                        draw.rectangle((x,y,x+width,y+line.height),fill=colors['header'] if line.kind=='table-header' else colors['bg'],outline=colors['border'])
-                        draw.text((x+6,y+3),cell,font=body,fill=colors['accent'] if line.column_labels[column_index]=='潜能' else colors['fg'])
-                        x+=width
+                        is_h = line.kind == 'table-header'
+                        cell_bg = colors['header'] if is_h else colors['bg']
+                        draw.rectangle((x, y, x + width, y + line.height), fill=cell_bg, outline=colors['border'])
+                        is_pot = line.column_labels[column_index] == '潜能'
+                        draw.text((x + 7, y + 3), cell, font=body, fill=colors['accent'] if is_pot else colors['fg'])
+                        x += width
                 elif line.kind == 'separator':
                     draw.line((margin, y + line.height // 2, options.width - margin, y + line.height // 2), fill=colors['border'])
                 else:
@@ -191,7 +212,9 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                               fill=colors['accent'] if line.kind == 'potential' else colors['fg'])
                 y += line.height
             footer = f'第 {index} / {len(pages)} 页 · 本地数据快照 · 模板 {document.metadata.get("template_version", "")} '
-            draw.text((margin, height - margin - options.font_size), footer, font=small, fill=colors['muted'])
+            footer_y = height - margin - options.font_size
+            draw.line((margin, footer_y - 8, options.width - margin, footer_y - 8), fill=colors['border'])
+            draw.text((margin, footer_y), footer, font=small, fill=colors['muted'])
             if cancel:
                 cancel.check()
             image.save(temporary, format='PNG', optimize=False)

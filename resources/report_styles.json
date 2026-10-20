@@ -16,16 +16,17 @@
   },
   "html": {
     "paper": "#ffffff",
-    "canvas": "#f4f5f6",
-    "ink": "#202122",
-    "rule": "#a9b1ba",
-    "header": "#eaecf0",
-    "link": "#2864a8",
-    "layout": "224px directory + paper; single column <=800px",
+    "canvas": "#eef2f6",
+    "ink": "#121820",
+    "rule": "#d4dee7",
+    "header": "#edf3f7",
+    "accent": "#0098a6",
+    "link": "#0088b8",
+    "layout": "220px directory + paper; single column <=900px",
     "font_roles": {
-      "heading": "Microsoft YaHei / PingFang SC, semibold",
-      "body": "Microsoft YaHei / PingFang SC / Noto Sans CJK SC",
-      "utility": "same native Chinese family, smaller size"
+      "heading": "-apple-system / Segoe UI / PingFang SC / Microsoft YaHei, bold",
+      "body": "-apple-system / Segoe UI / PingFang SC / Microsoft YaHei / Noto Sans CJK SC",
+      "utility": "same native Chinese family / Consolas monospace, smaller size"
     },
     "signature": "fixed-column attribute contributions with separately labeled potential increase"
   },

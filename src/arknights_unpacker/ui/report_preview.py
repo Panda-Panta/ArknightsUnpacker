@@ -244,9 +244,20 @@ def profile_html(profile):
     document = ReportDocument(title=profile.name,
         operators=[profile] if isinstance(profile, OperatorProfile) else [],
         modules=[profile] if isinstance(profile, ModuleProfile) else [])
-    body = '<h1>' + _escaped_text(document.title) + '</h1>' + blocks_html(semantic_blocks(document))
-    body += '<p style="color:#607786">完整来源、字段读取证据及原始结构随 JSON 资料保存。</p>'
-    return '<html><head><style>h1{font-size:22px;color:#203b4c}h2{font-size:16px;color:#087e8b;margin-top:18px}table{border-color:#d5e0e6}th{background-color:#eaf0f4;color:#415b6b}td{background-color:#ffffff}p{line-height:150%}</style></head><body style="font-family:Microsoft YaHei UI; color:#233746; background-color:#ffffff;">' + body + '</body></html>'
+    badge = '<div style="font-size:10px; font-weight:700; color:#0093a2; letter-spacing:1px; margin-bottom:4px;">PRTS // LOCAL DOSSIER ARCHIVE</div>'
+    body = badge + '<h1>' + _escaped_text(document.title) + '</h1>' + blocks_html(semantic_blocks(document))
+    body += '<p class="footer-note">完整来源、字段读取证据及原始结构随 JSON 资料保存。</p>'
+    css = (
+        'body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif; color: #1c2834; background-color: #ffffff; padding: 6px; } '
+        'h1 { font-size: 22px; font-weight: 700; color: #14222e; margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #0093a2; } '
+        'h2 { font-size: 15px; font-weight: 600; color: #1b3848; margin-top: 20px; margin-bottom: 8px; padding-left: 8px; border-left: 4px solid #0093a2; } '
+        'table { border-collapse: collapse; border: 1px solid #d4dfe7; margin-bottom: 12px; } '
+        'th { background-color: #f0f5f8; color: #2e4758; font-weight: 600; padding: 6px 10px; border: 1px solid #d4dfe7; font-size: 12px; } '
+        'td { background-color: #ffffff; color: #1c2834; padding: 6px 10px; border: 1px solid #d4dfe7; font-size: 12px; line-height: 150%; } '
+        'p { line-height: 150%; margin: 6px 0; } '
+        '.footer-note { color: #607786; font-size: 11px; margin-top: 18px; border-top: 1px dashed #d4dfe7; padding-top: 8px; }'
+    )
+    return '<html><head><style>' + css + '</style></head><body>' + body + '</body></html>'
 
 
 def changes_html(changes, kind, entity_id):

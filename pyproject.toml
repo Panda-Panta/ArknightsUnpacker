@@ -1,6 +1,6 @@
 [project]
 name = "arknights-unpacker-gui"
-version = "0.1.4"
+version = "0.1.5"
 description = "Arknights PC resource explorer, unpacker and offline operator reports"
 requires-python = ">=3.12,<3.13"
 dependencies = [
