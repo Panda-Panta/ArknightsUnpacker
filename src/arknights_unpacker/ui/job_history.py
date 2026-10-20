@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import uuid
 from arknights_unpacker.contracts import as_jsonable
 
@@ -38,9 +39,29 @@ def valid_request(request):
 
 class JobHistory:
     def __init__(self, root):
-        self.root = Path(root)
+        self.root = Path(root).absolute()
         self.root.mkdir(parents=True, exist_ok=True)
         self.warnings = []
+
+    def remove(self, job_id):
+        """Remove only this task's metadata, never any registered output path."""
+        if not isinstance(job_id, str) or not re.fullmatch(r'[a-f0-9]{32}', job_id):
+            raise ValueError('无效任务ID，已保留任务记录。')
+        for folder in (self.root, *self.root.parents):
+            info = folder.lstat()
+            if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise ValueError('任务历史路径含重解析点，已保留任务记录。')
+        targets = [self.root / (job_id + suffix) for suffix in ('.events.jsonl', '.json')]
+        for path in targets:
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            if (not stat.S_ISREG(info.st_mode) or
+                    getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                raise ValueError('任务历史文件类型异常，已保留任务记录。')
+        for path in targets:
+            path.unlink(missing_ok=True)
 
     def save(self, job):
         payload = {key: getattr(job, key) for key in ('job_id', 'title', 'status', 'output', 'created_at',

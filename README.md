@@ -2,11 +2,11 @@
 
 Windows 原生 GUI：浏览《明日方舟》PC 资源、扫描最近更新、解包选中文件，并生成干员／模组 PNG 长图与 PRTS 风格离线 HTML。
 
-**版本 0.1.8。** 模组改为按属性、特性与天赋分类，将未装备／1级／2级／3级横向对照；各级显示装备后值及该级总加成，重复效果用明确引用简写。干员技能和全部模组直接连续展示，取消 HTML 技能／模组／等级选择，所有报告元素紧凑排列。PNG／HTML 继续共用亮色和暗色主题，模组合集默认单张长图、可选分页。默认输出为程序旁 `exports/`，保留设置、快照和已有报告。具体验证见 [验收摘要](docs/ACCEPTANCE.md)。
+**版本 0.1.9。** 成功任务自动保留最近20条，可手动清理成功记录；失败与待恢复任务保留。对象和资料临时预览在窗口释放、后台结束后自动回收，已交给外部浏览器的临时HTML保留到本程序退出；正式导出和保存副本保留。预览不再改写正式输出目录。PNG／HTML继续提供亮色、暗色与紧凑的全部资料展示。具体验证见 [验收摘要](docs/ACCEPTANCE.md)。
 
 ## 直接运行
 
-Release 入口：[v0.1.8](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.8) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.8/ArknightsUnpacker-0.1.8-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.8/ArknightsUnpacker-0.1.8-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.7](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.7)／[v0.1.6](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.6)／[v0.1.4](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.4)／[v0.1.3](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.3)／[v0.1.2](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.2)／[v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)／[v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留；本机 0.1.5 制品也保留。
+Release 入口：[v0.1.9](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.9) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.9/ArknightsUnpacker-0.1.9-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.9/ArknightsUnpacker-0.1.9-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.8](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.8)／[v0.1.7](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.7)／[v0.1.6](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.6)／[v0.1.4](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.4)／[v0.1.3](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.3)／[v0.1.2](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.2)／[v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)／[v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留；本机 0.1.5 制品也保留。
 
 解压完整 ZIP 后，双击其中的 `ArknightsUnpacker.exe`。无需安装 Python，保留同目录的 `_internal` 文件夹。本机已交付目录中的程序也可直接运行；源码仓库不保存 `dist/` 构建产物。
 
@@ -26,7 +26,7 @@ Release 入口：[v0.1.8](https://github.com/Panda-Panta/ArknightsUnpacker/relea
 - 满级、满潜、满信赖属性，标明基础／信赖／潜能／单个模组的数值；天赋潜能差额、专三技能、后勤、三级模组资料与语义变化比较。
 - 新干员／新模组由完整前后数据快照确定，可一键导出新增资料。首次没有历史基线时显示“历史未知”，不会把所有角色认定为新增。
 - 干员 PNG 保持独立报告分页；模组页合集 PNG 默认合为一张长图，在“模组PNG排版”可选分页。单图超过 8,000 万像素时明确提示改用分页或减少选择，不静默裁切或分张；预览缩放不改变输出像素。每名干员独立 HTML，模组合集保存为一个 `modules.html`。PNG／HTML 共用黑色顶栏、青色分区、资料卡片及亮色／暗色主题。HTML 全部技能和模组直接展示，提供右侧目录、就近锚点、搜索高亮／清除、折叠和完整打印；打印统一为适合纸张的亮色。CSS、脚本、图片均内嵌，无 JavaScript 时展示全部正文。
-- 后台队列、独立解包进程、进度、取消、失败诊断与重试；导出不覆盖旧批次，禁止输出到游戏目录内。
+- 后台队列、独立解包进程、进度、取消、失败诊断与重试；导出不覆盖旧批次，禁止输出到游戏目录内。 成功记录保留最近20条；临时预览按实际窗口和生产任务生命周期回收，正式产物保留。
 
 文件修改时间仅表示本机写入时间。快速扫描不会反复读取全部普通 AB 内容；无完整摘要时明确保留元数据证据等级。真实新增识别需要更新前的完整同服基线，不能由 mtime 或干员编号倒推。默认区服未知；同一安装的两次观测可带提示比较，跨来源需明确区服。
 

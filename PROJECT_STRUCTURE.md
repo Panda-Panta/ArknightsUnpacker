@@ -21,7 +21,8 @@ ArknightsUnpacker/
 │  │  ├─ style.py                共用亮色／暗色调色板、字体与资料分区顺序
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
-│     └─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
+│     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
+│     └─ preview_cache.py        临时预览归属、窗口／生产任务释放、旧缓存回收
 ├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ exports/                       启动自动创建的默认输出，不随源码或程序打包
@@ -74,3 +75,5 @@ MainWindow → AppServices.export → build_operator/build_module → reports.ex
 显式 `--headless-verify` 在一次真实扫描／解析后分别以 dark/light 导出同一组选定干员和模组，`verification.json` 的 `report_runs` 记录两种结果；该入口不代表浏览器检查。浏览器脚本另从实际导出 HTML 检查主题颜色、离线交互、窄屏和打印状态；打印媒体使用共享亮色变量，结束后恢复屏幕主题。`--smoke-test` 原生窗口收据包含当前主题与可选值，用于冻结／安装设置保留验证。
 
 HTML 所有技能与模组连续显示，移除技能／模组页签和等级控件；每个模组只用一个 details 折叠，分类为带行表头的横表。原生锚点用于跳转，JS仅处理搜索、清除、折叠、打印与锚点展开。共享正文行高为1.4，PNG按实测首列宽度为四状态列留等宽空间，窄图保留带标签回退。旧静态HTML不受影响，需重新导出。
+
+`ui/jobs.py` 在启动及每个任务终结后，将成功历史限制为最近20条；`ui/job_history.py` 仅移除对应任务JSON／事件，保留非成功与恢复祖先，不删除正式产物。`settled(job)` 在工作线程释放后通知主窗口结束预览生产占用。`ui/preview_cache.py` 为data/preview与previews分配带标记和QLockFile的独占目录，lease须同时结束生产并释放窗口后才删除；外部HTML延至程序退出。主窗口在队列修剪前扫描旧缓存归属，未知／链接／其他在用实例保留；对话框只释放显式绑定的lease，正式任务重复预览仍可打开。AppServices.extract/export的remember_output默认为True，临时预览传False，不改变正式输出设置。

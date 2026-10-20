@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 import traceback
 import time
 import uuid
@@ -8,8 +9,11 @@ from PySide6.QtCore import QObject, QThread, Signal, Qt
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QPlainTextEdit, QProgressBar, QLabel
-from arknights_unpacker.contracts import CancelToken, CancelledError, as_jsonable
-from .job_history import JobHistory, valid_request, report_artifact_event, retained_file
+from arknights_unpacker.contracts import CancelToken, CancelledError, GameDataSnapshot, as_jsonable
+from .job_history import INTERRUPTED, JobHistory, valid_request, report_artifact_event, retained_file
+
+
+SUCCESS_HISTORY_LIMIT = 20
 
 
 @dataclass
@@ -71,6 +75,7 @@ class JobQueue(QObject):
     changed = Signal()
     message = Signal(str)
     progress = Signal(object)
+    settled = Signal(object)
 
     def __init__(self, parent=None, *, history_root=None, resume_handler=None):
         super().__init__(parent)
@@ -91,6 +96,49 @@ class JobQueue(QObject):
                           result=record.get('result', {}), ancestors=record.get('ancestors', []), receipt_root=record.get('receipt_root', ''))
                 self.jobs.append(job)
                 self._persist(job)
+        self._prune_successful()
+
+    def forget_finished(self, job_ids):
+        """Forget exact settled tasks while preserving any retained recovery chain."""
+        requested = {job_id for job_id in job_ids if isinstance(job_id, str) and re.fullmatch(r'[a-f0-9]{32}', job_id)}
+        candidates = {job.job_id for job in self.jobs if job.job_id in requested
+                      and job is not self.active and job.status not in INTERRUPTED}
+        ancestors = {job.job_id: {item for item in job.ancestors if isinstance(item, str)}
+                     for job in self.jobs if isinstance(job.ancestors, (list, tuple))}
+        removed = []
+        # Remove leaves first; an occupied child record must keep its checkpoints.
+        while candidates:
+            referenced = {ancestor for job_id, values in ancestors.items() if job_id not in removed for ancestor in values}
+            ready_ids = candidates - referenced
+            ready = [job for job in self.jobs if job.job_id in ready_ids]
+            if not ready:
+                break
+            for job in ready:
+                candidates.remove(job.job_id)
+                try:
+                    if self.history:
+                        self.history.remove(job.job_id)
+                except (OSError, ValueError) as error:
+                    warning = '任务记录无法清理：' + str(error)
+                    self.history.warnings.append(warning)
+                    self.message.emit(warning)
+                    continue
+                removed.append(job.job_id)
+        if removed:
+            self.jobs[:] = [job for job in self.jobs if job.job_id not in removed]
+            self.changed.emit()
+        return removed
+
+    def _prune_successful(self):
+        successful = sorted((job for job in self.jobs if job.status == '成功'), key=lambda job: job.created_at)
+        removed = self.forget_finished(job.job_id for job in successful[:-SUCCESS_HISTORY_LIMIT])
+        if removed:
+            self.message.emit(f'已自动清理 {len(removed)} 条旧成功任务记录；正式导出文件保留。')
+
+    def clear_successful(self):
+        removed = self.forget_finished(job.job_id for job in self.jobs if job.status == '成功')
+        self.message.emit(f'已清理 {len(removed)} 条成功任务记录；正式导出文件保留。')
+        return len(removed)
 
     def _persist(self, job):
         if self.history:
@@ -183,6 +231,10 @@ class JobQueue(QObject):
                 self.active.status = {'partial': '部分完成（查看诊断）', 'failed': '失败', 'cancelled': '已取消'}[status]
         if isinstance(result, dict) and 'snapshot' in result and not getattr(result['snapshot'], 'complete', True):
             self.active.status = '部分扫描（未推进基线）'
+        if isinstance(result, GameDataSnapshot) and not result.complete:
+            self.active.status = '部分解析（查看诊断）'
+            self.active.last_error = '\n'.join(map(str, result.diagnostics)) or '核心数据未完整解析。'
+            self.message.emit(self.active.last_error)
         if isinstance(result, list):
             if result and all(hasattr(item, 'format') or isinstance(item, dict) and 'format' in item for item in result):
                 self.active.artifacts = result
@@ -208,9 +260,12 @@ class JobQueue(QObject):
 
     def _finished(self):
         old = self.worker
+        job = self.active
         self.worker = None
         self.active = None
         old.deleteLater()
+        self.settled.emit(job)
+        self._prune_successful()
         self.changed.emit()
         self._next()
 
@@ -250,10 +305,11 @@ class JobQueue(QObject):
 
     def shutdown(self):
         self.closing = True
-        for job in self.jobs:
+        for job in list(self.jobs):
             if job.status == '排队中':
                 job.status = '已取消'
                 self._persist(job)
+                self.settled.emit(job)
         self.cancel()
 
 
@@ -263,7 +319,10 @@ class JobsView(QWidget):
         super().__init__(parent)
         self.queue = queue
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel('任务历史自动保存；重启后的中断任务等待手动重试，不会自动执行。'))
+        retention = QLabel(f'成功任务自动保留最近 {SUCCESS_HISTORY_LIMIT} 条，其他状态及恢复依据保留；'
+                           '中断任务需手动重试。清理任务不会删除正式导出文件。')
+        retention.setWordWrap(True)
+        layout.addWidget(retention)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(['任务', '状态', '输出目录'])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -276,7 +335,8 @@ class JobsView(QWidget):
         self.pause = QPushButton('暂停队列')
         self.pause.clicked.connect(queue.toggle_pause)
         buttons.addWidget(self.pause)
-        for text, action in [('取消当前任务', queue.cancel), ('重试选中任务', self.retry), ('预览任务产物', self.preview_artifacts), ('打开输出目录', self.open_output)]:
+        for text, action in [('取消当前任务', queue.cancel), ('重试选中任务', self.retry), ('预览任务产物', self.preview_artifacts),
+                             ('打开输出目录', self.open_output), ('清理成功任务', queue.clear_successful)]:
             button = QPushButton(text)
             button.clicked.connect(action)
             buttons.addWidget(button)

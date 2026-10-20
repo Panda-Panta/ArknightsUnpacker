@@ -237,7 +237,7 @@ class AppServices:
     def objects(self, path, emit=null_progress, cancel=None):
         return self.runner.run("objects", {"path": str(path)}, emit, cancel)
 
-    def extract(self, paths, output, kinds=None, object_ids=None, mode="auto", emit=null_progress, cancel=None):
+    def extract(self, paths, output, kinds=None, object_ids=None, mode="auto", emit=null_progress, cancel=None, *, remember_output=True):
         root = str(self.installation.root) if self.installation else self.config.get("game_root", "")
         if root:
             source = Path(root).resolve()
@@ -257,11 +257,12 @@ class AppServices:
                                     object_ids or {}, request_id)
         value = self.runner.run("extract", as_jsonable(request), emit, cancel)
         value["output_root"] = str(task_target)
-        self.config["output_root"] = str(target)
-        self.save_config()
+        if remember_output:
+            self.config["output_root"] = str(target)
+            self.save_config()
         return _dataclass_from_dict(ExtractionResult, value)
 
-    def export(self, operator_ids, module_ids, output, formats, spec=None, options=None, emit=null_progress, cancel=None):
+    def export(self, operator_ids, module_ids, output, formats, spec=None, options=None, emit=null_progress, cancel=None, *, remember_output=True):
         from .reports import compose_report, export_report
         cancel = cancel or CancelToken()
         data = self._need_data()
@@ -289,8 +290,9 @@ class AppServices:
         cancel.check()
         result = export_report(document, target, set(formats) | {ExportFormat.JSON, ExportFormat.TXT},
                                cancel=cancel, emit=emit)
-        self.config["output_root"] = str(target)
-        self.save_config()
+        if remember_output:
+            self.config["output_root"] = str(target)
+            self.save_config()
         return result
 
     def import_baseline(self, path):
@@ -313,6 +315,8 @@ class AppServices:
     def export_snapshot(self, path):
         from .library import dumps_snapshot
         output = validate_output(path, self.installation.root if self.installation else None)
+        if any(output.is_relative_to(self.data_root / name) for name in ('preview', 'previews')):
+            raise ValueError('临时预览目录会自动回收，请将数据快照保存到正式输出目录。')
         if output.exists():
             raise ValueError("该文件已存在，请选择一个新文件名。")
         output.parent.mkdir(parents=True, exist_ok=True)

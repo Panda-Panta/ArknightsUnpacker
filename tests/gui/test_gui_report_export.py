@@ -97,9 +97,11 @@ def test_preview_exports_to_private_cache_and_task_can_reopen_artifacts(qtbot, t
     assert services.config['output_root'] == user_output
     assert window._dialogs[-1].export_button.isVisible()
     first_count = len(window._dialogs)
+    original = window._dialogs[-1]
     window.jobs.table.selectRow(len(window.queue.jobs) - 1)
     window.jobs.preview_artifacts()
-    assert len(window._dialogs) == first_count + 1
+    assert len(window._dialogs) == first_count
+    assert window._dialogs[-1] is original and original.isVisible()
 
 
 def test_real_reference_detail_uses_readable_report_blocks_and_keeps_evidence(qtbot):

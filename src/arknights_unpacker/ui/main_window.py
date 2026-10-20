@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-import uuid
 import os
 from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent, QFontDatabase, QFont
@@ -16,6 +15,7 @@ from .pages import PageComposition
 from .report_preview import ObjectsDialog, ReportArtifactsDialog
 from .styles import apply_theme
 from .job_history import remaining_extraction
+from .preview_cache import PreviewCache, legacy_preview_paths
 
 
 class MainWindow(QMainWindow):
@@ -28,9 +28,26 @@ class MainWindow(QMainWindow):
         self._load_pending = False
         self._monitor_stamp = None
         self._dialogs = []
+        self._dialog_jobs = {}
+        self._preview_jobs = {}
+        self._displayed_preview_jobs = set()
+        self._discard_when_settled = set()
+        self._preview_warning_count = 0
         self._closing = False
         self._restore_pending = False
         self._view_state_ready = False
+        history_root = Path(services.data_root) / 'queue'
+        old_previews = legacy_preview_paths(services.data_root, history_root)
+        saved_output = services.config.get('output_root')
+        if saved_output and Path(saved_output).expanduser().resolve() in old_previews:
+            from arknights_unpacker.paths import default_output_root, validate_output
+            output = validate_output(default_output_root(), services.config.get('game_root'))
+            output.mkdir(parents=True, exist_ok=True)
+            services.config['output_root'] = str(output)
+            services.save_config()
+        self.preview_cache = PreviewCache(services.data_root,
+            protected_roots=[services.config['output_root']] if services.config.get('output_root') else [])
+        self.preview_cache.cleanup_stale(history_root)
         if not QFontDatabase.families():
             # The offscreen Qt platform has no system font discovery on Windows.
             font_path = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts/msyh.ttc'
@@ -43,6 +60,12 @@ class MainWindow(QMainWindow):
         self.resize(1450, 930)
         self.setMinimumSize(1050, 700)
         self.queue = JobQueue(self, history_root=Path(services.data_root) / 'queue', resume_handler=self.prepare_recovery)
+        removed_previews = {Path(path) for path in self.preview_cache.last_cleanup['removed']}
+        self.queue.forget_finished([job.job_id for job in self.queue.jobs
+            if job.status == '成功' and (job.request or {}).get('output') and
+            (Path(job.request['output']).expanduser().resolve() in removed_previews or
+             Path(job.request['output']).expanduser().resolve() in old_previews and not Path(job.request['output']).exists())])
+        self.queue.settled.connect(self._job_settled)
         self.queue.message.connect(self.show_status)
         self.queue.changed.connect(self._queue_changed)
         central = QWidget()
@@ -139,6 +162,7 @@ class MainWindow(QMainWindow):
         self.monitor_timer.timeout.connect(self.check_manifests)
         self.monitor_timer.start()
         self._queue_changed()
+        self._report_preview_warnings()
         if self.root_edit.text().strip():
             QTimer.singleShot(0, self.restore_previous)
 
@@ -321,6 +345,9 @@ class MainWindow(QMainWindow):
             self.show_status('请在设置中选择独立输出目录。')
             return None
         output = Path(text).resolve()
+        if any(output.is_relative_to(root) for root in self.preview_cache.roots):
+            self.show_status('临时预览目录会自动回收，请选择独立的正式输出目录。')
+            return None
         root = self.root_edit.text().strip()
         if root and output.is_relative_to(Path(root).resolve()):
             self.show_status('输出目录不能位于游戏目录中。请在设置中选择独立目录。')
@@ -328,18 +355,32 @@ class MainWindow(QMainWindow):
         return str(output)
 
     def extract(self, paths, object_ids=None, preview_dialog=None, *, kinds=None, mode=None):
-        output = str(Path(self.services.data_root) / 'preview' / uuid.uuid4().hex) if preview_dialog else self.output_root()
+        if preview_dialog and (self._closing or getattr(preview_dialog, '_workbench_closed', False)):
+            return
+        output = self.output_root() if preview_dialog is None else None
+        lease = None
+        if preview_dialog:
+            try:
+                lease = self.preview_cache.allocate('objects')
+            except (OSError, ValueError) as error:
+                self.show_status('无法创建对象预览：' + str(error))
+                return
+            preview_dialog.track_preview(lease)
+            output = str(lease.path)
         if output is None:
             return
         kinds = list(kinds) if kinds is not None else [key for key, check in self.settings.kinds.items() if check.isChecked()]
         mode = mode if mode is not None else self.settings.mode.currentData()
         if not kinds:
+            if lease:
+                lease.release()
+                lease.finish()
             self.show_status('请在设置中至少选择一种资源类型。')
             return
         self.show_status(f'加入解包队列：{len(paths)} 个文件 · {mode} · {output}')
         def done(result):
             errors = value(result, 'errors', [])
-            if errors and self.queue.active:
+            if errors and self.queue.active and not preview_dialog:
                 failed_paths = list(dict.fromkeys(str(e.get('source')) for e in errors if e.get('source')))
                 failed_ids = {}
                 for path in failed_paths:
@@ -350,34 +391,47 @@ class MainWindow(QMainWindow):
                     self.queue.active.retry_call = lambda **kw: self.services.extract(failed_paths, output, kinds=kinds,
                                                                                      object_ids=failed_ids, mode=mode, **kw)
             if preview_dialog:
+                if self._closing or getattr(preview_dialog, '_workbench_closed', False):
+                    lease.release()
+                    return
                 outputs = value(result, 'outputs', [])
                 for item in outputs:
                     path = item.get('path', item.get('output_path', item.get('output', ''))) if isinstance(item, dict) else str(item)
                     if path and Path(path).is_file():
-                        preview_dialog.show_file(path)
+                        preview_dialog.show_file(path, preview_lease=lease)
+                        if self.queue.active:
+                            self._displayed_preview_jobs.add(self.queue.active.job_id)
                         break
                 else:
+                    lease.release()
                     preview_dialog.status.setText('未生成可预览文件。请在任务页查看失败或跳过原因。')
         title = '预览对象' if preview_dialog else '导出包内原图' if kinds == ['image'] and mode == 'auto' else '解包所选'
-        self.queue.submit(title + f' · {len(paths)} 个文件',
-                          lambda **kw: self.services.extract(paths, output, kinds=kinds, object_ids=object_ids, mode=mode, **kw), done, output,
+        job = self.queue.submit(title + f' · {len(paths)} 个文件',
+                          lambda **kw: self.services.extract(paths, output, kinds=kinds, object_ids=object_ids, mode=mode,
+                                                            remember_output=not bool(preview_dialog), **kw), done, output,
                           request={'operation': 'extract', 'root': str(value(self.services.installation, 'root') or self.root_edit.text().strip()), 'paths': list(paths),
-                                   'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode})
+                                   'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode, 'preview': bool(preview_dialog)})
+        if lease:
+            self._bind_preview_job(job, lease, preview_dialog)
 
     def objects(self, path):
         dialog = ObjectsDialog(path, self)
-        self._dialogs.append(dialog)
+        self._track_dialog(dialog)
         dialog.extract_requested.connect(lambda source, ids, preview: self.extract([source], {source: ids}, dialog if preview else None))
         dialog.show()
-        self.queue.submit('读取内部对象 · ' + Path(path).name,
-                          lambda **kw: self.services.objects(path, **kw), dialog.set_objects)
+        job = self.queue.submit('读取内部对象 · ' + Path(path).name,
+                          lambda **kw: self.services.objects(path, **kw),
+                          lambda objects: dialog.set_objects(objects) if not getattr(dialog, '_workbench_closed', False) else None)
+        self._dialog_jobs[job.job_id] = dialog
 
     def export(self, kind, ids, only_new=False, *, preview=False, report_spec=None, report_options=None):
-        output = str(Path(self.services.data_root) / 'previews' / uuid.uuid4().hex) if preview else self.output_root()
+        if self._closing:
+            return
+        output = None if preview else self.output_root()
         formats = self.settings.selected_formats()
         if preview:
             formats = formats | {ExportFormat.PNG}
-        if output is None:
+        if not preview and output is None:
             return
         if not formats:
             self.show_status('请在设置中至少选择一种导出格式。')
@@ -391,20 +445,33 @@ class MainWindow(QMainWindow):
         options = report_options or self.settings.report_options()
         if kind == 'modules' and only_new and not options.title:
             options = replace(options, title='本次新增模组')
+        try:
+            lease = self.preview_cache.allocate('reports') if preview else None
+        except (OSError, ValueError) as error:
+            self.show_status('无法创建资料预览：' + str(error))
+            return
+        if lease:
+            output = str(lease.path)
         def done(artifacts):
-            if preview:
-                # AppServices records its target; preview cache must not become the saved user output.
-                self.services.config['output_root'] = self.settings.output.text().strip()
-                self.services.save_config()
+            if self._closing:
+                if lease:
+                    lease.release()
+                return
             self.show_status(f'资料{"预览" if preview else "导出"}完成：{len(artifacts)} 个产物。')
-            self.show_report_artifacts(artifacts, preview_only=preview,
+            dialog = self.show_report_artifacts(artifacts, preview_only=preview, preview_lease=lease,
                                        export_action=(lambda: self.export(kind, ids, report_spec=spec, report_options=options)) if preview else None)
-        self.queue.submit(f'{"预览" if preview else "导出"}{"新增" if only_new else "选中"}资料 · {len(ids)} 项',
-                          lambda **kw: self.services.export(operators, modules, output, formats, spec=spec, options=options, **kw),
+            if lease and self.queue.active:
+                self._dialog_jobs[self.queue.active.job_id] = dialog
+                self._displayed_preview_jobs.add(self.queue.active.job_id)
+        job = self.queue.submit(f'{"预览" if preview else "导出"}{"新增" if only_new else "选中"}资料 · {len(ids)} 项',
+                          lambda **kw: self.services.export(operators, modules, output, formats, spec=spec, options=options,
+                                                           remember_output=not preview, **kw),
                           done, output, request={'operation': 'report', 'root': self.root_edit.text().strip(),
                           'snapshot_id': value(self.services.gamedata, 'snapshot_id'), 'operators': operators, 'modules': modules,
                           'output': output, 'formats': [fmt.value for fmt in formats], 'spec': as_jsonable(spec),
                           'options': as_jsonable(options), 'preview': preview})
+        if lease:
+            self._bind_preview_job(job, lease)
         self.pages.select('jobs')
 
     def preview_reports(self, kind, ids):
@@ -413,6 +480,8 @@ class MainWindow(QMainWindow):
     def prepare_recovery(self, job):
         """Resolve declarative history only after the user explicitly presses retry."""
         request = job.request or {}
+        if request.get('preview'):
+            raise ValueError('预览是临时任务，请从原页面重新预览；正式导出文件不受影响。')
         operation = request.get('operation')
         if operation == 'scan':
             return (lambda **kw: self.services.scan(request['root'], hours=request.get('hours', 24),
@@ -470,13 +539,77 @@ class MainWindow(QMainWindow):
             if not current or Path(current).resolve() != Path(root).resolve():
                 raise ValueError('当前游戏安装与历史报告来源不同。请先解析原安装的核心数据，或从当前资料页重新导出。')
 
-    def show_report_artifacts(self, artifacts, *, preview_only=False, export_action=None):
-        dialog = ReportArtifactsDialog(artifacts, self, preview_only=preview_only)
+    def _track_dialog(self, dialog):
+        dialog._workbench_closed = False
+        self._dialogs.append(dialog)
+        def closed(*_):
+            dialog._workbench_closed = True
+            if dialog in self._dialogs:
+                self._dialogs.remove(dialog)
+            ids = {job_id for job_id, owner in self._dialog_jobs.items() if owner is dialog}
+            pending = {job.job_id for job in self.queue.jobs if job.job_id in ids and
+                       job.status in ('排队中', '运行中', '正在取消')}
+            self._discard_when_settled.update(pending)
+            self.queue.forget_finished([job.job_id for job in self.queue.jobs if job.job_id in ids and job.status == '成功'])
+            for job_id in ids - pending:
+                self._dialog_jobs.pop(job_id, None)
+                self._discard_when_settled.discard(job_id)
+            self._report_preview_warnings()
+            dialog.deleteLater()
+        dialog.finished.connect(closed)
+
+    def _bind_preview_job(self, job, lease, dialog=None):
+        self._preview_jobs[job.job_id] = lease
+        if dialog is not None:
+            self._dialog_jobs[job.job_id] = dialog
+        def cleaned():
+            if job.status == '成功':
+                self.queue.forget_finished([job.job_id])
+            self._dialog_jobs.pop(job.job_id, None)
+            self._discard_when_settled.discard(job.job_id)
+        lease.on_cleaned(cleaned)
+
+    def _job_settled(self, job):
+        lease = self._preview_jobs.pop(job.job_id, None)
+        if lease:
+            if job.job_id not in self._displayed_preview_jobs or self._closing:
+                lease.release()
+            lease.finish()
+        self._displayed_preview_jobs.discard(job.job_id)
+        if job.job_id in self._discard_when_settled:
+            if job.status == '成功':
+                self.queue.forget_finished([job.job_id])
+            self._dialog_jobs.pop(job.job_id, None)
+            self._discard_when_settled.discard(job.job_id)
+        self._report_preview_warnings()
+
+    def _report_preview_warnings(self):
+        for warning in self.preview_cache.warnings[self._preview_warning_count:]:
+            self.queue.message.emit(warning)
+        self._preview_warning_count = len(self.preview_cache.warnings)
+
+    def show_report_artifacts(self, artifacts, *, preview_only=False, export_action=None, preview_lease=None):
+        if self._closing:
+            if preview_lease:
+                preview_lease.release()
+            return None
+        artifacts = list(artifacts)
+        requested = {str(value(artifact, 'path', '')) for artifact in artifacts}
+        for job in self.queue.jobs:
+            owner = self._dialog_jobs.get(job.job_id)
+            if owner is not None and not getattr(owner, '_workbench_closed', False) and requested.intersection(
+                    str(value(artifact, 'path', '')) for artifact in job.artifacts):
+                owner.show()
+                owner.raise_()
+                owner.activateWindow()
+                return owner
+        dialog = ReportArtifactsDialog(artifacts, self, preview_only=preview_only, preview_lease=preview_lease)
         dialog.html_open_requested.connect(lambda path: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
         if export_action:
             dialog.export_requested.connect(export_action)
-        self._dialogs.append(dialog)
+        self._track_dialog(dialog)
         dialog.show()
+        return dialog
 
     def refresh_history(self):
         installation = self.services.installation
@@ -552,12 +685,16 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         self._closing = True
+        for dialog in list(self._dialogs):
+            dialog.close()
         self.monitor_timer.stop()
         self.queue.shutdown()
         if self.queue.busy:
             self.show_status('正在取消任务并等待工作进程退出，完成后将自动关闭。')
             event.ignore()
             return
+        self.preview_cache.shutdown()
+        self._report_preview_warnings()
         self.remember_view_state()
         self.services.config.update(game_root=self.root_edit.text().strip(), hours=self.hours.value())
         # commit emits changed -> save_settings once, including the view state.

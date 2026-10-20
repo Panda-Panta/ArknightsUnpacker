@@ -186,13 +186,16 @@ def main() -> int:
                                       "report_theme_options": [window.settings.theme.itemData(i) for i in range(window.settings.theme.count())],
                                       "report_theme_labels": [window.settings.theme.itemText(i) for i in range(window.settings.theme.count())],
                                       "queue_idle": not window.queue.busy,
+                                      "successful_jobs": sum(job.status == '成功' for job in window.queue.jobs),
+                                      "preview_cleanup": window.preview_cache.last_cleanup,
+                                      "preview_cleanup_warnings": window.preview_cache.warnings,
                                       "scan_id": getattr(services.scan_snapshot, 'snapshot_id', None),
                                       "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),
                                       "operators": len(services.operators()), "modules": len(services.modules()),
                                       "palette_window": app.palette().window().color().name(),
                                       "theme_icons": {name: not QPixmap(str(resource_root() / 'resources/ui' / name)).isNull()
                                                       for name in ('arrow-down.svg', 'arrow-up.svg', 'check.svg')},
-                                      "jobs": [{"title": job.title, "status": job.status} for job in window.queue.jobs]})
+                                      "jobs": [{"job_id": job.job_id, "title": job.title, "status": job.status} for job in window.queue.jobs]})
             finally:
                 window.close()
         QTimer.singleShot(1800, record)

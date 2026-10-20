@@ -37,7 +37,7 @@ def _save_start(parent, source):
     return Path.home() / 'Pictures' / source.name
 
 
-def _copy_original_image(source, destination, input_roots):
+def _copy_original_image(source, destination, input_roots, preview_roots=()):
     """Copy encoded bytes, never the scaled QLabel pixmap or a re-encoded image."""
     source = Path(source).expanduser().resolve(strict=True)
     if not source.is_file():
@@ -53,6 +53,9 @@ def _copy_original_image(source, destination, input_roots):
     target = validate_output(target)
     for root in input_roots:
         validate_output(target, root)
+    for root in preview_roots:
+        if target.is_relative_to(Path(root).resolve()):
+            raise ValueError('预览缓存会自动清理，请选择正式输出目录保存原图。')
     if target.exists():
         raise FileExistsError('目标文件已存在，请选择其他文件名；已有文件会保留。')
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -75,8 +78,14 @@ def _choose_original_save(dialog, source):
         options=QFileDialog.Option.DontConfirmOverwrite)
     if not filename:
         return None
+    preview_roots = list(getattr(dialog, '_preview_cache_roots', ()))
+    parent = dialog.parentWidget()
+    while parent is not None:
+        preview_roots.extend(getattr(getattr(parent, 'preview_cache', None), 'roots', ()))
+        parent = parent.parentWidget()
     try:
-        return _copy_original_image(source, filename, dialog._input_roots)
+        return _copy_original_image(source, filename, dialog._input_roots,
+                                    preview_roots)
     except (OSError, ValueError) as error:
         QMessageBox.warning(dialog, '无法保存原图', str(error))
         return None
@@ -87,15 +96,19 @@ class ReportArtifactsDialog(QDialog):
     html_open_requested = Signal(str)
     export_requested = Signal()
 
-    def __init__(self, artifacts, parent=None, *, preview_only=False):
+    def __init__(self, artifacts, parent=None, *, preview_only=False, preview_lease=None):
         super().__init__(parent)
         self.artifacts = list(artifacts)
+        self.preview_closed = False
+        self._preview_lease = preview_lease
+        self._preview_cache_roots = tuple(preview_lease.cache.roots) if preview_lease else ()
         self._pixmap = QPixmap()
         self._input_roots = _input_roots(parent)
+        self.finished.connect(self._release_preview)
         self.setWindowTitle('资料预览' if preview_only else '本次资料导出产物')
         self.resize(1150, 850)
         layout = QVBoxLayout(self)
-        self.summary = QLabel(('预览保存在本地记录目录；点击“导出所选到输出目录”保存完整资料。' if preview_only else '本次生成的图片、HTML 与来源文件。') + f'　共 {len(self.artifacts)} 个文件。缩放只影响预览。')
+        self.summary = QLabel(('临时预览在关闭后清理，浏览器已打开的 HTML 保留至程序退出；点击“导出所选到输出目录”保存完整资料。' if preview_only else '本次生成的图片、HTML 与来源文件。') + f'　共 {len(self.artifacts)} 个文件。缩放只影响预览。')
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         toolbar = QHBoxLayout()
@@ -207,7 +220,24 @@ class ReportArtifactsDialog(QDialog):
     def request_html(self):
         path = self.html_files.currentData()
         if path:
+            if self._preview_lease:
+                self._preview_lease.defer_until_exit()
             self.html_open_requested.emit(str(path))
+
+    def _release_preview(self, *_):
+        if self.preview_closed:
+            return
+        self.preview_closed = True
+        self._pixmap = QPixmap()
+        self.image.clear()
+        self.save_original_button.setEnabled(False)
+        if self._preview_lease:
+            self._preview_lease.release()
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        if event.isAccepted():
+            self._release_preview()
 
     def save_original(self):
         path = self.pages.currentData()
@@ -278,9 +308,14 @@ class ObjectsDialog(QDialog):
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self.path = path
+        self.preview_closed = False
+        self._preview_leases = []
+        self._current_preview_lease = None
+        self._preview_cache_roots = ()
         self._input_roots = _input_roots(parent, path)
         self._image_path = None
         self._image_pixmap = QPixmap()
+        self.finished.connect(self._release_previews)
         self.setWindowTitle('内部对象 · ' + Path(path).name)
         self.resize(1060, 720)
         layout = QVBoxLayout(self)
@@ -350,8 +385,36 @@ class ObjectsDialog(QDialog):
         layout.addLayout(row)
 
     def set_objects(self, objects):
+        if self.preview_closed:
+            return
         self.model.replace(objects)
         self.status.setText(f'{len(objects):,} 个对象　·　{self.path}')
+
+    def track_preview(self, lease):
+        if self.preview_closed:
+            lease.release()
+            return
+        if lease not in self._preview_leases:
+            self._preview_leases.append(lease)
+        self._preview_cache_roots = tuple(dict.fromkeys((*self._preview_cache_roots, *lease.cache.roots)))
+
+    def _release_previews(self, *_):
+        if self.preview_closed:
+            return
+        self.preview_closed = True
+        self._image_path = None
+        self._image_pixmap = QPixmap()
+        self.picture.clear()
+        self.save_original_button.setEnabled(False)
+        for lease in self._preview_leases:
+            lease.release()
+        self._preview_leases.clear()
+        self._current_preview_lease = None
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        if event.isAccepted():
+            self._release_previews()
 
     def request(self, preview):
         ids = [str(r['id']) for r in selected_records(self.table)]
@@ -361,7 +424,15 @@ class ObjectsDialog(QDialog):
         if ids:
             self.extract_requested.emit(self.path, ids, preview)
 
-    def show_file(self, path):
+    def show_file(self, path, preview_lease=None):
+        if self.preview_closed:
+            if preview_lease:
+                preview_lease.release()
+            return
+        if preview_lease:
+            self.track_preview(preview_lease)
+        previous = self._current_preview_lease
+        self._current_preview_lease = preview_lease
         path = Path(path)
         self._image_path = None
         self._image_pixmap = QPixmap()
@@ -385,6 +456,9 @@ class ObjectsDialog(QDialog):
             with path.open('rb') as stream:
                 data = stream.read(256 * 1024 + 1)
             self.preview.setPlainText(data[:256 * 1024].decode('utf-8', errors='replace') + ('\n\n预览已限长，完整内容见输出。' if len(data) > 256 * 1024 else ''))
+        if previous and previous is not preview_lease:
+            previous.release()
+            self._preview_leases.remove(previous)
 
     def update_image(self, *_):
         if self._image_pixmap.isNull():
