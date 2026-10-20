@@ -10,7 +10,13 @@
 
 使用安装库的只读 78.2.0 真实快照构建 434 项干员、513 个模组，检查 3,371 行属性对照、63 个条件阶段、137 项召唤物效果；能天使、令、夕生成全部四种格式，能天使 PNG 为 1200×9438、三模组合集为 1200×10410。两个真实 HTML 各通过 Edge 离线 9 项检查，包含等级、搜索／清除、折叠、键盘、390 窄屏、无 JS、打印状态恢复、零远程请求和零脚本错误；模组页截图已查看。浏览器先复现 0.1.5 CSS 覆盖无 JS 隐藏规则导致无效按钮仍显示，移除重复 display 声明后复验通过，现有视觉保留。
 
-独立领域审查发现编号相同的内部条目会覆盖公开效果前级说明；已补碰撞回归后修正为名称／编号／作用域匹配，优先同 target，跨 target 仅接受唯一非空前驱。复核真实 513 模组，9 处错误均消除，塞雷娅／拜松／特克诺 3 处跨 target 延续保持，统一语义块含正确 2 级效果；领域与报告复核 78 passed。证据均位于 `.work/modularity-20261020/`：`source-final.xml`、`domain-acceptance.json`、`browser-source-fixed/summary.json`、`review-pages/review.json` 及 `review-domain/fix-verification.json`。以上为源码与保存真实资料证据，正式冻结制品、安装和远端结果取得后另补。
+独立领域审查发现编号相同的内部条目会覆盖公开效果前级说明；已补碰撞回归后修正为名称／编号／作用域匹配，优先同 target，跨 target 仅接受唯一非空前驱。复核真实 513 模组，9 处错误均消除，塞雷娅／拜松／特克诺 3 处跨 target 延续保持，统一语义块含正确 2 级效果；领域与报告复核 78 passed。证据均位于 `.work/modularity-20261020/`：`source-final.xml`、`domain-acceptance.json`、`browser-source-fixed/summary.json`、`review-pages/review.json` 及 `review-domain/fix-verification.json`。
+
+正式构建任务 `20261020-164912-d58d8877`，来源为干净候选 `6a852f4cfe45ba98eeb8b230692720b803d68cdf`，151 项构建输入逐一与提交核对；507 项程序文件共 184,424,623 字节，目录清单、ZIP 全项 SHA 和 CRC 通过。独立冻结 EXE 原生 Windows Qt 启动 3.89 秒；真实服务链 42.75 秒完成 16,886 文件扫描、434／513 资料解析与资源提取，实际 4 模组输出一张 1200×14359 PNG 和一个 modules.html。该 EXE 实际生成的干员页及模组页均经 Edge 离线行为检查；首轮附加断言错误要求没有模组的克莱门莎页也含对照，核对其 0 个模组后仅对含模组输出要求新字段，并复用同次服务结果完成浏览器验证，没有重扫。证据为 `package-receipt.json`、`frozen-verification.json`、`frozen-services-and-html.json` 及 `browser/frozen-exe/summary.json`。未将服务运行声称为游戏战斗或人工逐控件操作。
+
+候选普通快进同步既有私有 main／test 后更新 `D:\Tools\ArknightsUnpacker`。先备份并核验旧 0.1.5 的 504 项程序文件，替换 52 项、新增 3 个 Windows 运行库、删除 0 项、452 项不变；当时 90 个未托管用户文件与旧 AppData 的 85 项均同步不变。安装 EXE 启动 5.34 秒、关闭重启 5.03 秒，均退出 0，恢复同一扫描／数据 ID 及 434／513 项资料，原 3 个扫描与 1 份数据快照 payload 不变，无重扫重解析。1 个旧查看状态根迁为页面 ID，原筛选／选中项与其余设置保留；程序及 GUI 正常演进之外的 86 个保护文件再次核验。原生截图已查看，旧报告保留且不额外往 Tools 写示例输出。备份为 `.work/modularity-20261020/backup-0.1.5/`；收据为 `sync-preview.json`、`sync-result.json`、`installed-verification.json`。
+
+EXE SHA-256：`59bb4441626d5c53b61f62cc9d2a774b2849700985c524a1b551a9eff366cf0b`。ZIP `ArknightsUnpacker-0.1.6-win64.zip` 为 73,615,063 字节，SHA-256：`58f00745a36a70d0defcce6e850c1b1da391ad2864d94fd43eef672bc508a5e3`。交付沿用私有仓库 [v0.1.6 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.6)，main／test／标签及两附件状态、大小和 GitHub 摘要由 `verify_remote.py` 最终核验并写 `release-result.json`；本机 0.1.5、原发布及用户数据保留。验收后仅补本文与主计划，151 项程序构建输入不变，无需重建。
 
 ## v0.1.4 · 模组合并导出与批量勾选（2026-10-20）
 
