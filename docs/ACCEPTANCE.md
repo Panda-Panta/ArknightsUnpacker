@@ -14,7 +14,13 @@
 
 独立语义审查最终模型 SHA `783da9716c90e8c4a21dd31e9cd23c2d3b2e440d756256acbe348fd06f515385`：513 模组／1936 语义块、3371 条属性对照、1038 条天赋说明、58 条召唤物说明及673条潜能全部位于对应列，129 条受限属性不显示常驻总值；引用不串链，真实别名去重未遗漏不同公开说明。低培养 3375 槽、缺2级、缺信赖表及旧资料均正确保留未知／未解锁，领域与报告112项通过，无阻塞发现。原始证据在 `.work/module-matrix-20261020/` 的 `source-final.xml`、`source-acceptance.json`、`browser/source-verified/summary.json`、`html/title-search-{red,green}.json`、`index-source.json` 及 `review-model/`。
 
-独立布局审查37项回归与16个PNG探针通过：四张真实PNG逐像素一致，27,852个源字符／1,982次单元格绘制完整、未越界；短项目名按实测宽度分配首列，四个状态列等宽（像素舍入相差不超过1）。28项浏览器探针中首次发现四页搜索64字符快照ID时，反馈文字将390窄屏撑到514px；仅为提示文字补充可断行规则，四页均恢复390px，最终28／28通过，页面错误及远程请求为零。修后reports全部80项通过（15.33秒），原失败与最终源码哈希均保存在 `review-layout/`，无未解决阻塞发现。正式构建／安装与远端结果取得后补记；源码检查不替代正式EXE验收。
+独立布局审查37项回归与16个PNG探针通过：四张真实PNG逐像素一致，27,852个源字符／1,982次单元格绘制完整、未越界；短项目名按实测宽度分配首列，四个状态列等宽（像素舍入相差不超过1）。28项浏览器探针中首次发现四页搜索64字符快照ID时，反馈文字将390窄屏撑到514px；仅为提示文字补充可断行规则，四页均恢复390px，最终28／28通过，页面错误及远程请求为零。修后reports全部80项通过（15.33秒），原失败与最终源码哈希均保存在 `review-layout/`，无未解决阻塞发现。正式交付结果如下。
+
+构建任务 `20261020-182420-9e203bf6`，来源为干净提交 `8cc22e391780e48ab0dca22865e664907deb7838`，152源输入与提交逐项核验；507程序文件共184,437,637字节，清单及ZIP每项SHA／CRC通过。独立正式EXE原生Windows Qt启动4.00秒。实际冻结服务链45.34秒完成16,891文件扫描、434干员／513模组解析与图片／音频等资源导出，分别生成dark/light报告；四模组合集各1张1200×6567 PNG，能天使各1200×8306，两主题元数据／真实像素均核对。实际EXE生成的四份HTML各通过10项离线Edge检查、两批次目录另核，截图已查看；本轮未出现需重试的提取错误。证据为 `package-receipt.json`、`frozen-verification.json`、`frozen-services-and-html.json`、`index-frozen.json` 与 `browser/frozen-exe/`，不以源码样例代替冻结输出。
+
+候选已按既定流程普通快进私有main/test后同步到 `D:\Tools\ArknightsUnpacker`：完整备份并核验507旧0.1.7托管文件，仅替换12项、495项不变、零新增／删除，230用户／旧AppData文件同步时不变。实际安装EXE原生启动5.30秒、关闭后重启4.94秒，均退出0；原3扫描／1数据快照payload、434／513资料、dark主题、查看状态及其余设置保留，未重扫重解析，已有exports保留。507程序项及GUI正常演进外102保护文件再次核验，截图已查看；旧程序备份 `backup-0.1.7/`，收据为 `sync-preview.json`、`backup-verified.json`、`sync-result.json` 与 `installed-verification.json`。隔离服务验收的新扫描与Tools恢复的旧扫描分别记录，不认定为观察到游戏更新。
+
+EXE SHA-256：`90d5f4504989eae7d4831a0a5fd720db406a2f1c6bdda7c070e9447ff52e9eec`。ZIP `ArknightsUnpacker-0.1.8-win64.zip` 为73,628,739字节，SHA-256：`9296b8aab5a081c1b389772a914780cb3c40d0c7c404e5ba405d692977c9e1a2`。沿用私有仓库 [v0.1.8 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.8)，新附件大小／上传状态／GitHub摘要、main/test/tag及旧发布保留由 `verify_remote.py` 最终核验并写 `release-result.json`；后补本文与主计划不改152构建输入。已验证绝对目标后清理当前构建的pyinstaller／tmp两个实际存在目录（17文件、26,383,176字节），pyinstaller-cache原本不存在；来源／安装／旧回退共1521程序文件及ZIP清理后再次核验，日志为 `cleanup-{preflight,result}.json`。保留旧制品、必要回退、实际报告／截图／收据与首轮失败证据；旧静态报告需重新导出。
 
 ## v0.1.7 · PNG／HTML 统一亮色与暗色导出（2026-10-20）
 
