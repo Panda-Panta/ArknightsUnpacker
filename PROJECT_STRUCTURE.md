@@ -9,13 +9,13 @@ ArknightsUnpacker/
 ├─ src/arknights_unpacker/
 │  ├─ __main__.py, bootstrap.py    GUI／worker／验收入口分派
 │  ├─ application.py              AppServices 用例集成，负责所选安装与输出保护
-│  ├─ contracts.py                共享模型、取消标记、进度与序列化契约
+│  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
-│  ├─ reports/                    语义块、PNG 排版、独立 HTML 与批次清单
+│  ├─ reports/                    语义块、模组单张／分页PNG、独立HTML与批次清单
 │  └─ ui/                         Qt 浅色六页工作台、启动恢复、更新批量导图、原图预览保存
 ├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
@@ -54,7 +54,7 @@ MainWindow → AppServices.extract → WorkerRunner → extraction.engine
 MainWindow → AppServices.export → build_operator/build_module → reports.export_report
 ```
 
-`reports/html_render.py` 负责生成资料与选择结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.0.0，修改会直接影响新报告。`reports/model.py` 的 entry_id／entry_title／stage 将模组简介与各级属性、天赋归为同一条目，PNG／TXT 继续共用资料。PNG 主题实现位于 `reports/render.py`。folder_rules.json 是目录用途分类的实际运行输入。
+`reports/html_render.py` 负责生成资料与选择结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.0.0，修改会直接影响新报告。`reports/model.py` 的 entry_id／entry_title／stage 将模组简介与各级属性、天赋归为同一条目，PNG／TXT 继续共用资料。PNG 主题与排版实现位于 `reports/render.py`：`ReportOptions.module_image_layout` 为 `single`（默认）或 `paged`，只控制纯模组合集；`single` 按内容生成一张自适应高度图，超过 8,000 万像素时明确提示改用分页或减少选择。`ui/settings.py` 以 `report_module_image_layout` 保存“模组PNG排版”，模组页合并导出所选或本次新增；`modules.html` 仍同页容纳全部模组，干员独立报告分页不变。模组复选框由 `ui/entity_view.py` 内局部模型按稳定ID维护，排序／筛选保留勾选并提示隐藏数量；共享 `RecordsModel` 与干员列表选择不变。folder_rules.json 是目录用途分类的实际运行输入。
 
 `scripts/verify-html.cjs` 是真实浏览器验收入口：`node scripts/verify-html.cjs --html <产物路径> --output <证据目录>`。开发环境需提供 Node.js 和 Playwright，可用 `NODE_PATH` 指向已有 Playwright 安装的 `node_modules`；这些工具不属于产品运行依赖。旧 HTML 为静态快照，需重新导出才使用新资产，不迁改已有报告。
 

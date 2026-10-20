@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 from ..contracts import ReportDocument, CancelToken, null_progress
 from .model import semantic_blocks
 
+MAX_SINGLE_IMAGE_PIXELS = 80_000_000
+
 
 @dataclass
 class DrawLine:
@@ -57,6 +59,7 @@ def wrap_text(text: str, font, width: int, *, cancel: CancelToken | None = None)
 
 def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None, emit=null_progress) -> list[list[DrawLine]]:
     options = document.options
+    single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
     body_font = _font(options.font_size)
     heading_font = _font(round(options.font_size * 1.12), True)
     margin = min(48, options.width // 14)
@@ -65,7 +68,7 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
     heading_height = math.ceil(options.font_size * 1.85)
     # Reserve a complete title and page footer on every page.
     page_height = min(options.max_page_height, 20_000_000 // options.width)
-    capacity = page_height - margin * 2 - heading_height * 2
+    capacity = None if single_module_image else page_height - margin * 2 - heading_height * 2
     pages: list[list[DrawLine]] = []
     current: list[DrawLine] = []
     used = 0
@@ -74,7 +77,7 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
         nonlocal current, used
         if cancel:
             cancel.check()
-        if used + line.height > capacity and current:
+        if capacity is not None and used + line.height > capacity and current:
             pages.append(current)
             current, used = [], 0
         current.append(line)
@@ -88,7 +91,7 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
         heading = wrap_text(block.title, heading_font, content_width - 16, cancel=cancel)
         # Keep a section heading with at least its first content line when feasible.
         required = len(heading) * heading_height + line_height
-        if current and used + required > capacity:
+        if capacity is not None and current and used + required > capacity:
             pages.append(current)
             current, used = [], 0
         for text in heading:
@@ -124,6 +127,7 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
 def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: CancelToken | None = None,
                emit=null_progress, on_page=None) -> list[Path]:
     options = document.options
+    single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
     pages = layout_pages(document, cancel=cancel, emit=emit)
     dark = options.theme == 'dark'
     colors = dict(bg='#20252b' if dark else '#ffffff', fg='#f1f3f5' if dark else '#20252b',
@@ -139,44 +143,66 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
         if cancel:
             cancel.check()
         emit({'kind':'progress','stage':'report_png','current':index,'total':len(pages),'message':f'{document.title} · 第{index}页'})
-        height = min(options.max_page_height, margin * 2 + heading_height * 2 + sum(line.height for line in lines))
-        image = Image.new('RGB', (options.width, height), colors['bg'])
-        draw = ImageDraw.Draw(image)
-        # A short repeated title cannot run beyond the right edge.
-        title = wrap_text(document.title, heading, options.width - margin * 2)[0]
-        if title != document.title:
-            title = title[:-1] + '…'
-        draw.text((margin, margin), title, font=heading, fill=colors['fg'])
-        y = margin + heading_height
-        for line in lines:
-            if cancel:
-                cancel.check()
-            if line.kind in {'heading','warning-heading'}:
-                draw.rectangle((margin - 8, y, options.width - margin + 8, y + line.height - 4),
-                               fill='#6b3b23' if line.kind == 'warning-heading' else colors['header'])
-                draw.text((margin, y + 3), line.text, font=heading, fill=colors['fg'])
-            elif line.kind in {'table','table-header'}:
-                weights = [1.6] + [1] * (len(line.cells)-1)
-                widths = [int((options.width-margin*2) * weight / sum(weights)) for weight in weights]
-                x=margin
-                for column_index,(cell,width) in enumerate(zip(line.cells,widths)):
-                    draw.rectangle((x,y,x+width,y+line.height),fill=colors['header'] if line.kind=='table-header' else colors['bg'],outline=colors['border'])
-                    draw.text((x+6,y+3),cell,font=body,fill=colors['accent'] if line.column_labels[column_index]=='潜能' else colors['fg'])
-                    x+=width
-            elif line.kind == 'separator':
-                draw.line((margin, y + line.height // 2, options.width - margin, y + line.height // 2), fill=colors['border'])
-            else:
-                draw.text((margin + 6, y + 3), line.text, font=body,
-                          fill=colors['accent'] if line.kind == 'potential' else colors['fg'])
-            y += line.height
-        footer = f'第 {index} / {len(pages)} 页 · 本地数据快照 · 模板 {document.metadata.get("template_version", "")} '
-        draw.text((margin, height - margin - options.font_size), footer, font=small, fill=colors['muted'])
+        if cancel:
+            cancel.check()
+        full_height = margin * 2 + heading_height * 2 + sum(line.height for line in lines)
+        height = full_height if single_module_image else min(options.max_page_height, full_height)
+        # RGB alone needs three bytes per pixel, with extra drawing/PNG buffers.
+        # Refuse an excessive single canvas before allocating it; silently
+        # splitting or clipping here would violate the requested layout.
+        if single_module_image and options.width * height > MAX_SINGLE_IMAGE_PIXELS:
+            raise ValueError(f'模组单张图片过大（{options.width:,} × {height:,}），超过 {MAX_SINGLE_IMAGE_PIXELS:,} 像素上限。请改用分页排版或减少所选模组。')
         path = directory / f'{stem}_p{index:02d}.png'
         temporary = path.with_suffix('.png.tmp')
-        image.save(temporary, format='PNG', optimize=False)
-        temporary.replace(path)
+        image = None
+        try:
+            try:
+                image = Image.new('RGB', (options.width, height), colors['bg'])
+            except MemoryError as error:
+                if single_module_image:
+                    raise ValueError('内存不足，无法生成模组单张长图。请改用分页排版或减少所选模组。') from error
+                raise
+            draw = ImageDraw.Draw(image)
+            # A short repeated title cannot run beyond the right edge.
+            title = wrap_text(document.title, heading, options.width - margin * 2, cancel=cancel)[0]
+            if title != document.title:
+                title = title[:-1] + '…'
+            draw.text((margin, margin), title, font=heading, fill=colors['fg'])
+            y = margin + heading_height
+            for line in lines:
+                if cancel:
+                    cancel.check()
+                if line.kind in {'heading','warning-heading'}:
+                    draw.rectangle((margin - 8, y, options.width - margin + 8, y + line.height - 4),
+                                   fill='#6b3b23' if line.kind == 'warning-heading' else colors['header'])
+                    draw.text((margin, y + 3), line.text, font=heading, fill=colors['fg'])
+                elif line.kind in {'table','table-header'}:
+                    weights = [1.6] + [1] * (len(line.cells)-1)
+                    widths = [int((options.width-margin*2) * weight / sum(weights)) for weight in weights]
+                    x=margin
+                    for column_index,(cell,width) in enumerate(zip(line.cells,widths)):
+                        draw.rectangle((x,y,x+width,y+line.height),fill=colors['header'] if line.kind=='table-header' else colors['bg'],outline=colors['border'])
+                        draw.text((x+6,y+3),cell,font=body,fill=colors['accent'] if line.column_labels[column_index]=='潜能' else colors['fg'])
+                        x+=width
+                elif line.kind == 'separator':
+                    draw.line((margin, y + line.height // 2, options.width - margin, y + line.height // 2), fill=colors['border'])
+                else:
+                    draw.text((margin + 6, y + 3), line.text, font=body,
+                              fill=colors['accent'] if line.kind == 'potential' else colors['fg'])
+                y += line.height
+            footer = f'第 {index} / {len(pages)} 页 · 本地数据快照 · 模板 {document.metadata.get("template_version", "")} '
+            draw.text((margin, height - margin - options.font_size), footer, font=small, fill=colors['muted'])
+            if cancel:
+                cancel.check()
+            image.save(temporary, format='PNG', optimize=False)
+            if cancel:
+                cancel.check()
+            temporary.replace(path)
+        finally:
+            if image is not None:
+                image.close()
+            temporary.unlink(missing_ok=True)
         paths.append(path)
-        image.close()
         if on_page:
             on_page(path, len(pages))
     return paths

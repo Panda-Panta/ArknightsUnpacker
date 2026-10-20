@@ -25,9 +25,22 @@ def verify_installation(services, root: str, target: Path) -> dict:
     char_id = "char_4231_clemnt" if any(r["id"] == "char_4231_clemnt" for r in rows) else rows[0]["id"]
     profile = services.operator_profile(char_id)
     modules = services.modules()
-    module_id = "uniequip_002_chen" if any(r["id"] == "uniequip_002_chen" for r in modules) else modules[0]["id"] if modules else None
-    artifacts = services.export([char_id], [module_id] if module_id else [], str(target / "reports"),
+    module_ids = [row['id'] for row in modules[:4]]
+    artifacts = services.export([char_id], module_ids, str(target / "reports"),
                                 {ExportFormat.PNG, ExportFormat.HTML}, emit=progress)
+    module_collection = None
+    if module_ids:
+        from PIL import Image
+        pngs = [item for item in artifacts if item.format == 'png' and Path(item.path).name.startswith('modules_')]
+        htmls = [item for item in artifacts if item.format == 'html' and Path(item.path).name == 'modules.html']
+        if len(pngs) != 1 or pngs[0].pages != 1 or len(htmls) != 1:
+            raise RuntimeError('模组合集验收必须生成一张完整PNG和一个HTML')
+        with Image.open(pngs[0].path) as picture:
+            image_size = picture.size
+            picture.verify()
+        module_collection = {'module_ids': module_ids, 'png': pngs[0].path, 'html': htmls[0].path,
+                             'image_size': image_size, 'pages': 1,
+                             'scope': 'Manually selected current modules; no server update observed.'}
     extraction_checks = []
     def sample_path(relative):
         for layer in ("hot", "base"):
@@ -83,6 +96,7 @@ def verify_installation(services, root: str, target: Path) -> dict:
                "data_complete": data.complete, "data_version": data.version,
                "resource_version": data.resource_version, "operators": len(rows), "modules": len(modules),
                "profile": as_jsonable(profile), "artifacts": as_jsonable(artifacts),
+               "module_collection": module_collection,
                "extraction_checks": extraction_checks,
                "elapsed_seconds": round(time.monotonic() - start, 2), "events": events,
                "evidence": "Production service and isolated worker flow; browser offline rendering not exercised."}
@@ -161,6 +175,7 @@ def main() -> int:
                                       "output_root": services.config.get("output_root"),
                                       "output_directory_exists": Path(services.config["output_root"]).is_dir(),
                                       "settings_output": window.settings.output.text(),
+                                      "module_image_layout": window.settings.report_options().module_image_layout,
                                       "queue_idle": not window.queue.busy,
                                       "scan_id": getattr(services.scan_snapshot, 'snapshot_id', None),
                                       "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),

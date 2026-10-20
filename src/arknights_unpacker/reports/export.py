@@ -91,7 +91,7 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
         documents.append((single, name, operator.summary.get('profession', ''), operator.metadata.get('version', 'unknown'), operator.char_id))
     if document.modules or not document.operators:
         single = deepcopy(document)
-        single.title = '模组资料合集' if document.modules else document.title
+        single.title = '模组资料合集' if document.modules and document.operators else document.title
         single.operators = []
         restrict_changes(single)
         documents.append((single, 'modules' if document.modules else 'report', '', '', ''))

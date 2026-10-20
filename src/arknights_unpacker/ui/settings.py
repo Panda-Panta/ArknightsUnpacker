@@ -70,6 +70,17 @@ class SettingsView(QWidget):
         self.theme.addItem('浅色', 'light')
         self.theme.setCurrentIndex(max(0, self.theme.findData(config.get('report_theme', 'dark'))))
         report_form.addRow('资料图片主题', self.theme)
+        self.module_image_layout = QComboBox()
+        self.module_image_layout.setObjectName('reportModuleImageLayout')
+        self.module_image_layout.addItem('合成单张长图（默认）', 'single')
+        self.module_image_layout.addItem('按高度分页', 'paged')
+        self.module_image_layout.setCurrentIndex(max(0, self.module_image_layout.findData(config.get('report_module_image_layout', 'single'))))
+        self.module_image_layout.setToolTip('仅影响模组合集的 PNG；HTML 始终汇总为一个页面，干员图片分页不变。')
+        report_form.addRow('模组 PNG 排版', self.module_image_layout)
+        module_note = QLabel('模组 HTML 始终合并为一个页面；此选项仅影响模组 PNG，干员图片分页不变。')
+        module_note.setProperty('muted', True)
+        module_note.setWordWrap(True)
+        report_form.addRow(module_note)
         report_note = QLabel('以上设置仅用于生成资料长图，界面始终使用浅色工作台。\n解包的资源图片和“保存原图”保留原始像素；预览缩放只改变显示大小。')
         report_note.setProperty('muted', True)
         report_note.setWordWrap(True)
@@ -117,6 +128,7 @@ class SettingsView(QWidget):
                            extraction_kinds=[key for key, check in self.kinds.items() if check.isChecked()],
                            formats=[fmt.value for fmt, check in self.formats.items() if check.isChecked()],
                            report_width=self.width.value(), report_font_size=self.font_size.value(),
+                           report_module_image_layout=self.module_image_layout.currentData(),
                            report_theme=self.theme.currentData(), monitor=self.monitor.isChecked(),
                            data_locale=self.data_locale.currentData())
         self.changed.emit()
@@ -125,4 +137,5 @@ class SettingsView(QWidget):
         return {fmt for fmt, check in self.formats.items() if check.isChecked()}
 
     def report_options(self):
-        return ReportOptions(width=self.width.value(), font_size=self.font_size.value(), theme=self.theme.currentData())
+        return ReportOptions(width=self.width.value(), font_size=self.font_size.value(), theme=self.theme.currentData(),
+                             module_image_layout=self.module_image_layout.currentData())

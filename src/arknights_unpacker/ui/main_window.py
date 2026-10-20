@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
+from dataclasses import replace
 from pathlib import Path
 import uuid
 import os
@@ -502,6 +503,8 @@ class MainWindow(QMainWindow):
         # A single chosen module may enter the static panel; never combine modules.
         spec = report_spec or (BuildSpec(module_id=self.operators.module_choice.currentData()) if kind == 'operators' and len(ids) == 1 else BuildSpec())
         options = report_options or self.settings.report_options()
+        if kind == 'modules' and only_new and not options.title:
+            options = replace(options, title='本次新增模组')
         def done(artifacts):
             if preview:
                 # AppServices records its target; preview cache must not become the saved user output.

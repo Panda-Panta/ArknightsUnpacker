@@ -249,6 +249,7 @@ class ReportOptions:
     theme: str = "dark"
     max_page_height: int = 16000
     title: str = ""
+    module_image_layout: str = "single"
 
 
 @dataclass
