@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from PIL.PngImagePlugin import PngInfo
 
 from ..contracts import ReportDocument, CancelToken, null_progress
+from .model import display_title
 from .style import ordered_groups, style_version, theme_colors, typography
 
 MAX_SINGLE_IMAGE_PIXELS = 80_000_000
@@ -210,7 +211,7 @@ def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None,
 
     # The full source title participates in pagination, even when it alone needs
     # several pages. A short masthead is repeated without duplicating source text.
-    for text in wrap_text(document.title, layout.title, layout.width, cancel=cancel):
+    for text in wrap_text(display_title(document), layout.title, layout.width, cancel=cancel):
         add(DrawLine(text, layout.title_height, 'title'))
     add(DrawLine('', layout.chrome_padding + layout.gap, 'title-end', padding_bottom=layout.gap))
     groups = ordered_groups(document)

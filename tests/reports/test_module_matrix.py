@@ -79,7 +79,8 @@ def test_different_scopes_remain_distinct_and_same_public_text_is_not_duplicated
     talents = [row for row in effects.cells if '共同天赋' in row[0]]
     assert len(talents) == 2
     assert sum(row[3].count('2级天赋正文') for row in talents) == 1
-    assert any('map-special' in row[0] and '限定地图效果' in row[3] for row in talents)
+    assert any('具体范围未确认' in row[0] and '限定地图效果' in row[3] for row in talents)
+    assert all('map-special' not in cell for row in talents for cell in row)
 
 
 def test_legacy_bonus_only_profile_and_token_values_do_not_become_panel_totals():
@@ -93,6 +94,6 @@ def test_legacy_bonus_only_profile_and_token_values_do_not_become_panel_totals()
     assert '加成' in attributes.cells[0][2] and '+20' in attributes.cells[0][2]
     summons, = [block for block in parts if block.kind == 'module-summons']
     assert any('召唤物1' in row[0] and '生命上限' in row[0] and '+50' in row[2] for row in summons.cells)
-    assert ('召唤物1', 'token_one') in parts[0].rows
+    assert 'token_one' not in text_report(ReportDocument('旧模组', modules=[profile]))
     assert any('召唤物效果' in row[2] for row in summons.cells)
     assert all(row[1] == '未提供' for row in summons.cells)

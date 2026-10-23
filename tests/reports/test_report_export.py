@@ -84,7 +84,7 @@ def test_empty_missing_and_invalid_options(tmp_path):
     paths = export_report(empty, tmp_path, {ExportFormat.TXT})
     assert '无技能' in Path(paths[0].path).read_text('utf-8')
     paths = export_report(broken, tmp_path, {ExportFormat.TXT})
-    assert '技能数据缺失或未解析' in Path(paths[0].path).read_text('utf-8')
+    assert '技能资料不完整' in Path(paths[0].path).read_text('utf-8')
     with pytest.raises(ValueError):
         compose_report(ReportSelection(), ReportOptions(max_page_height=20))
 
@@ -183,8 +183,8 @@ def test_draft_badge_and_module_recipient_sections():
     from arknights_unpacker.reports.model import text_report
     broken=OperatorProfile('a','缺数据',diagnostics=['skill_table: missing'])
     warning=OperatorProfile('a','未知区服',diagnostics=['区服未知，仅比较同一安装位置内容'])
-    assert '数据未完整解析 · 草稿' in text_report(compose_report(ReportSelection([broken]),ReportOptions()))
-    assert '数据未完整解析 · 草稿' not in text_report(compose_report(ReportSelection([warning]),ReportOptions()))
+    assert '资料不完整' in text_report(compose_report(ReportSelection([broken]),ReportOptions()))
+    assert '资料不完整' not in text_report(compose_report(ReportSelection([warning]),ReportOptions()))
     module=ModuleProfile('eq','a','甲','模组',phases=[{'level':3,'trait':'本体特性','attributes':[],
         'effects':[{'description':'不应重复显示'}], 'hidden_effects':[{'blackboard':[{'key':'raw','value':10}]}],
         'token_effects':[{'name':'召唤物强化','description':'召唤物攻击提升','potential_delta':'+2',
@@ -192,7 +192,7 @@ def test_draft_badge_and_module_recipient_sections():
         'token_attributes':{'token_1':[{'key':'max_hp','value':50}]},'scope':{'game_tag_meta':'限定模式'},'talents':[]}])
     text=text_report(compose_report(ReportSelection(modules=[module]),ReportOptions()))
     assert '召唤物效果' in text and '生命上限' in text and '+50（加成）' in text
-    assert '召唤物1：token_1' in text
+    assert '召唤物1' in text and 'token_1' not in text
     assert '限定模式' in text and '特定玩法' in text
     assert 'hidden_effects' not in text and 'blackboard' not in text and '不应重复显示' not in text
 

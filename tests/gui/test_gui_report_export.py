@@ -127,7 +127,7 @@ def test_real_reference_detail_uses_readable_report_blocks_and_keeps_evidence(qt
     assert '克莱门莎' in text and '1065' in text and '21' in text
     assert '合作原则' in text and '谈判技巧' in text
     assert '初始技力' in text and '专精3' in text
-    assert '来源与诊断' in text and '可读诊断测试' in text
+    assert '来源与诊断' not in text and '可读诊断测试' not in text
     assert 'raw-internal-getter-sentinel' not in text
     assert 'raw-internal-source-sentinel' not in text
     assert 'field_evidence' not in text and 'getter' not in text

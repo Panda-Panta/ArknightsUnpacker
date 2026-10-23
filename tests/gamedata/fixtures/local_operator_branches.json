@@ -1,0 +1,93 @@
+{
+  "version": "78.2.0",
+  "resource_version": "26-10-14-13-44-12-52990322",
+  "snapshot_id": "4c8a392c97c180b2ed2d432e2e96c6f6069d64b471699bb8f20d3633514d988d",
+  "origin": "Subset of locally decoded PC game table; names copied without translation. Existing fixed_reference omits subProfDict.",
+  "source": {
+    "path": "D:\\Games\\Hypergryph Launcher\\games\\Arknights Game\\Arknights_Data\\StreamingAssets\\AB\\Windows\\anon\\64798a2fa2ed64156094d4497dc6c537.bin",
+    "layer": "base",
+    "logical_name": "gamedata/excel/uniequip_table8b1bb5",
+    "object_name": "uniequip_table8b1bb5",
+    "path_id": "-6771223193573277171",
+    "table": "uniequip_table",
+    "pointer": "/subProfDict",
+    "sha256": "81f7ba080afe9735319de923a20805e8c1f18e4c36e89797d2220f62ab18e252",
+    "decoder_version": "pc-fbs-161d5e2-normalize-v1"
+  },
+  "field_evidence": {
+    "/subProfDict": {
+      "getter": "clz_Torappu_UniEquipTable.SubProfDict",
+      "states": [
+        "vector"
+      ],
+      "state": "vector",
+      "dictionary": true
+    },
+    "/subProfDict/*/subProfessionCatagory": {
+      "getter": "clz_Torappu_SubProfessionData.SubProfessionCatagory",
+      "slot": 8,
+      "states": [
+        "present"
+      ],
+      "state": "present"
+    },
+    "/subProfDict/*/subProfessionId": {
+      "getter": "clz_Torappu_SubProfessionData.SubProfessionId",
+      "slot": 4,
+      "states": [
+        "present"
+      ],
+      "state": "present"
+    },
+    "/subProfDict/*/subProfessionName": {
+      "getter": "clz_Torappu_SubProfessionData.SubProfessionName",
+      "slot": 6,
+      "states": [
+        "present"
+      ],
+      "state": "present"
+    }
+  },
+  "subProfDict": {
+    "primguard": {
+      "subProfessionCatagory": 71,
+      "subProfessionId": "primguard",
+      "subProfessionName": "本源近卫"
+    },
+    "corecaster": {
+      "subProfessionCatagory": 32,
+      "subProfessionId": "corecaster",
+      "subProfessionName": "中坚术师"
+    },
+    "fastshot": {
+      "subProfessionCatagory": 25,
+      "subProfessionId": "fastshot",
+      "subProfessionName": "速射手"
+    },
+    "physician": {
+      "subProfessionCatagory": 39,
+      "subProfessionId": "physician",
+      "subProfessionName": "医师"
+    },
+    "splashcaster": {
+      "subProfessionCatagory": 33,
+      "subProfessionId": "splashcaster",
+      "subProfessionName": "扩散术师"
+    },
+    "artsfghter": {
+      "subProfessionCatagory": 11,
+      "subProfessionId": "artsfghter",
+      "subProfessionName": "术战者"
+    },
+    "incantationmedic": {
+      "subProfessionCatagory": 57,
+      "subProfessionId": "incantationmedic",
+      "subProfessionName": "咒愈师"
+    },
+    "summoner": {
+      "subProfessionCatagory": 47,
+      "subProfessionId": "summoner",
+      "subProfessionName": "召唤师"
+    }
+  }
+}

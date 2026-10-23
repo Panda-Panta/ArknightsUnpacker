@@ -350,7 +350,7 @@ footer p { margin: 8px 0 0; }
 /* Responsive Media Queries */
 @media (max-width: 900px) {
   .shell { display: flex; flex-direction: column; padding: 14px; gap: 16px; }
-  aside { position: static; max-height: none; padding: 0; border-bottom: 1px solid var(--rule); overflow: visible; }
+  aside { position: static; align-self: stretch; max-height: none; padding: 0; border-bottom: 1px solid var(--rule); overflow: visible; }
   .directory-heading, .directory-note { display: none; }
   .section-directory { overflow-x: auto; padding: 3px 0; }
   aside ol { display: flex; gap: 4px; padding: 0; }

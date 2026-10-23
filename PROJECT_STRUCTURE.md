@@ -48,6 +48,8 @@ ArknightsUnpacker/
 
 Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG／HTML／TXT；JSON 保留完整资料和字段证据。Unity 解码运行在独立进程中，GUI 线程只处理界面与结果。
 
+`gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
+
 主要调用链：
 
 ```text
@@ -78,4 +80,4 @@ HTML 所有技能与模组连续显示，移除技能／模组页签和等级控
 
 `ui/jobs.py` 在启动及每个任务终结后，将成功历史限制为最近20条；`ui/job_history.py` 仅移除对应任务JSON／事件，保留非成功与恢复祖先，不删除正式产物。`settled(job)` 在工作线程释放后通知主窗口结束预览生产占用。`ui/preview_cache.py` 为data/preview与previews分配带标记和QLockFile的独占目录，lease须同时结束生产并释放窗口后才删除；外部HTML延至程序退出。主窗口在队列修剪前扫描旧缓存归属，未知／链接／其他在用实例保留；对话框只释放显式绑定的lease，正式任务重复预览仍可打开。AppServices.extract/export的remember_output默认为True，临时预览传False，不改变正式输出设置。
 
-0.1.10界面更新：main_window.py管理可折叠的扫描选项／历史对照、当前页说明及可省略路径；settings.py自行拥有可滚动表单与固定保存栏，SettingsPage直接装配该视图。entity_view.py、explorer.py、updates.py各自拥有表格／空状态切换和就近清除筛选，不改变服务层数据或稳定ID。jobs.py仅改善空队列及进度呈现，未更改调度器。HTML模板2.3.0添加正文跳转、滚动目录位置及局部横表键盘访问，仍使用style.py和report_styles.json的2.2.0共享调色板；PNG排版未改。新增界面回归在tests/gui/test_*_usability.py与tests/reports/test_html_usability.py；截图／真实快照验收在.work/ui-refresh-20261023/，不随包发布。
+0.1.10界面更新：main_window.py管理可折叠的扫描选项／历史对照、当前页说明及可省略路径；settings.py自行拥有可滚动表单与固定保存栏，SettingsPage直接装配该视图。entity_view.py、explorer.py、updates.py各自拥有表格／空状态切换和就近清除筛选，不改变服务层数据或稳定ID。jobs.py仅改善空队列及进度呈现，未更改调度器。HTML模板2.3.0添加正文跳转、滚动目录位置及局部横表键盘访问，仍使用style.py和report_styles.json的2.2.0共享调色板；PNG排版器未改，PNG／HTML／TXT的正文由model.py统一精简为玩家资料，exporters.py的JSON仍直接保存完整ReportDocument，内部导航键不删除。新增界面回归在tests/gui/test_*_usability.py与tests/reports/test_html_usability.py；截图／真实快照验收在.work/ui-refresh-20261023/，不随包发布。

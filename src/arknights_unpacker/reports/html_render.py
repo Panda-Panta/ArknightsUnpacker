@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from ..contracts import ReportDocument
 from ..paths import resource_root
-from .model import Block, plain, present
+from .model import Block, display_title, plain, present
 from .style import ordered_groups, theme_css
 
 _ASSETS = resource_root() / 'resources' / 'html'
@@ -48,7 +48,7 @@ def _portrait(document: ReportDocument) -> str:
 
 
 def _header(document: ReportDocument) -> str:
-    chips, version = [], ''
+    chips = []
     if len(document.operators) == 1:
         profile = document.operators[0]
         summary = profile.summary
@@ -61,15 +61,12 @@ def _header(document: ReportDocument) -> str:
             chips.append('潜能 ' + plain(summary['potential']))
         if summary.get('trust') is not None:
             chips.append('信赖 ' + plain(summary['trust']))
-        version = profile.metadata.get('version') or ''
     elif document.modules:
         chips.append('模组资料')
-        version = document.modules[0].metadata.get('version') or ''
     badges = ''.join(f'<span>{_e(value)}</span>' for value in chips)
     return '<header class="operator-header">' + _portrait(document) + '<div class="operator-identity">' + \
-        '<p class="eyebrow">LOCAL DOSSIER <span>本地资料快照</span></p><h1>' + _e(document.title or '干员与模组资料') + '</h1>' + \
-        '<div class="identity-tags">' + badges + '</div>' + \
-        (f'<p class="snapshot-label">游戏数据版本 {_e(version)}</p>' if version else '') + '</div></header>'
+        '<h1>' + _e(display_title(document)) + '</h1>' + \
+        '<div class="identity-tags">' + badges + '</div></div></header>'
 
 
 def _tables(block: Block, *, matrix: bool = False) -> str:
@@ -162,7 +159,7 @@ def render_html(document: ReportDocument) -> str:
     content, directory = [], []
     for group, anchor, title, items in ordered_groups(document):
         directory.append(f'<li><a href="#{anchor}">{_e(title)}</a></li>')
-        classes = 'report-section' + (' warning' if group == '草稿警告' else '') + (' auxiliary' if anchor in {'version', 'sources'} else '')
+        classes = 'report-section' + (' warning' if group == '草稿警告' else '')
         content.append(f'<section class="{classes}" id="{anchor}" data-report-section data-report-group="{_e(group)}">'
                        f'<h2>{_e(title)}<a class="section-link" href="#{anchor}" aria-label="{_e(title)}分区链接">#</a></h2>')
         if group == '技能':
@@ -172,14 +169,15 @@ def render_html(document: ReportDocument) -> str:
         else:
             content.extend(_block(index, block) for index, block in items)
         content.append('</section>')
-    return _PAGE.substitute(title=_e(document.title or '干员与模组资料'), theme=_e(document.options.theme),
+    return _PAGE.substitute(title=_e(display_title(document)), theme=_e(document.options.theme),
                             css=_styles(document.options.theme), script=JS,
                             directory=''.join(directory), header=_header(document), content=''.join(content))
 
 
 def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light') -> str:
     rows = ''.join('<tr>' + f'<td><a href="{quote(entry["path"])}">{_e(entry["title"])}</a></td>' + ''.join(
-        f'<td>{_e(entry.get(key, ""))}</td>' for key in ('profession', 'version', 'status')) + '</tr>' for entry in entries)
+        f'<td>{_e(present("kind" if key == "status" else key, entry[key])) if entry.get(key) else ""}</td>'
+        for key in ('profession', 'status')) + '</tr>' for entry in entries)
     return ('<!doctype html>'
             f'<html lang="zh-CN" data-report-theme="{_e(theme)}"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -187,5 +185,5 @@ def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light'
             f'<body><main class="index-main"><p class="eyebrow">LOCAL ARCHIVE <span>离线资料目录</span></p><h1>{_e(title)}</h1>'
             f'<p class="index-description">共 {len(entries)} 份资料 · 点击名称打开，移动整个任务文件夹后仍可使用</p>'
             '<div class="table-wrap" tabindex="0" role="region" aria-label="离线资料目录表格，可横向滚动"><table class="index-table"><thead><tr>'
-            '<th scope="col">资料</th><th scope="col">职业</th><th scope="col">数据版本</th><th scope="col">状态</th>'
+            '<th scope="col">资料</th><th scope="col">职业</th><th scope="col">状态</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div></main></body></html>')

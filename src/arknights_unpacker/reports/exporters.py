@@ -37,7 +37,7 @@ def _export_text(context: ExportContext) -> None:
 
 def _export_html(context: ExportContext) -> None:
     from .html_render import render_html, render_index
-    from .model import plain
+    from .model import display_title, plain
 
     entries = []
     for single, name, profession, version, identifier in context.documents:
@@ -45,17 +45,17 @@ def _export_html(context: ExportContext) -> None:
         path = context.directory / f'{name}.html'
         context.write(path, render_html(single))
         context.record(ReportArtifact(str(path), 'html', single.title))
-        entry_status = '当前快照'
+        entry_status = '当前资料'
         changes = context.document.metadata.get('changes') or {}
         for change in changes.get('operators', []):
             if change.get('id', change.get('char_id')) == identifier:
                 entry_status = plain(change.get('kind', change.get('status', '变化')))
-        entries.append({'path': path.name, 'title': single.title, 'profession': plain(profession),
+        entries.append({'path': path.name, 'title': display_title(single), 'profession': plain(profession),
                         'version': plain(version), 'status': entry_status})
     if len(context.documents) > 1:
         context.cancel.check()
         path = context.directory / 'index.html'
-        context.write(path, render_index(entries, context.document.title, theme=context.document.options.theme))
+        context.write(path, render_index(entries, display_title(context.document), theme=context.document.options.theme))
         context.record(ReportArtifact(str(path), 'html', context.document.title + ' · 目录'))
 
 

@@ -2,7 +2,7 @@
 from ..contracts import BuildSpec, OperatorProfile, as_jsonable
 from .attributes import panel
 from .build import build_state, metadata
-from .candidates import choose, condition, potential_delta, unlocked
+from .candidates import choose, condition, phase_number, potential_delta, unlocked
 from .descriptions import render_description
 
 
@@ -18,6 +18,11 @@ def build_operator(data, char_id, spec=None):
     prefix = '/patchChars' if origin == 'char_patch_table' else ''
     p.metadata = metadata(data, origin, prefix + '/' + char_id)
     p.summary = {'profession':ch.get('profession'), 'sub_profession':ch.get('subProfessionId'), 'rarity':ch.get('rarity'), 'phase':phase, 'level':level, 'potential':rank+1, 'trust':spec.trust, 'obtainable':not ch.get('isNotObtainable', False), 'appellation':ch.get('appellation'), 'form_of':data.tables.get('_indexes', {}).get('forms', {}).get(char_id)}
+    # The game owns branch labels; retain its ID and resolve the selected form's name.
+    branch = (data.tables.get('uniequip_table', {}).get('subProfDict') or {}).get(ch.get('subProfessionId'))
+    branch_name = branch.get('subProfessionName') if isinstance(branch, dict) else None
+    if isinstance(branch_name, str) and branch_name.strip():
+        p.summary['sub_profession_name'] = branch_name.strip()
     terms = data.tables.get('gamedata_const', {}).get('termDescriptionDict', {})
     trait_candidate = choose((ch.get('trait') or {}).get('candidates'), phase, level, rank)
     if trait_candidate:
@@ -58,16 +63,21 @@ def build_operator(data, char_id, spec=None):
         bchar = building.get('chars', {}).get(data.tables.get('_indexes', {}).get('forms', {}).get(char_id, char_id))
         if bchar is None:
             p.diagnostics.append(f'building_data/chars/{char_id}: 后勤记录缺失')
-        for slot in (bchar or {}).get('buffChar') or []:
-            candidate = choose(slot.get('buffData'), phase, level, rank)
-            if not candidate:
-                continue
-            buff = building.get('buffs', {}).get(candidate.get('buffId'))
-            if not buff:
-                p.diagnostics.append(f'building_data: unresolved buff {candidate.get("buffId")}'); continue
-            description, ds = render_description(buff.get('description'), terms=terms)
-            p.diagnostics.extend(ds)
-            p.building_skills.append({'name':buff.get('buffName', ''), 'description':description, 'room':buff.get('roomType'), 'unlock':condition(candidate), 'id':candidate.get('buffId')})
+        for slot_number, slot in enumerate((bchar or {}).get('buffChar') or [], 1):
+            # A dossier includes every unlock stage, even if the chosen combat
+            # build cannot yet use it. Keep slot identity for upgrade relations.
+            candidates = [item for item in slot.get('buffData') or [] if isinstance(item, dict)]
+            candidates.sort(key=lambda item: (phase_number(condition(item).get('phase', 0)), condition(item).get('level', 1)))
+            for candidate in candidates:
+                buff = building.get('buffs', {}).get(candidate.get('buffId'))
+                if buff:
+                    description, ds = render_description(buff.get('description'), terms=terms)
+                    p.diagnostics.extend(ds)
+                else:
+                    p.diagnostics.append(f'building_data: unresolved buff {candidate.get("buffId")}')
+                    description = None
+                    buff = {}
+                p.building_skills.append({'name':buff.get('buffName', ''), 'description':description, 'room':buff.get('roomType'), 'unlock':condition(candidate), 'id':candidate.get('buffId'), 'slot':slot_number})
     p.potentials = [x.get('description', '') for x in (ch.get('potentialRanks') or [])[:rank]]
     from .modules import build_module
     for equip_id in data.tables.get('_indexes', {}).get('modules', {}).get(char_id, []):

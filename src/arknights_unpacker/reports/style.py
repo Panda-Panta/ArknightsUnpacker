@@ -12,7 +12,7 @@ REPORT_GROUPS = (
     ('天赋', 'talents', '天赋'), ('技能', 'skills', '技能'),
     ('后勤', 'building', '后勤技能'), ('潜能', 'potentials', '潜能提升'),
     ('模组', 'modules', '模组'), ('更新对照', 'changes', '更新对照'),
-    ('来源与诊断', 'sources', '来源与诊断'), ('', 'version', '资料版本与口径'),
+    ('', 'notes', '提示'),
 )
 
 

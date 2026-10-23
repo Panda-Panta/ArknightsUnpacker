@@ -32,20 +32,22 @@ def test_block_adds_optional_entry_fields_without_breaking_legacy_construction()
     assert block.stage is None
 
 
-def test_skill_and_unresolved_parameters_form_one_entry_per_real_skill():
+def test_skill_entries_keep_identity_without_showing_unresolved_parameters():
     operator = OperatorProfile('char_owner', '干员甲', skills=[
         {'index': 1, 'id': 'skill_one', 'name': '主技能甲', 'description': '倍率 {ratio}',
          'blackboard': {'ratio': 2.5}, 'diagnostics': ['unresolved placeholder ratio']},
         {'index': 2, 'id': 'skill_two', 'name': '主技能乙', 'description': '技能乙内容'},
     ])
     blocks = [block for block in semantic_blocks(ReportDocument('资料', [operator])) if block.group == '技能']
-    assert len(blocks) == 3
-    assert blocks[0].entry_id == blocks[1].entry_id
-    assert blocks[0].entry_id != blocks[2].entry_id
+    assert len(blocks) == 2
+    assert blocks[0].entry_id != blocks[1].entry_id
     assert blocks[0].entry_id and 'char_owner' in blocks[0].entry_id and 'skill_one' in blocks[0].entry_id
-    assert [block.entry_title for block in blocks] == ['主技能甲', '主技能甲', '主技能乙']
+    assert [block.entry_title for block in blocks] == ['主技能甲', '主技能乙']
     assert all(block.stage is None for block in blocks)
-    assert blocks[1].rows == [('未解析参数 ratio', '2.5')]
+    assert ('说明', '倍率 （效果未确认）') in blocks[0].rows
+    visible = text_report(ReportDocument('资料', [operator]))
+    assert 'ratio' not in visible and 'skill_one' not in visible
+    assert operator.skills[0]['blackboard'] == {'ratio': 2.5}
 
 
 def test_module_categories_share_main_entry_and_compare_stages_without_losing_content():
@@ -66,8 +68,10 @@ def test_module_categories_share_main_entry_and_compare_stages_without_losing_co
     assert profile.phases == original['phases'], 'formatting must not rename raw talents or alter game values'
     text = text_report(document)
     for phrase in ('阶段一特性', '阶段三特性', '阶段一天赋内容', '阶段三天赋内容',
-                   '召唤物阶段一强化', '限定玩法', 'map-one', 'token_one', '+2', '+3', '+4', '50', '250', '模组来源已保留'):
+                   '召唤物阶段一强化', '限定玩法', '限定地图/模式，具体范围未确认', '召唤物1', '+2', '+3', '+4', '50', '250'):
         assert phrase in text
+    for internal in ('map-one', 'token_one', '模组来源已保留', 'char_owner', 'equip_main'):
+        assert internal not in text
 
 
 def test_embedded_modules_fall_back_to_owner_and_keep_distinct_entries():
@@ -147,7 +151,7 @@ def test_empty_module_talent_stub_is_not_displayed_but_source_records_remain():
     talents = [row for row in effects.cells if '未命名天赋' in row[0]]
     assert len(talents) == 1  # One category row retains these unnamed records together.
     assert '未命名但有实际天赋效果' in talents[0][4]
-    assert '未解析' in talents[0][4]
-    assert '潜能增量 1' in text_report(ReportDocument('资料', modules=[module]))
+    assert '效果未确认' in talents[0][4]
+    assert '攻击相关潜能效果有变化，幅度未确认' in text_report(ReportDocument('资料', modules=[module]))
     assert module == original
     assert module.phases[0]['talents'][0] == empty

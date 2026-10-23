@@ -45,7 +45,8 @@ def test_png_section_order_and_type_hierarchy_match_shared_report_design(tmp_pat
     sections = [line.text for page in pages for line in page if line.kind == 'section']
     assert sections == [title for _, _, title, _ in ordered_groups(document)]
     assert sections.index('天赋') < sections.index('技能')
-    assert sections[-1] == '资料版本与口径'
+    assert sections[-1] == '模组'
+    assert '资料版本与口径' not in sections and '来源与诊断' not in sections
     sizes = {}
     original = ImageDraw.ImageDraw.text
 
@@ -56,7 +57,7 @@ def test_png_section_order_and_type_hierarchy_match_shared_report_design(tmp_pat
     monkeypatch.setattr(ImageDraw.ImageDraw, 'text', capture)
     render.render_png(document, tmp_path, 'hierarchy')
     assert (sizes[document.title] > sizes['干员信息'] >
-            sizes['样式验收干员 · char_style'] > sizes['说明：造成物理伤害'])
+            sizes['样式验收干员'] > sizes['说明：造成物理伤害'])
 
 
 @pytest.mark.parametrize('theme', ['light', 'dark'])

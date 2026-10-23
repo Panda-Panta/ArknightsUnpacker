@@ -33,7 +33,8 @@ def test_stage_effects_are_readable_in_operator_and_module_outputs_without_mutat
         assert all(value in text for value in ('未装备', '1级', '2级', '3级'))
         assert '本级效果' not in text and '较2级变化' not in text
         assert '一名随机友方单位' in text and '两名随机友方单位' in text
-        assert '属性口径' in text and '潜能增量' in text
+        assert '属性口径' in text and '（+2%）' in text and '（+3%）' in text
+        assert '潜能增量' not in text  # The same increments already appear in the effects.
         html = render_html(doc)
         png_text = ''.join(line.text for page in layout_pages(doc) for line in page)
         for phrase in ('属性对照', '未装备', '3级', '+41'):

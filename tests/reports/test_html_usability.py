@@ -55,8 +55,10 @@ def test_wide_tables_are_named_keyboard_scroll_regions_without_javascript():
 
 
 def test_batch_directory_states_actual_count_and_identifies_column_headers():
-    output = render_index([{'path': '甲.html', 'title': '甲'}, {'path': '乙.html', 'title': '乙'}], '资料合集')
+    output = render_index([{'path': '甲.html', 'title': '甲', 'profession': 'SNIPER', 'status': 'added'},
+                           {'path': '乙.html', 'title': '乙'}], '资料合集')
     page = Markup(output)
     assert '共 2 份资料' in output
+    assert '狙击' in output and '新增' in output and 'SNIPER' not in output
     assert all(heading.get('scope') == 'col' for heading in page.find('th'))
     assert page.find('div', role='region', tabindex='0')
