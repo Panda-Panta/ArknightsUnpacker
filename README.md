@@ -2,11 +2,11 @@
 
 Windows 原生 GUI：浏览《明日方舟》PC 资源、扫描最近更新、解包选中文件，并生成干员／模组 PNG 长图与 PRTS 风格离线 HTML。
 
-**版本 0.1.10（交付验证中）。** 桌面工作台提供按需展开的扫描／历史工具、清楚的空状态、紧凑操作栏和固定设置保存按钮；离线HTML改善阅读目录、窄屏横表和键盘操作，保留亮暗主题。PNG／HTML／TXT正文仅展示游戏相关资料，JSON保留完整字段。具体验证见 [验收摘要](docs/ACCEPTANCE.md)。
+**版本 0.1.10。** 桌面工作台提供按需展开的扫描／历史工具、清楚的空状态、紧凑操作栏和固定设置保存按钮；离线HTML改善阅读目录、窄屏横表和键盘操作，保留亮暗主题。PNG／HTML／TXT正文仅展示游戏相关资料，JSON保留完整字段；职业分支使用游戏名称，后勤保留所有阶段与解锁条件。具体验证见 [验收摘要](docs/ACCEPTANCE.md)。
 
 ## 直接运行
 
-Release 入口：[v0.1.9](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.9) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.9/ArknightsUnpacker-0.1.9-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.9/ArknightsUnpacker-0.1.9-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.8](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.8)／[v0.1.7](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.7)／[v0.1.6](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.6)／[v0.1.4](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.4)／[v0.1.3](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.3)／[v0.1.2](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.2)／[v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)／[v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留；本机 0.1.5 制品也保留。
+Release 入口：[v0.1.10](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.10) · [Windows x64 ZIP](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.10/ArknightsUnpacker-0.1.10-win64.zip) · [ZIP SHA-256](https://github.com/Panda-Panta/ArknightsUnpacker/releases/download/v0.1.10/ArknightsUnpacker-0.1.10-win64.zip.sha256)。分发目标为私有仓库，访问需要对应仓库权限。旧 [v0.1.9](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.9)／[v0.1.8](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.8)／[v0.1.7](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.7)／[v0.1.6](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.6)／[v0.1.4](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.4)／[v0.1.3](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.3)／[v0.1.2](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.2)／[v0.1.1](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.1)／[v0.1.0](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.0) 保留；本机 0.1.5 制品也保留。
 
 解压完整 ZIP 后，双击其中的 `ArknightsUnpacker.exe`。无需安装 Python，保留同目录的 `_internal` 文件夹。本机已交付目录中的程序也可直接运行；源码仓库不保存 `dist/` 构建产物。
 

@@ -14,7 +14,15 @@
 
 完整旧冻结报告JSON用当前可读层重渲染，两主题JSON结构逐项不变；同一份正文6743→4372字符，干员PNG高度8306→5762、四模组合集6567→4932（宽1200），完整游戏字段由专门语义回归核对。新的分支／全阶段后勤另由实时构建的资料与原生预览／PNG验证，不把旧JSON补全当成新解析。截图已人工查看。初次65bbd28候选在390px的目录撑宽缺陷保留了400→390单变量证据，该候选未安装；修复后四份原冻结正文只替换CSS均通过浏览器检查，最终正式包另行验证。
 
-本机证据统一在 `.work/ui-refresh-20261023/`：`source-final-verification.log`、`player-report/mixed-change-final-receipt.json`、`player-report-final/receipt.json`、`branch-audit/verified-fixed.json`、`building-before.json`／`building-after.json`、`live-complete-profile/receipt.json`、`live-building-visible/`、`review-player/`。首轮UI／浏览器与失败证据仍保留。正式便携包、安装与发布结果在完成后补录；本节当前不把源码运行等同于已安装版本。
+本机证据统一在 `.work/ui-refresh-20261023/`：`source-final-verification.log`、`player-report/mixed-change-final-receipt.json`、`player-report-final/receipt.json`、`branch-audit/verified-fixed.json`、`building-before.json`／`building-after.json`、`live-complete-profile/receipt.json`、`live-building-visible/`、`review-player/`。首轮UI／浏览器与失败证据仍保留。正式便携包、安装与发布结果如下。
+
+正式0.1.10来源为干净提交 `a8e8afa18923db98884cbf4d18fbb1016ca06cba`，构建 `20261023-215700-5255f959`，153源输入与提交逐项一致，507程序文件及ZIP逐项SHA／CRC通过。EXE原生首次启动5.64秒；实际冻结服务81.73秒完成16,908文件扫描、434干员／513模组与各解包类型，两主题JSON／TXT确认中文分支、完整后勤阶段及原始字段，四份实际HTML各10项离线Edge及两目录检查通过，390px与桌面截图已查看。证据为package-receipt.json、frozen-verification.json、frozen-services-and-html.json、browser/frozen-exe-final/、index-frozen.json。
+
+已将候选普通快进至既有私有main/test并同步 `D:\Tools\ArknightsUnpacker`：先完整备份核验507旧0.1.9程序文件，替换35、472不变，零新增／删除，同步时29用户文件摘要保持。安装EXE启动9.55秒、重启8.62秒均通过；原3扫描／1资料payload、434／513资料、主题与查看／其他设置保留，无重扫重解析。启动前另备份21项queue元数据；正常恢复／查看产生新成功任务后按既有20条上限替换4条旧成功记录，非成功任务与正式导出保留，未有预览缓存需要删除。GUI正常演进之外6项用户文件和507程序文件再次核验。证据为sync-preview.json、sync-result.json、runtime-cleanup-backup.json、installed-verification.json；回退为backup-0.1.9/。
+
+ZIP `ArknightsUnpacker-0.1.10-win64.zip` 为73,672,204字节，SHA-256 `db38d9beb2bbaf923b5cccf7c3e8b7f8da6e77ee48da30ae9ce179ac5a0c39fe`；EXE SHA-256 `4a9f96bbee76bb648edee6ae0093a597c5dde1240628a9f061bf13425b433a79`。私有 [v0.1.10 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.10) 的远端main/test/tag、两附件大小／GitHub摘要及旧0.1.9发布保持已核验。tag指向制品来源提交，后补README／本计划／验收记录不改153构建输入，最终refs由verify_remote.py再核验并写release-result.json。
+
+验证绝对路径、链接边界与清单后清理本构建17项中间文件（26,503,126字节），另清理未发布旧候选包及其缓存526项（284,639,887字节）；两次均核对当前制品／安装／回退1521程序项及发布ZIP不变。保留初次失败正文、截图、收据与隔离运行快照，保留正式旧发布、用户文件与必要回退；清单在cleanup-{preflight,result}.json与superseded-cleanup-{preflight,result}.json。
 
 ## v0.1.9 · 任务历史与临时预览自动回收（2026-10-20）
 
