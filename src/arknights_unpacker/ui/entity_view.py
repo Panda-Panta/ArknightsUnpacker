@@ -1,6 +1,6 @@
 from __future__ import annotations
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QSplitter, QTableView, QTextBrowser, QAbstractItemView, QComboBox
+from PySide6.QtCore import QSignalBlocker, Signal, Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QSplitter, QTableView, QTextBrowser, QAbstractItemView, QComboBox, QFrame, QStackedWidget
 from arknights_unpacker.contracts import BuildSpec
 from .models import RecordsModel, STATUS, selected_records, value
 from .report_preview import profile_html, changes_html
@@ -73,15 +73,18 @@ class EntityView(QWidget):
         self.changes = None
         self.current_profile = None
         self._active_entity_id = None
+        self._has_loaded = False
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
         top = QHBoxLayout()
         load = QPushButton('解析核心数据')
-        load.setProperty('primary', True)
         load.clicked.connect(self.load_requested)
-        top.addWidget(load)
         self.summary = QLabel('尚未解析。选择游戏目录后，手动解析核心数据以建立资料快照。')
         self.summary.setWordWrap(True)
+        self.summary.setProperty('muted', True)
         top.addWidget(self.summary, 1)
+        top.addWidget(load)
         layout.addLayout(top)
         self.diagnostics = QLabel()
         self.diagnostics.setObjectName(kind + 'Diagnostics')
@@ -91,20 +94,37 @@ class EntityView(QWidget):
         layout.addWidget(self.diagnostics)
         tools = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText('搜索干员名称、模组名称或稳定 ID')
+        self.search.setPlaceholderText('搜索模组、所属干员或 ID' if kind == 'modules' else '搜索干员名称或 ID')
         self.search.setObjectName(kind + 'Search')
+        self.search.setAccessibleName('搜索模组资料' if kind == 'modules' else '搜索干员资料')
+        self.search.setClearButtonEnabled(True)
         tools.addWidget(self.search, 1)
         self.only_changes = QCheckBox('只看新增／变化')
         tools.addWidget(self.only_changes)
         self.only_new = QCheckBox('只看新增')
         tools.addWidget(self.only_new)
+        self.clear_filters_button = QPushButton('清除筛选')
+        self.clear_filters_button.clicked.connect(self.clear_filters)
+        tools.addWidget(self.clear_filters_button)
         layout.addLayout(tools)
-        if kind == 'modules':
-            check_note = QLabel('勾选可跨筛选保留，合并导出／预览包含全部已勾选项；未勾选时使用选中行。')
-            check_note.setProperty('muted', True)
-            check_note.setWordWrap(True)
-            layout.addWidget(check_note)
         split = QSplitter()
+        split.setChildrenCollapsible(False)
+        list_panel = QWidget()
+        list_panel.setMinimumWidth(300)
+        list_layout = QVBoxLayout(list_panel)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_title = QLabel('模组列表' if kind == 'modules' else '干员列表')
+        list_title.setProperty('role', 'sectionTitle')
+        list_heading = QHBoxLayout()
+        list_heading.addWidget(list_title)
+        if kind == 'modules':
+            check_note = QLabel('勾选跨筛选保留 · 未勾选用选中行')
+            check_note.setProperty('muted', True)
+            check_note.setToolTip('合并导出和预览包含全部已勾选项；未勾选时使用选中行。')
+            list_heading.addWidget(check_note, 1, Qt.AlignmentFlag.AlignRight)
+        else:
+            list_heading.addStretch()
+        list_layout.addLayout(list_heading)
         columns = [('干员名称', lambda r: r.get('name', '') + (' · 未确认可获取' if r.get('obtainable') is False else '')),
                    ('星级', rarity_text), ('职业', lambda r: PROFESSIONS.get(r.get('profession'), r.get('profession', ''))),
                    ('状态', lambda r: STATUS.get(r.get('status'), r.get('status', '历史未知'))), ('ID', 'id')]
@@ -118,17 +138,50 @@ class EntityView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().hide()
         self.table.horizontalHeader().setStretchLastSection(True)
         for column, width in enumerate([190, 140, 65, 110] if kind == 'modules' else [190, 70, 80, 110]):
             self.table.setColumnWidth(column, width)
         self.table.selectionModel().selectionChanged.connect(self.select_profile)
-        split.addWidget(self.table)
+        self.list_stack = QStackedWidget()
+        self.list_stack.addWidget(self.table)
+        self.empty_state = QFrame()
+        self.empty_state.setProperty('role', 'surface')
+        empty_layout = QVBoxLayout(self.empty_state)
+        empty_layout.setContentsMargins(24, 24, 24, 24)
+        empty_layout.setSpacing(12)
+        empty_layout.addStretch()
+        self.empty_title = QLabel()
+        self.empty_title.setProperty('role', 'emptyTitle')
+        self.empty_title.setWordWrap(True)
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_title)
+        self.empty_description = QLabel()
+        self.empty_description.setProperty('muted', True)
+        self.empty_description.setWordWrap(True)
+        self.empty_description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_description)
+        self.empty_action = QPushButton()
+        self.empty_action.setProperty('primary', True)
+        self.empty_action.clicked.connect(self.recover_empty_state)
+        empty_layout.addWidget(self.empty_action, 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addStretch()
+        self.list_stack.addWidget(self.empty_state)
+        list_layout.addWidget(self.list_stack, 1)
+        split.addWidget(list_panel)
         detail = QWidget()
+        detail.setMinimumWidth(300)
         detail_layout = QVBoxLayout(detail)
-        detail_layout.setContentsMargins(4, 0, 0, 0)
+        detail_layout.setContentsMargins(6, 0, 0, 0)
+        detail_title = QLabel('单项预览')
+        detail_title.setProperty('role', 'sectionTitle')
+        detail_layout.addWidget(detail_title)
         options = QHBoxLayout()
         options.addWidget(QLabel('静态面板'))
         self.module_choice = QComboBox()
+        self.module_choice.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.module_choice.setMinimumContentsLength(10)
+        self.module_choice.setToolTip('选择静态属性面板使用的模组；不改变导出范围。')
         self.module_choice.addItem('无模组 · 满级／满潜／满信赖', None)
         self.module_choice.currentIndexChanged.connect(self.select_profile)
         options.addWidget(self.module_choice, 1)
@@ -139,27 +192,42 @@ class EntityView(QWidget):
         self.details = QTextBrowser()
         self.details.setObjectName(kind + 'Details')
         self.details.setOpenExternalLinks(False)
-        self.details.setHtml('<h2>资料预览</h2><p>解析完成后选择一项查看。资料中的诊断与来源将随导出保留。</p>')
+        self.details.document().setDocumentMargin(18)
+        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看属性、技能及更新变化。资料中的诊断与来源将随导出保留。</p>')
         detail_layout.addWidget(self.details)
         split.addWidget(detail)
+        split.setStretchFactor(0, 5)
+        split.setStretchFactor(1, 6)
         split.setSizes([600, 680])
         layout.addWidget(split, 1)
-        buttons = QHBoxLayout()
+        footer = QFrame()
+        footer.setProperty('role', 'surface')
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(12, 8, 12, 8)
+        footer_layout.setSpacing(6)
+        selection_row = QHBoxLayout()
+        self.count = QLabel()
+        self.count.setWordWrap(True)
+        self.count.setProperty('muted', True)
+        selection_row.addWidget(self.count, 1)
         self.select_all_button = QPushButton('全选当前筛选' if kind == 'modules' else '全选当前筛选结果')
         self.select_all_button.clicked.connect(self.check_all_visible if kind == 'modules' else self.table.selectAll)
-        buttons.addWidget(self.select_all_button)
+        selection_row.addWidget(self.select_all_button)
         if kind == 'modules':
             self.select_all_button.setToolTip('将当前筛选中可导出的模组加入勾选，保留其他筛选中已勾选的项。')
             self.clear_checked_button = QPushButton('清空勾选')
             self.clear_checked_button.setToolTip('清除全部勾选，包括当前筛选中隐藏的模组。')
             self.clear_checked_button.clicked.connect(lambda: self.model.set_checked_ids(set()))
-            buttons.addWidget(self.clear_checked_button)
+            selection_row.addWidget(self.clear_checked_button)
+        footer_layout.addLayout(selection_row)
+        buttons = QHBoxLayout()
         self.preview_selected = QPushButton('预览模组合集' if kind == 'modules' else '预览所选资料')
         self.preview_selected.clicked.connect(self.request_preview)
         buttons.addWidget(self.preview_selected)
+        buttons.addStretch()
         self.export_selected = QPushButton('合并导出选中模组' if kind == 'modules' else '导出选中资料')
+        self.export_selected.setProperty('primary', True)
         self.export_selected.clicked.connect(lambda: self.request_export(False))
-        buttons.addWidget(self.export_selected)
         self.export_new = QPushButton('合并导出本次新增' if kind == 'modules' else '一键导出本次新增')
         if kind == 'modules':
             scope_tip = '优先使用全部已勾选模组（包含被筛选隐藏的项）；未勾选时使用选中行。PNG 按设置排版，HTML 合并为一个页面。'
@@ -169,17 +237,18 @@ class EntityView(QWidget):
         self.export_new.setEnabled(False)
         self.export_new.clicked.connect(lambda: self.request_export(True))
         buttons.addWidget(self.export_new)
-        buttons.addStretch()
-        self.count = QLabel('0 项')
+        buttons.addWidget(self.export_selected)
         if kind == 'modules':
             self.model.checks_changed.connect(self.update_count)
-        buttons.addWidget(self.count)
-        layout.addLayout(buttons)
+        footer_layout.addLayout(buttons)
+        layout.addWidget(footer)
         self.search.textChanged.connect(self.refresh)
         self.only_changes.toggled.connect(self.refresh)
         self.only_new.toggled.connect(self.refresh)
+        self.refresh()
 
     def set_rows(self, rows, changes=None, snapshot=None):
+        self._has_loaded = True
         if self.kind == 'modules':
             self.model.set_checked_ids(set())
         self.changes = changes
@@ -211,25 +280,22 @@ class EntityView(QWidget):
         self.refresh()
 
     def clear_data(self):
+        self._has_loaded = False
         if self.kind == 'modules':
             self.model.set_checked_ids(set())
         self.all_rows = []
         self.changes = self.current_profile = None
         self._active_entity_id = None
-        self.model.replace([])
         self.export_new.setEnabled(False)
         self.summary.setText('尚未解析。点击“解析核心数据”建立当前目录的资料快照。')
         self.diagnostics.clear()
         self.diagnostics.hide()
-        self.details.setHtml('<h2>资料预览</h2><p>解析完成后选择一项查看。</p>')
+        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看属性、技能及更新变化。</p>')
         self.module_choice.blockSignals(True)
         self.module_choice.clear()
         self.module_choice.addItem('无模组 · 满级／满潜／满信赖', None)
         self.module_choice.blockSignals(False)
-        if self.kind == 'modules':
-            self.update_count()
-        else:
-            self.count.setText('0 项')
+        self.refresh()
 
     def refresh(self, *_):
         query = self.search.text().strip().casefold()
@@ -239,7 +305,42 @@ class EntityView(QWidget):
         if self.only_new.isChecked():
             rows = [r for r in rows if r.get('status') in ('added', 'new')]
         self.model.replace(rows)
-        self.update_count()
+        self.update_empty_state()
+        self.select_profile()
+
+    def clear_filters(self):
+        with QSignalBlocker(self.search), QSignalBlocker(self.only_changes), QSignalBlocker(self.only_new):
+            self.search.clear()
+            self.only_changes.setChecked(False)
+            self.only_new.setChecked(False)
+        self.refresh()
+        self.search.setFocus()
+
+    def recover_empty_state(self):
+        if self.all_rows:
+            self.clear_filters()
+        else:
+            self.load_requested.emit()
+
+    def update_empty_state(self):
+        self.clear_filters_button.setEnabled(bool(self.search.text() or self.only_changes.isChecked() or self.only_new.isChecked()))
+        if self.model.rows:
+            self.list_stack.setCurrentWidget(self.table)
+            return
+        self.list_stack.setCurrentWidget(self.empty_state)
+        if not self._has_loaded:
+            self.empty_title.setText('尚未建立资料快照')
+            self.empty_description.setText('先选择游戏目录，再解析核心数据。解析完成后即可浏览和导出资料。')
+            self.empty_action.setText('解析核心数据')
+        elif not self.all_rows:
+            self.empty_title.setText('未找到模组资料' if self.kind == 'modules' else '未找到干员资料')
+            self.empty_description.setText('本次解析没有可显示的资料。请检查所选游戏目录及上方诊断，再重新解析。')
+            self.empty_action.setText('重新解析核心数据')
+        else:
+            self.empty_title.setText('没有符合筛选的资料')
+            self.empty_description.setText('尝试其他名称或 ID，或清除筛选查看全部资料。勾选的模组仍会保留。' if self.kind == 'modules'
+                                           else '尝试其他名称或 ID，或清除筛选查看全部资料。')
+            self.empty_action.setText('清除筛选')
 
     @property
     def checked_ids(self):
@@ -252,17 +353,30 @@ class EntityView(QWidget):
 
     def update_count(self):
         selected = len(selected_records(self.table))
-        text = f'{len(self.model.rows):,} 项　·　已选 {selected:,} 项'
+        text = f'显示 {len(self.model.rows):,} / {len(self.all_rows):,} 项　·　已选 {selected:,} 项'
         if self.kind == 'modules':
             hidden = len(self.checked_ids - {str(row['id']) for row in self.model.rows})
             text += f'　·　已勾选 {len(self.checked_ids):,} 项'
             if hidden:
                 text += f'（隐藏 {hidden:,} 项）'
         self.count.setText(text)
+        exportable = bool(self.chosen_ids())
+        self.preview_selected.setEnabled(exportable)
+        self.export_selected.setEnabled(exportable)
+        self.select_all_button.setEnabled(any(row.get('status') != 'removed' for row in self.model.rows)
+                                          if self.kind == 'modules' else bool(self.model.rows))
+        if self.kind == 'modules':
+            self.clear_checked_button.setEnabled(bool(self.checked_ids))
 
     def select_profile(self, *_):
         rows = selected_records(self.table)
         self.update_count()
+        if len(rows) != 1:
+            title = f'已选择 {len(rows):,} 项资料' if rows else '从列表中选择一项'
+            description = ('点击列表中的一行查看详情；下方可预览或导出所选资料。' if self._has_loaded
+                           else '解析完成后，可查看属性、技能及更新变化。资料中的诊断与来源将随导出保留。')
+            self.details.setHtml(f'<h2>{title}</h2><p>{description}</p>')
+            return
         if len(rows) == 1:
             entity_id = str(rows[0]['id'])
             if entity_id != self._active_entity_id:

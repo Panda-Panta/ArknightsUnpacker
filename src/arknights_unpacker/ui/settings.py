@@ -1,7 +1,7 @@
 from __future__ import annotations
 from PySide6.QtCore import Signal, QUrl, Qt
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QLabel, QSpinBox, QComboBox, QCheckBox, QGroupBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QLabel, QSpinBox, QComboBox, QCheckBox, QGroupBox, QScrollArea
 from arknights_unpacker.contracts import ExportFormat, ReportOptions
 from arknights_unpacker.paths import default_output_root
 
@@ -12,7 +12,20 @@ class SettingsView(QWidget):
     def __init__(self, config, data_root, parent=None):
         super().__init__(parent)
         self.config = config
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 10, 12, 10)
+        outer.setSpacing(10)
+        self.scroll = QScrollArea()
+        self.scroll.setObjectName('settingsScroll')
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        content = QWidget()
+        content.setMaximumWidth(1080)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(4, 0, 14, 12)
+        layout.setSpacing(14)
+        self.scroll.setWidget(content)
+        outer.addWidget(self.scroll, 1)
         output_group = QGroupBox('文件与输出')
         form = QFormLayout(output_group)
         output_row = QHBoxLayout()
@@ -60,10 +73,12 @@ class SettingsView(QWidget):
         self.width.setSuffix(' px')
         self.width.setValue(int(config.get('report_width', 1200)))
         self.width.setToolTip('仅决定新生成的干员／模组资料长图排版宽度，不缩放游戏资源原图。')
+        self.width.setMaximumWidth(200)
         report_form.addRow('资料 PNG 画布宽度', self.width)
         self.font_size = QSpinBox()
         self.font_size.setRange(18, 56)
         self.font_size.setValue(int(config.get('report_font_size', 28)))
+        self.font_size.setMaximumWidth(200)
         report_form.addRow('资料 PNG 字号', self.font_size)
         self.theme = QComboBox()
         self.theme.addItem('暗色', 'dark')
@@ -113,11 +128,29 @@ class SettingsView(QWidget):
         data_note.setWordWrap(True)
         app_form.addRow(data_note)
         layout.addWidget(app_group)
-        save = QPushButton('保存设置')
-        save.setProperty('primary', True)
-        save.clicked.connect(self.commit)
-        layout.addWidget(save)
         layout.addStretch()
+        footer = QHBoxLayout()
+        self.save_status = QLabel('设置应用于之后的操作，已有导出文件保持原样。')
+        self.save_status.setObjectName('settingsSaveStatus')
+        self.save_status.setWordWrap(True)
+        footer.addWidget(self.save_status, 1)
+        self.save_button = QPushButton('保存设置')
+        self.save_button.setObjectName('saveSettings')
+        self.save_button.setProperty('primary', True)
+        self.save_button.clicked.connect(self.commit)
+        footer.addWidget(self.save_button)
+        outer.addLayout(footer)
+        for control in self.findChildren(QLineEdit):
+            control.textChanged.connect(self.mark_pending)
+        for control in self.findChildren(QComboBox):
+            control.currentIndexChanged.connect(self.mark_pending)
+        for control in self.findChildren(QCheckBox):
+            control.toggled.connect(self.mark_pending)
+        for control in (self.width, self.font_size):
+            control.valueChanged.connect(self.mark_pending)
+
+    def mark_pending(self, *_):
+        self.save_status.setText('设置已更改，点击“保存设置”写入本地记录。')
 
     def choose_output(self):
         path = QFileDialog.getExistingDirectory(self, '选择独立输出目录', self.output.text())

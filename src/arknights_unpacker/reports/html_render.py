@@ -67,7 +67,7 @@ def _header(document: ReportDocument) -> str:
         version = document.modules[0].metadata.get('version') or ''
     badges = ''.join(f'<span>{_e(value)}</span>' for value in chips)
     return '<header class="operator-header">' + _portrait(document) + '<div class="operator-identity">' + \
-        '<p class="eyebrow">OPERATOR FILE <span>本地资料快照</span></p><h1>' + _e(document.title or '干员与模组资料') + '</h1>' + \
+        '<p class="eyebrow">LOCAL DOSSIER <span>本地资料快照</span></p><h1>' + _e(document.title or '干员与模组资料') + '</h1>' + \
         '<div class="identity-tags">' + badges + '</div>' + \
         (f'<p class="snapshot-label">游戏数据版本 {_e(version)}</p>' if version else '') + '</div></header>'
 
@@ -89,8 +89,12 @@ def _tables(block: Block, *, matrix: bool = False) -> str:
                     potential = 'potential' if block.columns[column] == '潜能' else ''
                     values.append(f'<td class="{potential}">{_e(value)}</td>')
             cells.append('<tr>' + ''.join(values) + '</tr>')
-        attributes = f'class="module-matrix" data-module-matrix aria-label="{_e(block.title)}"' if matrix else 'class="attributes"'
-        table += f'<div class="table-wrap"><table {attributes}><thead><tr>{heads}</tr></thead><tbody>{"".join(cells)}</tbody></table></div>'
+        attributes = 'class="module-matrix" data-module-matrix' if matrix else 'class="attributes"'
+        label = _e(block.title)
+        table += (f'<div class="table-area"><div class="table-wrap" tabindex="0" role="region" '
+                  f'aria-label="{label}表格，可横向滚动"><table {attributes} aria-label="{label}">'
+                  f'<thead><tr>{heads}</tr></thead><tbody>{"".join(cells)}</tbody></table></div>'
+                  '<p class="table-hint" aria-hidden="true">← 左右滚动查看全部列 · 聚焦表格后可使用方向键 →</p></div>')
     return table
 
 
@@ -180,8 +184,8 @@ def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light'
             f'<html lang="zh-CN" data-report-theme="{_e(theme)}"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_e(title)}</title><style>{_styles(theme)}</style></head>'
-            f'<body><main class="index-main"><h1>{_e(title)}</h1>'
-            '<p>离线资料目录 · 移动整个任务文件夹后仍可使用</p>'
-            '<div class="table-wrap"><table><thead><tr>'
-            '<th>资料</th><th>职业</th><th>数据版本</th><th>状态</th>'
+            f'<body><main class="index-main"><p class="eyebrow">LOCAL ARCHIVE <span>离线资料目录</span></p><h1>{_e(title)}</h1>'
+            f'<p class="index-description">共 {len(entries)} 份资料 · 点击名称打开，移动整个任务文件夹后仍可使用</p>'
+            '<div class="table-wrap" tabindex="0" role="region" aria-label="离线资料目录表格，可横向滚动"><table class="index-table"><thead><tr>'
+            '<th scope="col">资料</th><th scope="col">职业</th><th scope="col">数据版本</th><th scope="col">状态</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div></main></body></html>')

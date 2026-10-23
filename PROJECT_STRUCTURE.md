@@ -1,6 +1,6 @@
 # 实际工程结构
 
-更新：2026-10-20。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新：2026-10-23。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
@@ -60,7 +60,7 @@ MainWindow → AppServices.extract → WorkerRunner → extraction.engine
 MainWindow → AppServices.export → build_operator/build_module → reports.export_report
 ```
 
-`reports/html_render.py` 负责生成资料、连续条目与锚点目录结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.2.0，修改会直接影响新报告。`reports/style.py` 读取 `resources/report_styles.json`，提供两种格式共用的调色板、字体层级及 `ordered_groups(document)` 资料分区顺序。HTML 通过 `theme_css(theme)` 内联主题变量，PNG 使用 `theme_colors(theme)` 和 `typography()`；批次目录同样接收 `ReportOptions.theme`。JSON 是正式构建要求的运行资产，纯 JSON／TXT 导出仍不依赖这些样式。
+`reports/html_render.py` 负责生成资料、连续条目与锚点目录结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.3.0，修改会直接影响新报告。`reports/style.py` 读取 `resources/report_styles.json`，提供两种格式共用的调色板、字体层级及 `ordered_groups(document)` 资料分区顺序。HTML 通过 `theme_css(theme)` 内联主题变量，PNG 使用 `theme_colors(theme)` 和 `typography()`；批次目录同样接收 `ReportOptions.theme`。JSON 是正式构建要求的运行资产，纯 JSON／TXT 导出仍不依赖这些样式。
 
 `reports/model.py` 的 entry_id／entry_title 将模组简介与分类横表归为同一条目；Block.kind 标明模组简介、属性、效果、潜能、召唤物与条件，stage 保留兼容字段、新横表统一为空。列为项目／未装备／1级／2级／3级，属性直接读取领域比较结果，文本引用首次相同原文，JSON保留原数据。PNG／HTML／TXT与GUI预览共用这些语义块。PNG 排版实现位于 `reports/render.py`：`ReportOptions.module_image_layout` 为 `single`（默认）或 `paged`，只控制纯模组合集；`single` 按内容生成一张自适应高度图，超过 8,000 万像素时明确提示改用分页或减少选择。`ui/settings.py` 以 `report_module_image_layout` 保存“模组PNG排版”，以 `report_theme` 保存“资料导出主题（PNG / HTML）”，原有 dark/light 值兼容保留。`modules.html` 仍同页容纳全部模组，干员独立报告分页不变。模组复选框由 `ui/entity_view.py` 内局部模型按稳定ID维护，排序／筛选保留勾选并提示隐藏数量；共享 `RecordsModel` 与干员列表选择不变。folder_rules.json 是目录用途分类的实际运行输入。
 
@@ -77,3 +77,5 @@ MainWindow → AppServices.export → build_operator/build_module → reports.ex
 HTML 所有技能与模组连续显示，移除技能／模组页签和等级控件；每个模组只用一个 details 折叠，分类为带行表头的横表。原生锚点用于跳转，JS仅处理搜索、清除、折叠、打印与锚点展开。共享正文行高为1.4，PNG按实测首列宽度为四状态列留等宽空间，窄图保留带标签回退。旧静态HTML不受影响，需重新导出。
 
 `ui/jobs.py` 在启动及每个任务终结后，将成功历史限制为最近20条；`ui/job_history.py` 仅移除对应任务JSON／事件，保留非成功与恢复祖先，不删除正式产物。`settled(job)` 在工作线程释放后通知主窗口结束预览生产占用。`ui/preview_cache.py` 为data/preview与previews分配带标记和QLockFile的独占目录，lease须同时结束生产并释放窗口后才删除；外部HTML延至程序退出。主窗口在队列修剪前扫描旧缓存归属，未知／链接／其他在用实例保留；对话框只释放显式绑定的lease，正式任务重复预览仍可打开。AppServices.extract/export的remember_output默认为True，临时预览传False，不改变正式输出设置。
+
+0.1.10界面更新：main_window.py管理可折叠的扫描选项／历史对照、当前页说明及可省略路径；settings.py自行拥有可滚动表单与固定保存栏，SettingsPage直接装配该视图。entity_view.py、explorer.py、updates.py各自拥有表格／空状态切换和就近清除筛选，不改变服务层数据或稳定ID。jobs.py仅改善空队列及进度呈现，未更改调度器。HTML模板2.3.0添加正文跳转、滚动目录位置及局部横表键盘访问，仍使用style.py和report_styles.json的2.2.0共享调色板；PNG排版未改。新增界面回归在tests/gui/test_*_usability.py与tests/reports/test_html_usability.py；截图／真实快照验收在.work/ui-refresh-20261023/，不随包发布。

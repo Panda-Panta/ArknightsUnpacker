@@ -2,7 +2,8 @@ from __future__ import annotations
 from pathlib import Path
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QTableView, QPushButton, QAbstractItemView, QLineEdit, QCheckBox, QMenu)
+    QTableView, QPushButton, QAbstractItemView, QLineEdit, QCheckBox, QMenu, QFrame,
+    QStackedWidget)
 from .models import RecordsModel, value, size_text, time_text, STATUS, selected_records, is_resource_record
 
 
@@ -16,21 +17,35 @@ class UpdatesView(QWidget):
         self.changes = None
         self.hours = 24.0
         layout = QVBoxLayout(self)
-        self.summary = QLabel('尚未扫描。选择游戏目录后扫描，或在下次启动时读取已保存的结果。')
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+        summary_panel = QFrame()
+        summary_panel.setProperty('role', 'surface')
+        summary_layout = QHBoxLayout(summary_panel)
+        summary_layout.setContentsMargins(14, 12, 14, 12)
+        summary_title = QLabel('扫描与对照')
+        summary_title.setProperty('role', 'sectionTitle')
+        summary_layout.addWidget(summary_title, 0, Qt.AlignmentFlag.AlignTop)
+        self.summary = QLabel()
         self.summary.setObjectName('updatesSummary')
         self.summary.setWordWrap(True)
-        layout.addWidget(self.summary)
+        self.summary.setProperty('muted', True)
+        summary_layout.addWidget(self.summary, 1)
+        layout.addWidget(summary_panel)
         row = QHBoxLayout()
         row.addWidget(QLabel('显示范围'))
         self.mode = QComboBox()
         self.mode.setObjectName('updateScope')
         self.mode.addItems(['最近写入', '相对文件基线变化', '任一命中', '两者交集'])
         self.mode.setCurrentIndex(2)
+        self.mode.setToolTip('任一命中：最近写入或相对基线有变化；两者交集：同时满足两种条件。')
         self.mode.currentIndexChanged.connect(self.refresh)
         row.addWidget(self.mode)
         self.search = QLineEdit()
         self.search.setObjectName('updatesSearch')
         self.search.setPlaceholderText('搜索文件名、路径或用途')
+        self.search.setAccessibleName('搜索更新记录')
+        self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.refresh)
         row.addWidget(self.search, 1)
         self.ab_only = QCheckBox('仅 .ab')
@@ -38,6 +53,15 @@ class UpdatesView(QWidget):
         self.ab_only.toggled.connect(self.refresh)
         row.addWidget(self.ab_only)
         layout.addLayout(row)
+        records_header = QHBoxLayout()
+        records_title = QLabel('文件记录')
+        records_title.setProperty('role', 'sectionTitle')
+        records_header.addWidget(records_title)
+        records_header.addStretch()
+        self.result_count = QLabel()
+        self.result_count.setProperty('muted', True)
+        records_header.addWidget(self.result_count)
+        layout.addLayout(records_header)
         self.model = RecordsModel([('文件路径', 'path'), ('目录用途', 'category'), ('检测状态', 'status'),
                                    ('大小', lambda r: size_text(r.get('size'))), ('修改时间', 'mtime'),
                                    ('首次观测', 'first_seen'), ('检测依据', 'evidence')], self)
@@ -46,6 +70,10 @@ class UpdatesView(QWidget):
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().setStretchLastSection(True)
         for column, width in enumerate((390, 110, 140, 85, 210, 210)):
             self.table.setColumnWidth(column, width)
@@ -54,11 +82,43 @@ class UpdatesView(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.update_selection)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.context_menu)
-        layout.addWidget(self.table)
+        self.results = QStackedWidget()
+        self.results.addWidget(self.table)
+        self.empty_panel = QFrame()
+        self.empty_panel.setProperty('role', 'surface')
+        empty_layout = QVBoxLayout(self.empty_panel)
+        empty_layout.setContentsMargins(24, 22, 24, 22)
+        empty_layout.addStretch()
+        self.empty_title = QLabel()
+        self.empty_title.setProperty('role', 'emptyTitle')
+        self.empty_title.setWordWrap(True)
+        empty_layout.addWidget(self.empty_title)
+        self.empty = QLabel()
+        self.empty.setProperty('muted', True)
+        self.empty.setWordWrap(True)
+        empty_layout.addWidget(self.empty)
+        self.clear_filters_button = QPushButton('清除筛选')
+        self.clear_filters_button.clicked.connect(self.clear_filters)
+        empty_layout.addWidget(self.clear_filters_button, 0, Qt.AlignmentFlag.AlignLeft)
+        empty_layout.addStretch()
+        self.results.addWidget(self.empty_panel)
+        layout.addWidget(self.results, 1)
+        self.diagnostics = QLabel()
+        self.diagnostics.setWordWrap(True)
+        self.diagnostics.setProperty('notice', 'warning')
+        layout.addWidget(self.diagnostics)
+        self.selection_count = QLabel()
+        self.selection_count.setProperty('muted', True)
+        self.selection_count.setWordWrap(True)
+        layout.addWidget(self.selection_count)
         actions = QHBoxLayout()
-        select_all = QPushButton('全选当前结果')
-        select_all.clicked.connect(self.table.selectAll)
-        actions.addWidget(select_all)
+        self.select_all_button = QPushButton('全选当前结果')
+        self.select_all_button.clicked.connect(self.table.selectAll)
+        actions.addWidget(self.select_all_button)
+        self.clear_selection_button = QPushButton('取消选择')
+        self.clear_selection_button.clicked.connect(self.table.clearSelection)
+        actions.addWidget(self.clear_selection_button)
+        actions.addStretch()
         self.images_button = QPushButton('导出所选包内图片')
         self.images_button.setObjectName('exportUpdateImages')
         self.images_button.setProperty('primary', True)
@@ -69,14 +129,8 @@ class UpdatesView(QWidget):
         self.extract_button.setToolTip('使用设置中的资源类型和解包方式。')
         self.extract_button.clicked.connect(self.extract_selected)
         actions.addWidget(self.extract_button)
-        actions.addStretch()
-        self.selection_count = QLabel()
-        actions.addWidget(self.selection_count)
         layout.addLayout(actions)
-        self.empty = QLabel('')
-        self.empty.setWordWrap(True)
-        layout.addWidget(self.empty)
-        self.update_selection()
+        self.refresh()
 
     def set_data(self, snapshot, changes, hours=24):
         self.snapshot, self.changes, self.hours = snapshot, changes, hours
@@ -85,8 +139,15 @@ class UpdatesView(QWidget):
     def refresh(self, *_):
         snapshot = self.snapshot
         if snapshot is None:
+            self.summary.setText('尚未扫描。选择游戏目录后扫描，也可在下次启动时读取已保存的结果。')
+            self.summary.setToolTip('')
             self.model.replace([])
             self.update_selection()
+            self.empty_title.setText('还没有更新记录')
+            self.empty.setText('先扫描游戏目录，再查看最近写入和相对上次文件基线的变化。首次完整扫描会建立基线。')
+            self.clear_filters_button.hide()
+            self.diagnostics.hide()
+            self.results.setCurrentWidget(self.empty_panel)
             return
         complete = value(snapshot, 'complete', False)
         baseline = value(self.changes, 'baseline_id')
@@ -122,7 +183,27 @@ class UpdatesView(QWidget):
         self.model.replace(rows)
         self.update_selection()
         diagnostics = value(snapshot, 'errors', []) + value(self.changes, 'diagnostics', [])
-        self.empty.setText(('当前范围没有记录。' if not rows else f'{len(rows):,} 条记录。') + ('\n' + '\n'.join(diagnostics[:6]) if diagnostics else ''))
+        self.diagnostics.setText('\n'.join(diagnostics[:6]))
+        self.diagnostics.setVisible(bool(diagnostics))
+        self.clear_filters_button.hide()
+        if rows:
+            self.results.setCurrentWidget(self.table)
+        else:
+            self.results.setCurrentWidget(self.empty_panel)
+            if keys:
+                self.empty_title.setText('没有匹配的更新记录')
+                self.empty.setText('筛选后没有记录。尝试缩短关键词，或清除“仅 .ab”等筛选条件。')
+                self.clear_filters_button.show()
+            elif not baseline and self.mode.currentIndex() in (1, 3):
+                self.empty_title.setText('尚无可比较的文件基线')
+                self.empty.setText('当前范围没有记录。首次扫描只记录文件现状，可切换为“最近写入”或“任一命中”；后续完整扫描会与基线对照。')
+            else:
+                self.empty_title.setText('暂时没有更新记录')
+                self.empty.setText('当前范围没有记录。可切换“显示范围”，或调整顶部“扫描选项”中的时间窗口后重新扫描。此列表反映本机文件观测，不代表实际发布时间。')
+
+    def clear_filters(self):
+        self.search.clear()
+        self.ab_only.setChecked(False)
 
     def selected_paths(self, *, images_only=False):
         if self.snapshot is None:
@@ -143,9 +224,13 @@ class UpdatesView(QWidget):
     def update_selection(self, *_):
         selected = len(selected_records(self.table))
         images = len(self.selected_paths(images_only=True))
-        self.selection_count.setText(f'已选 {selected:,} 项 · 可导图 {images:,} 包')
+        extractable = len(self.selected_paths())
+        self.result_count.setText(f'{self.model.rowCount():,} 条记录')
+        self.selection_count.setText(f'已选 {selected:,} 项 · 可导图 {images:,} 包 · 可解包 {extractable:,} 项')
         self.images_button.setEnabled(images > 0)
-        self.extract_button.setEnabled(bool(self.selected_paths()))
+        self.extract_button.setEnabled(extractable > 0)
+        self.select_all_button.setEnabled(self.model.rowCount() > 0)
+        self.clear_selection_button.setEnabled(selected > 0)
 
     def extract_selected(self):
         paths = self.selected_paths()

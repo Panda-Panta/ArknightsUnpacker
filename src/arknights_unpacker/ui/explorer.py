@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import json
 from PySide6.QtCore import Qt, Signal, QDir
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeView,
     QTableView, QFileSystemModel, QLineEdit, QComboBox, QCheckBox, QLabel, QTextBrowser,
-    QPushButton, QMenu, QHeaderView, QAbstractItemView)
+    QPushButton, QMenu, QHeaderView, QAbstractItemView, QFrame, QStackedWidget)
 from .models import RecordsModel, value, size_text, time_text, STATUS, selected_records, is_resource_record
 
 
@@ -52,23 +51,46 @@ class ExplorerView(QWidget):
         self.catalog = None
         self.changes = {}
         self.folder = ''
+        self._root_selected = False
         self._directory_rows = {}
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
         tools = QHBoxLayout()
+        tools.setSpacing(10)
         self.layer = QComboBox()
         self.layer.addItems(['原始文件 · 全部来源', '当前生效资源'])
         self.layer.setObjectName('resourceLayer')
+        self.layer.setToolTip('原始文件按实际目录浏览；当前生效资源按扫描得到的来源选择结果浏览。')
         self.search = QLineEdit()
         self.search.setPlaceholderText('搜索名称、路径或用途')
         self.search.setObjectName('resourceSearch')
+        self.search.setClearButtonEnabled(True)
+        self.search.setAccessibleName('搜索资源')
         self.ab_only = QCheckBox('仅 .ab')
         self.ab_only.setObjectName('abOnly')
         self.recursive = QCheckBox('包含子目录')
         self.recursive.setChecked(False)
-        for control in (self.layer, self.search, self.ab_only, self.recursive):
-            tools.addWidget(control)
+        tools.addWidget(self.layer)
+        tools.addWidget(self.search, 1)
+        tools.addWidget(self.ab_only)
+        tools.addWidget(self.recursive)
         layout.addLayout(tools)
-        split = QSplitter()
+        self.splitter = QSplitter()
+        self.splitter.setObjectName('resourceSplitter')
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(8)
+        left = QWidget()
+        left.setMinimumWidth(160)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        directory_title = QLabel('目录')
+        directory_title.setProperty('role', 'sectionTitle')
+        left_layout.addWidget(directory_title)
+        directory_hint = QLabel('选择目录，查看其中的文件')
+        directory_hint.setProperty('muted', True)
+        directory_hint.setWordWrap(True)
+        left_layout.addWidget(directory_hint)
         self.fs = DirectoryModel(self)
         self.fs.setFilter(QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot)
         self.fs.setReadOnly(True)
@@ -78,18 +100,41 @@ class ExplorerView(QWidget):
         for column in (1, 2, 3):
             self.tree.hideColumn(column)
         self.tree.setHeaderHidden(True)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setIndentation(16)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.directory_context_menu)
-        split.addWidget(self.tree)
+        self.directory_stack = QStackedWidget()
+        self.directory_stack.addWidget(self.tree)
+        self.directory_empty = QFrame()
+        self.directory_empty.setProperty('role', 'surface')
+        directory_empty_layout = QVBoxLayout(self.directory_empty)
+        directory_empty_layout.setContentsMargins(14, 14, 14, 14)
+        directory_empty_text = QLabel('尚未选择游戏目录。\n\n在上方选择目录后，这里会显示目录结构。')
+        directory_empty_text.setProperty('muted', True)
+        directory_empty_text.setWordWrap(True)
+        directory_empty_layout.addWidget(directory_empty_text)
+        directory_empty_layout.addStretch()
+        self.directory_stack.addWidget(self.directory_empty)
+        self.directory_stack.setCurrentWidget(self.directory_empty)
+        left_layout.addWidget(self.directory_stack, 1)
+        self.splitter.addWidget(left)
         center = QWidget()
+        center.setMinimumWidth(280)
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
+        files_title = QLabel('文件')
+        files_title.setProperty('role', 'sectionTitle')
+        center_layout.addWidget(files_title)
         crumb_row = QHBoxLayout()
-        up = QPushButton('↑ 上一级')
-        up.clicked.connect(self.go_up)
+        self.up_button = QPushButton('↑ 上一级')
+        self.up_button.setToolTip('返回当前目录的上一级')
+        self.up_button.clicked.connect(self.go_up)
         self.breadcrumb = QLineEdit()
         self.breadcrumb.setReadOnly(True)
-        crumb_row.addWidget(up)
+        self.breadcrumb.setPlaceholderText('选择游戏目录后显示路径')
+        self.breadcrumb.setAccessibleName('当前资源目录')
+        crumb_row.addWidget(self.up_button)
         crumb_row.addWidget(self.breadcrumb, 1)
         center_layout.addLayout(crumb_row)
         self.model = RecordsModel([
@@ -105,6 +150,10 @@ class ExplorerView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
         for column, width in enumerate((185, 145, 55, 75, 165, 155)):
@@ -113,41 +162,76 @@ class ExplorerView(QWidget):
         self.table.customContextMenuRequested.connect(self.context_menu)
         self.table.doubleClicked.connect(lambda _: self.show_objects())
         self.table.selectionModel().selectionChanged.connect(self.update_selection)
-        center_layout.addWidget(self.table, 1)
-        self.count = QLabel('选择游戏目录后自动建立文件索引。')
+        self.results = QStackedWidget()
+        self.results.addWidget(self.table)
+        self.empty_panel = QFrame()
+        self.empty_panel.setProperty('role', 'surface')
+        empty_layout = QVBoxLayout(self.empty_panel)
+        empty_layout.setContentsMargins(22, 22, 22, 22)
+        empty_layout.addStretch()
+        self.empty_title = QLabel()
+        self.empty_title.setProperty('role', 'emptyTitle')
+        self.empty_title.setWordWrap(True)
+        empty_layout.addWidget(self.empty_title)
+        self.empty = QLabel()
+        self.empty.setProperty('muted', True)
+        self.empty.setWordWrap(True)
+        empty_layout.addWidget(self.empty)
+        self.clear_filters_button = QPushButton('清除筛选')
+        self.clear_filters_button.clicked.connect(self.clear_filters)
+        empty_layout.addWidget(self.clear_filters_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.include_subfolders_button = QPushButton('包含子目录')
+        self.include_subfolders_button.clicked.connect(lambda: self.recursive.setChecked(True))
+        empty_layout.addWidget(self.include_subfolders_button, 0, Qt.AlignmentFlag.AlignLeft)
+        empty_layout.addStretch()
+        self.results.addWidget(self.empty_panel)
+        center_layout.addWidget(self.results, 1)
+        self.count = QLabel()
+        self.count.setProperty('muted', True)
+        self.count.setWordWrap(True)
         center_layout.addWidget(self.count)
-        split.addWidget(center)
+        self.splitter.addWidget(center)
         right = QWidget()
+        right.setMinimumWidth(210)
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        details_title = QLabel('资源详情')
+        details_title.setProperty('role', 'sectionTitle')
+        right_layout.addWidget(details_title)
         self.details = QTextBrowser()
-        self.details.setMinimumWidth(220)
-        self.details.setHtml('<h3>资源详情</h3><p>选择一项，查看用途、来源与校验状态。</p>')
+        self.details.setMinimumWidth(0)
         right_layout.addWidget(self.details, 1)
         self.objects_button = QPushButton('查看内部对象／预览')
         self.objects_button.clicked.connect(self.show_objects)
         right_layout.addWidget(self.objects_button)
-        self.extract_button = QPushButton('将所选加入解包队列')
+        self.extract_button = QPushButton('加入解包队列')
+        self.extract_button.setToolTip('将所选的可解包文件加入任务队列。')
         self.extract_button.setProperty('primary', True)
         self.extract_button.clicked.connect(self.extract_selected)
         right_layout.addWidget(self.extract_button)
-        select_all = QPushButton('全选当前筛选结果')
-        select_all.clicked.connect(self.table.selectAll)
-        right_layout.addWidget(select_all)
-        split.addWidget(right)
-        split.setSizes([230, 780, 280])
-        layout.addWidget(split, 1)
+        self.select_all_button = QPushButton('全选当前筛选结果')
+        self.select_all_button.clicked.connect(self.table.selectAll)
+        right_layout.addWidget(self.select_all_button)
+        self.splitter.addWidget(right)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 0)
+        self.splitter.setSizes([215, 650, 250])
+        layout.addWidget(self.splitter, 1)
         self.tree.clicked.connect(self.select_directory)
         self.search.textChanged.connect(self.refresh)
         self.layer.currentIndexChanged.connect(self.refresh)
         self.ab_only.toggled.connect(self.refresh)
         self.recursive.toggled.connect(self.refresh)
+        self.refresh()
 
     def set_root(self, root):
         self.root = Path(root)
         self.folder = ''
+        self._root_selected = True
         self.fs.setRootPath(str(self.root))
         self.tree.setRootIndex(self.fs.index(str(self.root)))
+        self.directory_stack.setCurrentWidget(self.tree)
         self.refresh()
 
     def set_data(self, snapshot, changes=None, catalog=None):
@@ -177,7 +261,9 @@ class ExplorerView(QWidget):
         self.refresh()
 
     def refresh(self, *_):
-        self.breadcrumb.setText(str(self.root / self.folder))
+        self.breadcrumb.setText(str(self.root / self.folder) if self._root_selected else '')
+        self.breadcrumb.setToolTip(self.breadcrumb.text())
+        self.up_button.setEnabled(bool(self.folder))
         if self.layer.currentIndex() == 1:
             rows = []
             for resource in value(self.catalog, 'resources', {}).values():
@@ -196,10 +282,12 @@ class ExplorerView(QWidget):
         query = self.search.text().casefold().strip()
         prefix = self.folder.rstrip('/') + '/' if self.folder else ''
         visible = []
+        scope_count = 0
         for row in rows:
             path = row['path'].replace('\\', '/')
             if prefix and not path.startswith(prefix):
                 continue
+            scope_count += 1
             if self.ab_only.isChecked() and Path(path).suffix.casefold() != '.ab':
                 continue
             if query and query not in (path + ' ' + row.get('category', '')).casefold():
@@ -207,6 +295,40 @@ class ExplorerView(QWidget):
             visible.append(row)
         self.model.replace(visible)
         self.update_selection()
+        self.update_empty_state(scope_count)
+
+    def clear_filters(self):
+        self.search.clear()
+        self.ab_only.setChecked(False)
+
+    def update_empty_state(self, scope_count):
+        self.clear_filters_button.hide()
+        self.include_subfolders_button.hide()
+        if self.model.rowCount():
+            self.results.setCurrentWidget(self.table)
+            return
+        self.results.setCurrentWidget(self.empty_panel)
+        if self.snapshot is None:
+            self.empty_title.setText('尚未扫描资源')
+            self.empty.setText('在上方选择游戏目录并扫描，完成后即可按目录浏览、预览和解包。')
+        elif scope_count:
+            self.empty_title.setText('没有匹配的文件')
+            self.empty.setText('当前目录有文件，但没有命中筛选条件。尝试缩短关键词，或清除筛选。')
+            self.clear_filters_button.show()
+        elif self.layer.currentIndex() == 1:
+            self.empty_title.setText('当前范围没有生效资源')
+            self.empty.setText('可选择其他目录，或切换到“原始文件 · 全部来源”查看已扫描的文件。')
+        else:
+            prefix = self.folder.rstrip('/') + '/' if self.folder else ''
+            has_descendants = any(
+                group and folder != (self.folder or '.') and (not prefix or folder.startswith(prefix))
+                for folder, group in self._directory_rows.items())
+            self.empty_title.setText('当前目录没有已索引文件')
+            if not self.recursive.isChecked() and has_descendants:
+                self.empty.setText('文件位于子目录中。选择左侧子目录，或开启“包含子目录”。')
+                self.include_subfolders_button.show()
+            else:
+                self.empty.setText('选择其他目录，或重新扫描以更新文件索引。')
 
     def selected_paths(self):
         return [r.get('source_path') or str(self.root / r['path']) for r in selected_records(self.table)
@@ -214,13 +336,17 @@ class ExplorerView(QWidget):
 
     def update_selection(self, *_):
         selected = selected_records(self.table)
-        self.count.setText(f'当前结果 {self.model.rowCount():,} 项　·　已选 {len(selected):,} 项')
-        self.extract_button.setEnabled(bool(self.selected_paths()))
-        self.objects_button.setEnabled(len(selected) == 1 and bool(self.selected_paths()))
+        paths = self.selected_paths()
+        self.count.setText(f'当前结果 {self.model.rowCount():,} 项 · 已选 {len(selected):,} 项 · 可解包 {len(paths):,} 项')
+        self.extract_button.setEnabled(bool(paths))
+        self.objects_button.setEnabled(len(selected) == 1 and bool(paths))
+        self.select_all_button.setEnabled(self.model.rowCount() > 0)
         if selected:
             from html import escape
             row = selected[0]
             text = '<h3>' + escape(Path(row['path']).name) + '</h3>'
+            if len(selected) > 1:
+                text += f'<p>已选 {len(selected):,} 项，下方显示其中一个文件的详情。</p>'
             text += '<p>' + escape(category_description(row['path'], row.get('category', '未知用途'))) + '</p>'
             labels = {'path': '路径', 'layer': '来源层', 'status': '状态', 'logical_key': '逻辑资源', 'sha256': 'SHA-256', 'hash_status': '校验依据', 'error': '诊断'}
             for key, label in labels.items():
@@ -234,6 +360,9 @@ class ExplorerView(QWidget):
             if row.get('first_seen_at'):
                 text += '<p><b>首次观测</b><br>' + time_text(row['first_seen_at']) + '</p>'
             self.details.setHtml(text)
+        else:
+            self.details.setHtml('<h3>选择一个文件</h3><p>查看用途、来源与校验状态。</p>'
+                                 '<p>按住 Ctrl 或 Shift 可选择多个文件，一起加入解包队列。</p>')
 
     def extract_selected(self):
         paths = self.selected_paths()
@@ -247,9 +376,12 @@ class ExplorerView(QWidget):
 
     def context_menu(self, point):
         menu = QMenu(self)
-        menu.addAction('加入解包队列', self.extract_selected)
-        menu.addAction('查看内部对象／预览', self.show_objects)
-        menu.addAction('全选当前筛选结果', self.table.selectAll)
+        extract = menu.addAction('加入解包队列', self.extract_selected)
+        extract.setEnabled(self.extract_button.isEnabled())
+        objects = menu.addAction('查看内部对象／预览', self.show_objects)
+        objects.setEnabled(self.objects_button.isEnabled())
+        select_all = menu.addAction('全选当前筛选结果', self.table.selectAll)
+        select_all.setEnabled(self.select_all_button.isEnabled())
         menu.exec(self.table.viewport().mapToGlobal(point))
 
     def directory_context_menu(self, point):

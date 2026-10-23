@@ -11,8 +11,6 @@ from importlib import import_module
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtWidgets import QScrollArea
-
 from arknights_unpacker.contracts import BuildSpec
 from .models import selected_records, value
 
@@ -129,10 +127,9 @@ class UpdatesPage(PageController):
         root = value(self.window.services.installation, 'root')
         physical = self.view.snapshot
         if root and (physical is None or Path(value(physical, 'root', '')) != Path(root)):
-            self.view.snapshot = self.view.changes = None
-            self.view.model.replace([])
+            self.view.set_data(None, None, self.window.hours.value())
             self.view.summary.setText('当前安装的核心数据已解析；文件更新记录需要重新扫描。')
-            self.view.empty.clear()
+            self.view.empty.setText('核心资料已可查看。点击“扫描 / 检查更新”建立当前目录的文件更新记录。')
 
     def hours_changed(self):
         if self.view.snapshot:
@@ -269,12 +266,6 @@ class JobsPage(PageController):
 
 class SettingsPage(PageController):
     view_module = '.settings'
-
-    def __init__(self, window):
-        super().__init__(window)
-        self.widget = QScrollArea()
-        self.widget.setWidgetResizable(True)
-        self.widget.setWidget(self.view)
 
     def create_view(self):
         from .settings import SettingsView

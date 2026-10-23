@@ -8,39 +8,42 @@
   <style>$css</style>
 </head>
 <body>
+  <a class="skip-link" href="#report-content">跳到资料正文</a>
   <div class="page-bar">
     <div class="brand-wrap">
       <span class="brand">ARKNIGHTS</span>
-      <span class="brand-tag">PRTS // OS v3.4</span>
+      <span class="brand-tag">LOCAL ARCHIVE</span>
     </div>
-    <span class="page-title">本地资料档案 · OPERATOR DOSSIER</span>
-    <span class="hud-status">STATUS // ONLINE</span>
+    <span class="page-title">游戏资料 · 本地快照</span>
+    <span class="archive-label">离线档案</span>
   </div>
   <div class="shell">
     <aside aria-label="资料目录">
       <div class="directory-heading">资料目录 <span>CONTENTS</span></div>
-      <nav><ol>$directory</ol></nav>
-      <p class="directory-note">本地快照 · 离线阅读</p>
+      <nav class="section-directory"><ol>$directory</ol></nav>
+      <p class="directory-note">全部资料连续展示<br>点击目录可跳转到对应分区</p>
     </aside>
-    <main>
+    <main id="report-content" tabindex="-1">
       $header
-      <div class="report-tools js-only" role="search" aria-label="搜索资料">
+      <div class="report-tools js-only" role="region" aria-label="资料阅读工具">
         <div class="toolbar">
-          <label for="report-search">页面搜索</label>
-          <input type="search" id="report-search" placeholder="搜索技能、模组或正文" autocomplete="off">
-          <button id="clear-search" type="button">清除搜索</button>
+          <div class="search-field" role="search" aria-label="搜索资料">
+            <label for="report-search">页面搜索</label>
+            <input type="search" id="report-search" placeholder="技能、模组或正文关键词" autocomplete="off" aria-describedby="search-status">
+            <button id="clear-search" type="button" title="清除搜索（Esc）">清除</button>
+          </div>
           <div class="toolbar-actions">
             <button id="expand-all" type="button">展开全部</button>
             <button id="collapse-all" type="button">收起全部</button>
-            <button id="print-report" type="button">打印</button>
+            <button id="print-report" type="button">打印全文</button>
           </div>
         </div>
-        <p id="search-status" class="search-status" role="status" aria-live="polite">可搜索全页资料，或通过目录跳转到技能与模组。</p>
+        <p id="search-status" class="search-status" role="status" aria-live="polite">搜索全页资料；按 Esc 清除搜索并恢复阅读。</p>
       </div>
       <noscript><p class="reading-note">当前未启用脚本，以下完整列出所有技能与模组对照；可使用浏览器的页面查找。</p></noscript>
       <div id="search-empty" class="empty-state" hidden>没有找到匹配内容，请修改关键词或清除搜索。</div>
       $content
-      <footer>资料来自本地游戏快照。PRTS作为资料组织与视觉参考，具体版本与来源见“资料版本与口径”。</footer>
+      <footer><a class="back-to-top" href="#report-content">回到页首 ↑</a><p>资料来自本地游戏快照，可离线阅读。PRTS 作为资料组织与视觉参考，具体版本与来源见“资料版本与口径”。</p></footer>
     </main>
   </div>
   <script>$script</script>

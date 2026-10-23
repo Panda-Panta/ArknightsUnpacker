@@ -7,18 +7,25 @@
   const blocks = [...document.querySelectorAll('[data-report-block]')];
   const entries = [...document.querySelectorAll('[data-skill], [data-module]')];
   const details = [...document.querySelectorAll('details.block')];
+  const directoryLinks = [...document.querySelectorAll('.section-directory a')];
+  const scrollTables = [...document.querySelectorAll('.table-area .table-wrap')];
+  const tools = document.querySelector('.report-tools');
   const empty = document.getElementById('search-empty');
   const state = { query: '' };
   let searchOpen = null;
   let printing = null;
+  let layoutFrame = 0;
+  let anchorPosition = null;
   const normalize = value => value.toLocaleLowerCase().trim();
   const visible = element => !element.closest('[hidden]');
   const hasVisibleBlock = element => [...element.querySelectorAll('[data-report-block]')].some(visible);
   const searchText = new Map(blocks.map(block => {
     const entry = block.closest('[data-entry-title]');
     const group = block.closest('[data-report-section]');
+    const content = block.cloneNode(true);
+    content.querySelectorAll('[aria-hidden="true"]').forEach(element => element.remove());
     return [block, normalize((entry ? entry.dataset.entryTitle : '') + ' ' +
-      (group ? group.dataset.reportGroup : '') + ' ' + block.textContent)];
+      (group ? group.dataset.reportGroup : '') + ' ' + content.textContent)];
   }));
 
   document.querySelectorAll('.auxiliary details.block').forEach(detail => { detail.open = false; });
@@ -38,7 +45,8 @@
       const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
       const texts = [];
       while (walker.nextNode()) {
-        if (visible(walker.currentNode.parentElement) && normalize(walker.currentNode.nodeValue).includes(query)) {
+        if (visible(walker.currentNode.parentElement) && !walker.currentNode.parentElement.closest('[aria-hidden="true"]') &&
+            normalize(walker.currentNode.nodeValue).includes(query)) {
           texts.push(walker.currentNode);
         }
       }
@@ -64,6 +72,7 @@
   }
 
   function apply() {
+    anchorPosition = null;
     clearHighlights();
     const query = state.query;
     [...sections, ...entries]
@@ -85,6 +94,7 @@
     } else {
       empty.hidden = true;
     }
+    scheduleLayout();
   }
 
   function leaveSearch() {
@@ -110,11 +120,62 @@
   function locate(element) {
     if (!element) return;
     element.scrollIntoView({ behavior: 'auto', block: 'start' });
+    if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '-1');
+    element.focus({ preventScroll: true });
     const section = element.closest('[data-report-section]') || element;
-    document.querySelectorAll('aside a').forEach(link => {
-      if (link.hash.slice(1) === section.id) link.setAttribute('aria-current', 'location');
+    setCurrentSection(section.id);
+    anchorPosition = section.matches('[data-report-section]') ? { id: section.id, y: window.scrollY } : null;
+  }
+
+  function setCurrentSection(id) {
+    directoryLinks.forEach(link => {
+      if (link.hash.slice(1) === id) link.setAttribute('aria-current', 'location');
       else link.removeAttribute('aria-current');
     });
+  }
+
+  function updateLocation() {
+    // Near the document end several anchors share the same clamped scroll
+    // position. Keep the chosen destination until the reader actually scrolls.
+    if (anchorPosition && Math.abs(window.scrollY - anchorPosition.y) < 1) {
+      setCurrentSection(anchorPosition.id);
+      return;
+    }
+    anchorPosition = null;
+    const readingLine = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-height')) +
+      tools.getBoundingClientRect().height + 32;
+    const shown = sections.filter(visible);
+    let current = shown[0];
+    for (const section of shown) {
+      if (section.getBoundingClientRect().top <= readingLine) current = section;
+      else break;
+    }
+    if (window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+      current = shown[shown.length - 1];
+    }
+    setCurrentSection(current ? current.id : '');
+  }
+
+  function scheduleLayout() {
+    if (layoutFrame) return;
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = 0;
+      if (printing) return;
+      document.documentElement.style.setProperty('--toolbar-height', tools.getBoundingClientRect().height + 'px');
+      scrollTables.forEach(wrapper => {
+        const overflow = wrapper.clientWidth > 0 && wrapper.scrollWidth > wrapper.clientWidth + 1;
+        wrapper.parentElement.dataset.overflow = String(overflow);
+        wrapper.tabIndex = overflow ? 0 : -1;
+      });
+      updateLocation();
+    });
+  }
+
+  function clearSearch() {
+    leaveSearch();
+    apply();
+    status.textContent = '已清除搜索，恢复连续展示。';
+    input.focus();
   }
 
   input.addEventListener('input', () => {
@@ -129,19 +190,22 @@
     state.query = next;
     apply();
   });
-  document.getElementById('clear-search').addEventListener('click', () => {
-    leaveSearch();
-    apply();
-    status.textContent = '已清除搜索，恢复连续展示。';
-    input.focus();
+  document.getElementById('clear-search').addEventListener('click', clearSearch);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && input.value) {
+      event.preventDefault();
+      clearSearch();
+    }
   });
 
   [['expand-all', true], ['collapse-all', false]].forEach(([id, open]) => {
     document.getElementById(id).addEventListener('click', () => {
+      anchorPosition = null;
       details.forEach(detail => { detail.open = open; });
       if (searchOpen) searchOpen = new Map(details.map(detail => [detail, open]));
       status.textContent = open ? '已展开全部资料。'
         : '已收起全部资料，点击各条标题可再次展开。';
+      scheduleLayout();
     });
   });
 
@@ -158,6 +222,7 @@
     printing.panels.forEach(([panel, hidden]) => { panel.hidden = hidden; });
     printing.details.forEach(([detail, open]) => { detail.open = open; });
     printing = null;
+    scheduleLayout();
   }
 
   document.getElementById('print-report').addEventListener('click', () => {
@@ -171,7 +236,9 @@
     if (!target) return;
     leaveSearch();
     apply();
-    openPanel(target.closest('[data-report-block]') || target);
+    if (target.matches('[data-report-section], [data-report-block], [data-skill], [data-module]')) {
+      openPanel(target.closest('[data-report-block]') || target);
+    }
     locate(target);
   }
   document.querySelectorAll('a[href^="#"]').forEach(link => link.addEventListener('click', event => {
@@ -185,11 +252,20 @@
 
   apply();
   document.documentElement.classList.add('js');
-  const tools = document.querySelector('.report-tools');
-  const measure = () => document.documentElement.style.setProperty('--toolbar-height', tools.getBoundingClientRect().height + 'px');
-  if (window.ResizeObserver) new ResizeObserver(measure).observe(tools);
-  measure();
-  if (location.hash) {
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(scheduleLayout);
+    [tools, ...scrollTables].forEach(element => observer.observe(element));
+  }
+  window.addEventListener('scroll', scheduleLayout, { passive: true });
+  window.addEventListener('resize', () => { anchorPosition = null; scheduleLayout(); });
+  details.forEach(detail => detail.addEventListener('toggle', scheduleLayout));
+  const followHash = () => {
     try { followAnchor(document.getElementById(decodeURIComponent(location.hash.slice(1)))); } catch (_) {}
+  };
+  window.addEventListener('hashchange', followHash);
+  document.documentElement.style.setProperty('--toolbar-height', tools.getBoundingClientRect().height + 'px');
+  scheduleLayout();
+  if (location.hash) {
+    followHash();
   }
 })();

@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 import os
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent, QFontDatabase, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox, QCheckBox, QTabWidget,
-    QComboBox)
+    QComboBox, QSizePolicy)
 from arknights_unpacker.contracts import BuildSpec, ExportFormat, ReportOptions, ExtractionResult, as_jsonable
 from .models import value
 from .jobs import JobQueue
@@ -16,6 +16,19 @@ from .report_preview import ObjectsDialog, ReportArtifactsDialog
 from .styles import apply_theme
 from .job_history import remaining_extraction
 from .preview_cache import PreviewCache, legacy_preview_paths
+
+
+class _PathLabel(QLabel):
+    """Keep the full output path available without forcing the window wider."""
+    def setText(self, text):
+        self._full_text = text
+        self.setToolTip(text)
+        super().setText(self.fontMetrics().elidedText(text, Qt.TextElideMode.ElideMiddle, self.width()))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, '_full_text'):
+            self.setText(self._full_text)
 
 
 class MainWindow(QMainWindow):
@@ -76,14 +89,17 @@ class MainWindow(QMainWindow):
         header = QFrame()
         header.setObjectName('header')
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 14)
-        header_layout.setSpacing(10)
+        header_layout.setContentsMargins(16, 10, 16, 10)
+        header_layout.setSpacing(8)
         title_row = QHBoxLayout()
-        title = QLabel('ARKNIGHTS // 资源与资料工作台')
+        brand = QLabel('ARK / ARCHIVE')
+        brand.setObjectName('brandTag')
+        title_row.addWidget(brand)
+        title = QLabel('资源与资料工作台')
         title.setObjectName('appTitle')
         title_row.addWidget(title)
         title_row.addStretch()
-        subtitle = QLabel('PRTS TERMINAL · 资源索引 / 资料档案 / 原图导出')
+        subtitle = QLabel('本地资源 · 离线资料')
         subtitle.setObjectName('subtitle')
         title_row.addWidget(subtitle)
         header_layout.addLayout(title_row)
@@ -104,7 +120,27 @@ class MainWindow(QMainWindow):
         self.scan_button.setObjectName('scanButton')
         self.scan_button.clicked.connect(self.scan)
         root_row.addWidget(self.scan_button)
-        root_row.addWidget(QLabel('最近'))
+        header_layout.addLayout(root_row)
+        status_row = QHBoxLayout()
+        self.session_label = QLabel('选择游戏目录并扫描，开始浏览资源；已有记录会在启动时恢复。')
+        self.session_label.setObjectName('sessionStatus')
+        self.session_label.setWordWrap(True)
+        status_row.addWidget(self.session_label, 1)
+        self.scan_options_button = QPushButton('扫描选项')
+        self.scan_options_button.setObjectName('scanOptionsButton')
+        self.scan_options_button.setCheckable(True)
+        self.scan_options_button.setToolTip('调整最近更新时间范围，或启用完整摘要校验。')
+        status_row.addWidget(self.scan_options_button)
+        self.history_button = QPushButton('历史对照')
+        self.history_button.setObjectName('historyToggle')
+        self.history_button.setCheckable(True)
+        self.history_button.setToolTip('比较、导入或导出干员与模组资料快照。')
+        status_row.addWidget(self.history_button)
+        header_layout.addLayout(status_row)
+        self.scan_options = QWidget()
+        scan_options_layout = QHBoxLayout(self.scan_options)
+        scan_options_layout.setContentsMargins(0, 0, 0, 0)
+        scan_options_layout.addWidget(QLabel('最近更新时间'))
         self.hours = QDoubleSpinBox()
         self.hours.setObjectName('recentHours')
         self.hours.setRange(0.01, 876000)
@@ -113,39 +149,64 @@ class MainWindow(QMainWindow):
         self.hours.setSuffix(' 小时')
         self.hours.setFixedWidth(130)
         self.hours.valueChanged.connect(self._hours_changed)
-        root_row.addWidget(self.hours)
+        scan_options_layout.addWidget(self.hours)
         self.strict = QCheckBox('严格校验')
         self.strict.setToolTip('重新计算所选资源范围的完整摘要；耗时更长，可取消。')
-        root_row.addWidget(self.strict)
-        header_layout.addLayout(root_row)
-        self.session_label = QLabel('扫描和解析结果会自动保存在程序旁；下次启动直接读取。')
-        self.session_label.setObjectName('sessionStatus')
-        self.session_label.setWordWrap(True)
-        header_layout.addWidget(self.session_label)
+        scan_options_layout.addWidget(self.strict)
+        scan_hint = QLabel('按本机写入时间筛选；严格校验会增加扫描耗时。')
+        scan_hint.setProperty('muted', True)
+        scan_options_layout.addWidget(scan_hint, 1)
+        self.scan_options.hide()
+        self.scan_options_button.toggled.connect(self.scan_options.setVisible)
+        header_layout.addWidget(self.scan_options)
         layout.addWidget(header)
-        baseline_row = QHBoxLayout()
+        self.baseline_panel = QFrame()
+        self.baseline_panel.setProperty('role', 'surface')
+        baseline_row = QHBoxLayout(self.baseline_panel)
+        baseline_row.setContentsMargins(12, 8, 12, 8)
         baseline_row.addWidget(QLabel('资料对照'))
         self.history = QComboBox()
-        self.history.setMinimumWidth(350)
+        self.history.setMinimumWidth(180)
+        self.history.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.history.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.history.addItem('解析核心数据后可选择历史快照', None)
         baseline_row.addWidget(self.history, 1)
-        compare = QPushButton('与选中快照比较')
-        compare.clicked.connect(self.compare_history)
-        baseline_row.addWidget(compare)
+        self.compare_button = QPushButton('比较所选快照')
+        self.compare_button.clicked.connect(self.compare_history)
+        baseline_row.addWidget(self.compare_button)
         import_button = QPushButton('导入历史基线…')
         import_button.clicked.connect(self.import_baseline)
         baseline_row.addWidget(import_button)
-        export_button = QPushButton('导出当前数据快照…')
-        export_button.clicked.connect(self.export_snapshot)
-        baseline_row.addWidget(export_button)
-        layout.addLayout(baseline_row)
+        self.export_snapshot_button = QPushButton('导出当前快照…')
+        self.export_snapshot_button.clicked.connect(self.export_snapshot)
+        baseline_row.addWidget(self.export_snapshot_button)
+        self.baseline_panel.hide()
+        self.history_button.toggled.connect(self.baseline_panel.setVisible)
+        self.history.currentIndexChanged.connect(self._refresh_history_actions)
+        layout.addWidget(self.baseline_panel)
+        self.page_heading = QWidget()
+        page_heading = QHBoxLayout(self.page_heading)
+        page_heading.setContentsMargins(4, 2, 4, 2)
+        self.page_title = QLabel()
+        self.page_title.setProperty('role', 'pageTitle')
+        self.page_description = QLabel()
+        self.page_description.setProperty('muted', True)
+        self.page_description.setWordWrap(True)
+        page_heading.addWidget(self.page_title)
+        page_heading.addSpacing(12)
+        page_heading.addWidget(self.page_description, 1)
+        layout.addWidget(self.page_heading)
         self.tabs = QTabWidget()
         self.tabs.setObjectName('mainTabs')
         self.pages = PageComposition(self, page_definitions)
+        self.tabs.currentChanged.connect(self._update_page_heading)
+        self._update_page_heading()
         layout.addWidget(self.tabs, 1)
         footer = QHBoxLayout()
-        self.output_label = QLabel('输出：' + self.settings.output.text())
+        self.output_label = _PathLabel()
         self.output_label.setObjectName('subtitle')
+        self.output_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.output_label.setText('输出：' + self.settings.output.text())
         footer.addWidget(self.output_label, 1)
         open_output = QPushButton('打开输出')
         open_output.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.settings.output.text())))
@@ -162,9 +223,35 @@ class MainWindow(QMainWindow):
         self.monitor_timer.timeout.connect(self.check_manifests)
         self.monitor_timer.start()
         self._queue_changed()
+        self._refresh_history_actions()
         self._report_preview_warnings()
         if self.root_edit.text().strip():
             QTimer.singleShot(0, self.restore_previous)
+
+    def _update_page_heading(self, *_):
+        descriptions = {
+            'explorer': ('资源浏览', '浏览目录，选择资源包，查看对象或加入解包队列。'),
+            'updates': ('更新记录', '按时间和历史扫描定位变化，批量导出资源图片。'),
+            'operators': ('干员资料', '检索干员，查看培养面板与技能，生成完整资料。'),
+            'modules': ('模组更新', '对照模组各级效果，勾选资料并合并导出。'),
+            'jobs': ('导出任务', '查看处理进度与结果，重试失败任务或打开产物。'),
+            'settings': ('工作台设置', '调整输出位置、资料排版与历史记录选项。'),
+        }
+        current = self.pages.current_id()
+        title, description = descriptions.get(current, (self.tabs.tabText(self.tabs.currentIndex()), ''))
+        self.page_title.setText(title)
+        self.page_description.setText(description)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'page_heading'):
+            # The tabs still name every page; short windows need the space for rows.
+            self.page_heading.setVisible(event.size().height() >= 800)
+
+    def _refresh_history_actions(self, *_):
+        available = self.services.gamedata is not None and not self.queue.busy
+        self.compare_button.setEnabled(available and bool(self.history.currentData()))
+        self.export_snapshot_button.setEnabled(available)
 
     def restore_previous(self):
         if self._closing or self._restore_pending or self.queue.busy:
@@ -242,6 +329,7 @@ class MainWindow(QMainWindow):
         self.root_edit.setEnabled(not self.queue.busy)
         self.choose_root_button.setEnabled(not self.queue.busy)
         self.pages.queue_changed()
+        self._refresh_history_actions()
         if self._closing and not self.queue.busy:
             QTimer.singleShot(0, self.close)
 
@@ -657,6 +745,7 @@ class MainWindow(QMainWindow):
 
     def save_settings(self):
         self.services.save_config()
+        self.settings.save_status.setText('设置已保存。后续导出将使用当前设置。')
         self.show_status('设置已保存。')
 
     def manifest_stamp(self):

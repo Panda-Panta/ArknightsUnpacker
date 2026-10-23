@@ -322,13 +322,23 @@ class JobsView(QWidget):
         retention = QLabel(f'成功任务自动保留最近 {SUCCESS_HISTORY_LIMIT} 条，其他状态及恢复依据保留；'
                            '中断任务需手动重试。清理任务不会删除正式导出文件。')
         retention.setWordWrap(True)
+        retention.setProperty('muted', True)
         layout.addWidget(retention)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(['任务', '状态', '输出目录'])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setColumnWidth(0, 340)
+        self.table.setColumnWidth(1, 120)
+        self.table.verticalHeader().hide()
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
         layout.addWidget(self.table, 2)
+        self.empty_hint = QLabel('还没有处理任务。先在资源或资料页面选择内容，再进行预览或导出。')
+        self.empty_hint.setProperty('muted', True)
+        self.empty_hint.setWordWrap(True)
+        layout.addWidget(self.empty_hint)
         self.progress = QProgressBar()
         layout.addWidget(self.progress)
         buttons = QHBoxLayout()
@@ -344,6 +354,7 @@ class JobsView(QWidget):
         layout.addLayout(buttons)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
+        self.log.setPlaceholderText('处理过程、完成信息和失败原因将在这里显示。')
         self.log.setMaximumBlockCount(3000)
         layout.addWidget(self.log, 2)
         queue.changed.connect(self.refresh)
@@ -357,6 +368,7 @@ class JobsView(QWidget):
     def refresh(self):
         self.pause.setText('继续队列' if self.queue.paused else '暂停队列')
         self.table.setRowCount(len(self.queue.jobs))
+        self.empty_hint.setVisible(not self.queue.jobs)
         for i, job in enumerate(self.queue.jobs):
             for c, text in enumerate((job.title, job.status, job.receipt_root or job.output)):
                 self.table.setItem(i, c, QTableWidgetItem(text))
@@ -364,9 +376,11 @@ class JobsView(QWidget):
                 self.table.item(i, 1).setToolTip(job.last_error)
         if self.queue.busy:
             self.progress.setRange(0, 0)
+            self.progress.setFormat('正在处理…')
         else:
             self.progress.setRange(0, 100)
-            self.progress.setValue(100)
+            self.progress.setValue(0)
+            self.progress.setFormat('等待任务' if not self.queue.jobs else '当前没有运行中的任务')
 
     def update_progress(self, event):
         if isinstance(event, dict):
@@ -375,6 +389,7 @@ class JobsView(QWidget):
             if isinstance(total, (int, float)) and total > 0 and isinstance(done, (int, float)):
                 self.progress.setRange(0, int(total))
                 self.progress.setValue(int(done))
+                self.progress.setFormat('%p% · %v / %m')
 
     def retry(self):
         self.queue.retry(self.table.currentRow())

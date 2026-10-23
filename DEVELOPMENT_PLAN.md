@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.0本机便携交付完成；128项回归及真实资源/GUI/冻结服务链通过，浏览器效果保留未实测项。日期：2026-10-19，时区：Asia/Shanghai。
+> 状态：Windows 0.1.9已交付；2026-10-23进行桌面与HTML界面优化（第14.12节）。既有交付证据见各增量记录，当前任务验证结果单独登记。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -815,3 +815,21 @@ Release附现有已验收ZIP和 `.zip.sha256`；上传前再次核验ZIP、EXE�
 正式EXE生产服务首次1个PNG原子替换遇WinError5，保留failure.json／部分结果／worker现场；在全新隔离目录有限复验118.77秒通过，16,891文件扫描、434／513资料、两主题报告、图片／Spine／音频／视频流均完成，4份实际HTML各10项离线Edge及两批次目录通过。没有修改提取IO或宣称偶发访问拒绝已根治。候选普通快进私有main/test后安装：507旧0.1.8程序完整备份核验，替换8、499不变、零新增／删除，229用户／旧AppData文件在同步时保持。
 
 Tools实际原生启动6.92秒／重启5.86秒，成功记录127→20；先备份核验136个queue／预览相关文件，原127成功中111条旧ID被清理，另有4个正常恢复／查看任务进入最近记录。正式exports、主题／查看／其他设置及3扫描／1资料payload、434／513资料保留，无重扫重解析；507程序项及GUI正常演进外91文件再核，截图已查看。实际安装启动前没有预览文件，不虚称清掉旧用户预览。回退为本任务backup-0.1.8，元数据备份runtime-cleanup-backup；收据见docs/ACCEPTANCE.md。ZIP73,650,233字节、SHA `db1f5712c7fe97c85d7fc623847b2881bef5f7bb6eb88eee993fdb0870dd09cf`。已核对绝对路径后清理本构建pyinstaller／tmp两目录17文件26,449,069字节，153输入／1521程序文件及ZIP保持；不存在的pyinstaller-cache不记删除。保留旧制品、必要回退、用户文件及失败证据；后补本文／验收不改构建输入，私有v0.1.9 refs／附件和旧发布由verify_remote.py最终核验。
+
+### 14.12 桌面工作台与离线资料页优化（2026-10-23，源码验收完成，交付中）
+
+范围：用户确认同时优化桌面软件与导出的HTML。沿用个人开发模式、干净test基线94f4bdd和PySide6／内联HTML架构；只调整表现与界面交互，不更改游戏数据计算、解析、选择身份、输出格式或旧报告。目标是更清楚的常用操作层级、空状态引导、紧凑而可读的列表／资料、长页面定位和窄窗口可用性。保持全部技能／模组连续展示、暗／亮主题、离线／无脚本／打印、历史恢复与用户设置兼容。
+
+观察与方案：现有桌面顶部长期展示低频基线工具，实体页未加载／无筛选结果都呈现空表，长按钮行在小窗口挤压；设置表单横跨窗口且保存按钮在长滚动末尾。HTML仍有虚构的ONLINE／OS版本装饰，长文阅读导航和窄屏横表可改善。采用浅灰蓝工作台、白色内容面、青色主操作与深色文字（canvas #f2f5f8、paper #ffffff、ink #1c2834、muted #586c7d、accent #0093a2、border #c5d3de），中文正文使用Microsoft YaHei UI，标题Segoe UI Semibold，路径／辅助标识Consolas。标志特征为“来源→浏览→导出”的清晰工作台层级，减少无语义装饰；保留六页稳定ID和页签，不引入侧栏重构或新运行依赖。HTML沿用reports/style.py共用主题，完善真实的本地档案标识、阅读导航与表格提示。
+
+资源复用：已核对ui/pages.py稳定ID装配、styles.py全局Qt主题、现有GUI／报告测试、scripts/verify.ps1、scripts/verify-html.cjs、scripts/build.ps1、resources/html运行资产及真实快照留存。原生截图使用隔离AppServices与Qt grab；浏览器复用Edge／Playwright离线验收。证据与一次性脚本放.work/ui-refresh-20261023/，原用户库仅作只读备份，源码验收不改写原库或exports。领域skill为agent-dev-workflow及frontend-design；无需基建数值skill。
+
+分工与依赖：主agent独占main_window.py、styles.py、settings.py、pages.py（如有装配需要）、共享文档、版本、集成和交付。entity_ui独占entity_view.py及独立GUI行为回归；resource_ui独占explorer.py／updates.py及独立GUI回归；html_ui独占resources/html/、reports/html_render.py及HTML行为测试。三包同批实施，均保留原公开属性／信号。共享Qt样式角色约定：QLabel[role=pageTitle/sectionTitle/emptyTitle]、QLabel[muted=true]、QFrame[role=surface]、QPushButton[primary=true]，由主agent实现；各包不得改共享样式或Git。
+
+验收：真实Qt构造六页，检查1450×930及1050×700布局、搜索清除、空／无结果／有数据、模组跨筛选勾选、页签恢复、设置保存；按影响跑现有GUI和报告测试及完整verify.ps1。HTML用真实只读快照重新生成暗／亮干员与模组合集，Edge离线检查桌面／390px、搜索／跳转／折叠、打印恢复及无脚本，截图人工复核。独立审查后固定候选，按既有交付规则核对main/test、便携包及Tools目标；远端／安装是否有当前可核实授权分别记录，不将历史笔记视为新的发布指令。
+
+源码验收：桌面六页的层级／空状态／小窗布局、固定设置保存与任务空闲提示已完成，HTML模板升至2.3.0（软件0.1.10）。三个独立工作包完成并互审，另有主壳层只读审查；未发现未关闭阻塞。完整verify.ps1为375 passed、1 skipped（本环境无法建立目录联接）、1 local deselected，73.51秒。随后仅补700px小窗隐藏重复页标题，相关20项回归及700／799／800／930高度独立探针通过。独立全GUI出现一次未修改存储路径的WinError5，单项复跑通过；保留现场，不推断已根治。
+
+原生Windows Qt以Tools库的隔离副本恢复434干员／513模组，1450×930与1050×700六页截图和设置展开场景已查看，原库SHA不变。真实78.2.0能天使和三模组分别导出暗／亮HTML，固定时间后的32语义块一致；四份实际报告各10项离线Edge、两份索引检查、两主题各9项新增可用性检查通过，390px截图已查看。补充独立HTML审查3项浏览器探针通过；覆盖无JS、搜索清除／折叠恢复、目录焦点与位置、横表键盘滚动／固定项目列及打印媒体恢复，不代表物理打印机。源码证据统一放本任务目录，正式EXE／安装／发布结果待下文登记。
+
+交付授权已在原聊天01a153bc-becc-7642-b1da-c174a18d9608核实真人消息“推送至Github”“上传完成并创建Release”“同步到D:\Tools中的程序文件夹”；沿用同一私有仓库Panda-Panta/ArknightsUnpacker及D:\Tools\ArknightsUnpacker，不改变可见性。远端main/test初始均94f4bdd，main无保护要求；主agent串行固定候选、构建、普通快进、清单备份同步及实际启动核验。
