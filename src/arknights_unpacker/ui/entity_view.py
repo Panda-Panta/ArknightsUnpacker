@@ -3,7 +3,7 @@ from PySide6.QtCore import QSignalBlocker, Signal, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QSplitter, QTableView, QTextBrowser, QAbstractItemView, QComboBox, QFrame, QStackedWidget
 from arknights_unpacker.contracts import BuildSpec
 from .models import RecordsModel, STATUS, selected_records, value
-from .report_preview import profile_html, changes_html
+from .report_preview import profile_html
 
 
 PROFESSIONS = {'PIONEER': '先锋', 'WARRIOR': '近卫', 'TANK': '重装', 'SNIPER': '狙击',
@@ -391,18 +391,15 @@ class EntityView(QWidget):
                 self.module_choice.blockSignals(False)
                 self.details.setPlainText('正在读取当前资料…')
             if rows[0].get('status') == 'removed':
-                self.details.setHtml('<h2>已删除的资料</h2>' +
-                    ('<p>当前快照中已无此干员，无法查看或导出当前资料。</p>' if self.kind == 'operators'
-                     else self.diff_html(str(rows[0]['id']))))
+                entity_type = '干员' if self.kind == 'operators' else '模组'
+                self.details.setHtml(f'<h2>已删除的资料</h2><p>当前快照中已无此{entity_type}，无法查看或导出当前资料。</p>')
                 return
             spec = BuildSpec(module_id=self.module_choice.currentData())
             self.profile_requested.emit(entity_id, spec)
 
     def set_profile(self, profile):
         self.current_profile = profile
-        entity_id = value(profile, 'char_id') if self.kind == 'operators' else value(profile, 'equip_id')
-        self.details.setHtml(profile_html(profile) +
-            (self.diff_html(str(entity_id)) if self.kind == 'modules' else ''))
+        self.details.setHtml(profile_html(profile))
         if self.kind == 'operators':
             current = self.module_choice.currentData()
             self.module_choice.blockSignals(True)
@@ -415,9 +412,6 @@ class EntityView(QWidget):
             index = self.module_choice.findData(current)
             self.module_choice.setCurrentIndex(max(index, 0))
             self.module_choice.blockSignals(False)
-
-    def diff_html(self, entity_id):
-        return changes_html(self.changes, self.kind, entity_id)
 
     def request_export(self, only_new):
         if only_new:

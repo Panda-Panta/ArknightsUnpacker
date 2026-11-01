@@ -501,84 +501,9 @@ def semantic_blocks(document: ReportDocument) -> list[Block]:
             blocks.append(Block('模组', [('状态', _missing(profile, '模组', ('module', 'equip', '模组')))], group='模组'))
     for index, module in enumerate(document.modules, 1):
         blocks.extend(_module_blocks(as_jsonable(module), fallback_id=f'index-{index}'))
-    # Operator dossiers show current parameters, including their modules.
-    # Only standalone module history views retain cross-version comparison.
-    if document.metadata.get('changes') and not document.operators:
-        changes = document.metadata['changes']
-        names = {profile.equip_id: profile.name for profile in document.modules}
-        for category in ('modules',):
-            for index, change in enumerate(changes.get(category, []), 1):
-                identity = change.get('id') or change.get('equip_id') or change.get('char_id')
-                raw_name = change.get('name') or names.get(identity)
-                name = _player_name(raw_name if raw_name != identity else None, f'未命名条目{index}')
-                rows = _rows(change, {'name','before','after','changes','difference_type'})
-                direct = {}
-                for side in ('before','after'):
-                    if side in change:
-                        direct[side] = _readable_tree(change[side])
-                if direct.get('before') != direct.get('after'):
-                    rows.extend((label(side), text) for side, text in direct.items())
-                if notice := _hidden_change_notice(change.get('before'), change.get('after')):
-                    rows.append(('变化', notice))
-                field_blocks = []
-                for field_change in change.get('changes', []):
-                    field_name = field_change.get('field')
-                    if field_name not in LABELS or field_name in RAW_KEYS - {'scope', 'token_attributes', 'token_effects'}:
-                        continue
-                    before = _readable_tree({field_name: field_change.get('before')})
-                    after = _readable_tree({field_name: field_change.get('after')})
-                    field_rows = []
-                    if before != after:
-                        field_rows.extend([('更新前', before), ('更新后', after)])
-                    if notice := _hidden_change_notice({field_name: field_change.get('before')}, {field_name: field_change.get('after')}):
-                        field_rows.append(('变化', notice))
-                    if field_rows:
-                        field_blocks.append(Block(f'{name} · {label(field_name)}更新', field_rows, group='更新对照'))
-                if field_blocks or len(rows) > 1 or change.get('kind') in {'added','new','removed','form_added'}:
-                    blocks.append(Block(f'{label(category)} · {name}', rows, group='更新对照'))
-                    blocks.extend(field_blocks)
     if not blocks:
         blocks.append(Block('未选择资料', [('提示', '选择干员或模组后生成资料。')]))
     return blocks
-
-
-def _scope_values(value: Any) -> list[dict[str, Any]]:
-    if isinstance(value, list):
-        return [scope for item in value for scope in _scope_values(item)]
-    if not isinstance(value, dict):
-        return []
-    scope = value.get('scope')
-    scopes = [{key: item for key, item in scope.items() if item}] if isinstance(scope, dict) and any(scope.values()) else []
-    if isinstance(value.get('token_attributes'), dict) and value['token_attributes']:
-        scopes.append({'token_attributes': sorted(value['token_attributes'])})
-    return scopes + [scope for key, item in value.items()
-                     if key in LABELS and key not in RAW_KEYS - {'token_effects'}
-                     for scope in _scope_values(item)]
-
-
-def _unknown_attributes(value: Any) -> list[dict[str, Any]]:
-    if isinstance(value, list):
-        return [attribute for item in value for attribute in _unknown_attributes(item)]
-    if not isinstance(value, dict):
-        return []
-    if ('key' in value or 'label' in value) and 'value' in value and _attribute_label(value) == '属性效果未确认':
-        return [{key: item for key, item in value.items() if key in {'key','label','value','base','trust','potential','module','unit'}}]
-    return [attribute for key, item in value.items() if key in LABELS and key not in RAW_KEYS - {'token_effects'}
-            for attribute in _unknown_attributes(item)]
-
-
-def _hidden_change_notice(before: Any, after: Any) -> str:
-    old_scopes, new_scopes = _scope_values(before), _scope_values(after)
-    if old_scopes != new_scopes:
-        if [item['token_attributes'] for item in old_scopes if 'token_attributes' in item] != [item['token_attributes'] for item in new_scopes if 'token_attributes' in item]:
-            return '召唤物适用对象有变化，具体对象未确认'
-        for old, new in zip(old_scopes, new_scopes):
-            for key in old.keys() | new.keys():
-                if old.get(key) != new.get(key) and _scope_rows({key: old.get(key)}) == _scope_rows({key: new.get(key)}):
-                    return '适用范围有变化，具体范围未确认'
-    if _unknown_attributes(before) != _unknown_attributes(after):
-        return '属性效果有变化，具体效果未确认'
-    return ''
 
 
 def _readable_tree(value: Any, prefix: str = '') -> str:

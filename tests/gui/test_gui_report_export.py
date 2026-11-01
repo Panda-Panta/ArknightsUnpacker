@@ -138,21 +138,6 @@ def test_real_reference_detail_uses_readable_report_blocks_and_keeps_evidence(qt
     assert '&lt;img src=x' in escaped
 
 
-def test_direct_operator_history_detail_omits_all_cross_version_sections(qtbot):
-    from PySide6.QtWidgets import QTextBrowser
-    from arknights_unpacker.ui.report_preview import changes_html
-    changes = EntityChangeSet('before', 'after', operators=[{
-        'id': 'char_fixture', 'name': '测试干员', 'kind': 'modified', 'raw_changed': True,
-        'categories': ['raw_fields_only'], 'changes': [{'field': 'skills',
-        'before': [{'name': '旧技能', 'description': '旧说明', 'metadata': {'getter': 'hidden-getter-before'}}],
-        'after': [{'name': '新技能', 'description': '<测试说明>', 'field_evidence': {'getter': 'hidden-getter-after'}}]}]}])
-    browser = QTextBrowser()
-    qtbot.addWidget(browser)
-    browser.setHtml(changes_html(changes, 'operators', 'char_fixture'))
-    text = browser.toPlainText()
-    assert text == ''
-
-
 def test_first_inventory_never_becomes_all_new(qtbot, tmp_path):
     window, services = make_window(qtbot, tmp_path)
     services.load_data(str(tmp_path))

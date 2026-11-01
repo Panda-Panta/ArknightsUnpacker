@@ -11,7 +11,7 @@ REPORT_GROUPS = (
     ('特性', 'trait', '特性'), ('属性', 'attributes', '属性与加成'),
     ('天赋', 'talents', '天赋'), ('技能', 'skills', '技能'),
     ('后勤', 'building', '后勤技能'), ('潜能', 'potentials', '潜能提升'),
-    ('模组', 'modules', '模组'), ('更新对照', 'changes', '更新对照'),
+    ('模组', 'modules', '模组'),
     ('', 'notes', '提示'),
 )
 

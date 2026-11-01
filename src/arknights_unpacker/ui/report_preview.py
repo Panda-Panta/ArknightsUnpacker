@@ -290,18 +290,6 @@ def profile_html(profile):
     return '<html><head><style>' + css + '</style></head><body>' + body + '</body></html>'
 
 
-def changes_html(changes, kind, entity_id):
-    selected = [change for change in value(changes, kind, []) if
-                str(change.get('id', change.get('char_id', change.get('equip_id', '')))) == entity_id]
-    diagnostics = value(changes, 'diagnostics', [])
-    if not selected and not diagnostics:
-        return ''
-    payload = {'baseline_id': value(changes, 'baseline_id'), 'current_id': value(changes, 'current_id'),
-               'diagnostics': diagnostics, kind: selected}
-    document = ReportDocument(title='相对历史基线的变化', metadata={'changes': payload})
-    return blocks_html(block for block in semantic_blocks(document) if block.group == '更新对照')
-
-
 class ObjectsDialog(QDialog):
     extract_requested = Signal(str, list, bool)
 

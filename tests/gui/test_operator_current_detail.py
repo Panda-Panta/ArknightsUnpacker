@@ -1,4 +1,4 @@
-"""Entity details keep current operator parameters without historical sections."""
+"""Entity details keep current operator and module parameters without history."""
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -40,15 +40,12 @@ def assert_no_operator_history(text):
         assert marker not in text
 
 
-def test_operator_selection_shows_complete_current_profile_without_calling_history_renderer(qtbot, monkeypatch):
+def test_operator_selection_shows_complete_current_profile_when_history_is_present(qtbot):
     profile = build_operator(reference_data(), 'char_4231_clemnt')
     changes = operator_changes(profile)
     original_profile, original_changes = deepcopy(as_jsonable(profile)), deepcopy(as_jsonable(changes))
     view = EntityView('operators')
     qtbot.addWidget(view)
-    history_calls = []
-    original_diff = view.diff_html
-    monkeypatch.setattr(view, 'diff_html', lambda identity: history_calls.append(identity) or original_diff(identity))
     view.set_rows([{'id': profile.char_id, 'name': profile.name}], changes)
     requests = []
     view.profile_requested.connect(lambda identity, spec: requests.append(identity))
@@ -56,7 +53,6 @@ def test_operator_selection_shows_complete_current_profile_without_calling_histo
     assert requests == [profile.char_id]
     view.set_profile(profile)
     text = view.details.toPlainText()
-    assert history_calls == []
     assert_no_operator_history(text)
     current_only = QTextBrowser()
     qtbot.addWidget(current_only)
@@ -70,37 +66,68 @@ def test_operator_selection_shows_complete_current_profile_without_calling_histo
     assert as_jsonable(changes) == original_changes
 
 
-def test_removed_operator_is_identified_without_historical_values_or_export(qtbot, monkeypatch):
+def test_removed_operator_is_identified_without_historical_values_or_export(qtbot):
     profile = build_operator(reference_data(), 'char_4231_clemnt')
     view = EntityView('operators')
     qtbot.addWidget(view)
-    history_calls = []
-    original_diff = view.diff_html
-    monkeypatch.setattr(view, 'diff_html', lambda identity: history_calls.append(identity) or original_diff(identity))
     view.set_rows([], operator_changes(profile, 'removed'))
     view.table.selectRow(0)
-    assert history_calls == []
     assert '已删除' in view.details.toPlainText()
     assert_no_operator_history(view.details.toPlainText())
     assert not view.export_selected.isEnabled()
     assert not view.preview_selected.isEnabled()
 
 
-def test_module_detail_still_includes_its_independent_history(qtbot):
+def test_module_selection_shows_complete_current_profile_when_history_is_present(qtbot):
     module = build_module(reference_data(), 'uniequip_002_angel')
     changes = EntityChangeSet('old', 'current', modules=[{
         'id': module.equip_id, 'name': module.name, 'kind': 'modified',
         'changes': [{'field': 'phases', 'before': [{'level': 1, 'trait': '历史模组参数标记'}],
                      'after': as_jsonable(module.phases)}]}])
+    original_module, original_changes = deepcopy(as_jsonable(module)), deepcopy(as_jsonable(changes))
     view = EntityView('modules')
     qtbot.addWidget(view)
     view.set_rows([{'id': module.equip_id, 'name': module.name}], changes)
+    view.only_changes.setChecked(True)
+    assert [row['id'] for row in view.model.rows] == [module.equip_id]
+    assert view.model.rows[0]['status'] == 'modified'
+    requests = []
+    view.profile_requested.connect(lambda identity, spec: requests.append(identity))
     view.table.selectRow(0)
+    assert requests == [module.equip_id]
     view.set_profile(module)
     text = view.details.toPlainText()
+    current_only = QTextBrowser()
+    qtbot.addWidget(current_only)
+    current_only.setHtml(profile_html(module))
+    assert text == current_only.toPlainText()
     assert module.name in text
-    assert '历史模组参数标记' in text
-    assert '更新前' in text and '更新后' in text
+    assert all(label in text for label in ('未装备', '1级', '2级', '3级', '41'))
+    assert present('unlock_condition', module.metadata['unlock_condition']) in text
+    for marker in ('历史模组参数标记', '模组阶段更新', '更新前', '更新后'):
+        assert marker not in text
+    assert view.chosen_ids() == [module.equip_id]
+    assert as_jsonable(module) == original_module
+    assert as_jsonable(changes) == original_changes
+
+
+def test_removed_module_is_identified_without_historical_values_or_export(qtbot):
+    module = build_module(reference_data(), 'uniequip_002_angel')
+    changes = EntityChangeSet('old', 'current', modules=[{
+        'id': module.equip_id, 'name': module.name, 'kind': 'removed',
+        'changes': [{'field': 'phases', 'before': [{'level': 1, 'trait': '历史模组参数标记'}], 'after': None}]}])
+    view = EntityView('modules')
+    qtbot.addWidget(view)
+    view.set_rows([], changes)
+    view.table.selectRow(0)
+    assert view.model.rows[0]['status'] == 'removed'
+    text = view.details.toPlainText()
+    assert '已删除' in text and '当前快照中已无此模组' in text
+    for marker in ('历史模组参数标记', '模组阶段更新', '更新前', '更新后'):
+        assert marker not in text
+    assert view.chosen_ids() == []
+    assert not view.export_selected.isEnabled()
+    assert not view.preview_selected.isEnabled()
 
 
 def test_operator_empty_details_describe_current_parameters(qtbot):

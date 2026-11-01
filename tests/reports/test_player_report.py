@@ -173,7 +173,8 @@ def test_operator_only_legacy_change_document_does_not_create_an_update_report()
     assert layout_pages(legacy) == layout_pages(current)
 
 
-def test_standalone_module_history_stays_available_without_operator_history():
+def test_metadata_only_module_and_operator_history_cannot_create_a_report():
+    current = ReportDocument('模组资料')
     report = ReportDocument('模组资料', metadata={'changes': {'modules': [
         {'name': '模组', 'kind': 'modified', 'changes': [
             {'field': 'phases', 'before': [{'level': 1, 'attributes': [{'key': 'atk', 'value': 20}]}],
@@ -183,12 +184,40 @@ def test_standalone_module_history_stays_available_without_operator_history():
     mixed.metadata['changes']['operators'] = [
         {'name': '历史干员', 'kind': 'modified', 'changes': [
             {'field': 'trait', 'before': '历史特性旧值', 'after': '历史特性新值'}]}]
-    assert semantic_blocks(mixed) == semantic_blocks(report)
-    assert text_report(mixed) == text_report(report)
-    assert render_html(mixed) == render_html(report)
-    assert layout_pages(mixed) == layout_pages(report)
-    assert '更新前' in text_report(mixed) and '更新后' in text_report(mixed)
-    assert '最终值：20' in text_report(mixed) and '最终值：30' in text_report(mixed)
+    for legacy in (report, mixed):
+        original = deepcopy(as_jsonable(legacy))
+        assert semantic_blocks(legacy) == semantic_blocks(current)
+        assert text_report(legacy) == text_report(current)
+        assert render_html(legacy) == render_html(current)
+        assert layout_pages(legacy) == layout_pages(current)
+        assert as_jsonable(legacy) == original
+
+
+def test_current_module_all_fields_and_effects_render_identically_with_any_legacy_history():
+    current = ReportDocument('当前模组资料', modules=[deepcopy(document().modules[0])],
+        options=ReportOptions(width=700, font_size=20, max_page_height=4000))
+    legacy = deepcopy(current)
+    module = as_jsonable(current.modules[0])
+    legacy.metadata['changes'] = {
+        'operators': [{'name': '历史干员', 'kind': 'modified',
+                       'before': {'trait': '历史特性旧值'}, 'after': {'trait': '历史特性新值'}}],
+        'modules': [{'id': module['equip_id'], 'name': module['name'], 'kind': 'modified',
+            'before': {'name': '历史模组旧值', 'phases': [{'level': 1, 'trait': '历史模组特性旧值'}]},
+            'after': module,
+            'changes': [{'field': key, 'before': f'历史字段旧值-{key}', 'after': value}
+                        for key, value in module.items()]}],
+    }
+    original = deepcopy(as_jsonable(legacy))
+    assert semantic_blocks(legacy) == semantic_blocks(current)
+    assert text_report(legacy) == text_report(current)
+    assert render_html(legacy) == render_html(current)
+    assert layout_pages(legacy) == layout_pages(current)
+    text = text_report(legacy)
+    for phrase in ('战术模组', '未装备', '1级', '2级', '3级', '第1级特性效果', '第2级特性效果',
+                   '第3级特性效果', '召唤物1', '召唤物2', '生命上限', '仅指定作战模式生效',
+                   '可确认的中文玩法', '具体范围未确认', '精英2', '60级', '效果未确认'):
+        assert phrase in text
+    assert as_jsonable(legacy) == original
 
 
 def test_potential_effects_keep_confirmed_labels_without_guessing_units():
@@ -247,7 +276,7 @@ def test_empty_and_technical_only_changes_do_not_create_visible_update_sections(
     assert not any(block.group == '更新对照' for block in semantic_blocks(report))
 
 
-def test_unresolved_scope_changes_remain_visible_without_map_or_mode_identifiers():
+def test_history_only_scope_changes_do_not_generate_scope_update_notices():
     for before, after in [({'validInMapTag': 'map-one'}, {'validInMapTag': 'map-two'}),
                           ({'validModeIndices': [1001]}, {'validModeIndices': [1002]}),
                           ({'tokenKey': 'token-a'}, {'tokenKey': 'token-b'})]:
@@ -258,7 +287,7 @@ def test_unresolved_scope_changes_remain_visible_without_map_or_mode_identifiers
                  'changes': [{'field': field, 'before': old, 'after': new}]}]}})
             original = deepcopy(as_jsonable(report))
             text = text_report(report)
-            assert '适用范围有变化，具体范围未确认' in text
+            assert text == text_report(ReportDocument('资料'))
             assert all(marker not in text for marker in ('map-one', 'map-two', '1001', '1002', 'token-a', 'token-b'))
             assert as_jsonable(report) == original
 
@@ -332,19 +361,23 @@ def test_real_operator_building_stages_all_reach_readable_reports():
     assert as_jsonable(report) == before
 
 
-def test_token_attribute_recipient_and_unknown_attribute_changes_remain_player_readable():
+def test_current_token_attributes_and_unknown_effects_remain_without_their_history():
     cases = [
         ({'token_attributes': {'token-a': {'atk': 20}}}, {'token_attributes': {'token-b': {'atk': 20}}},
-         '召唤物适用对象有变化，具体对象未确认'),
+         '召唤物1'),
         ({'attributes': [{'key': 'unknown_ratio', 'label': 'unknown_ratio', 'value': 0.06}]},
          {'attributes': [{'key': 'unknown_ratio', 'label': 'unknown_ratio', 'value': 0.08}]},
-         '属性效果有变化，具体效果未确认'),
+         '属性效果未确认'),
     ]
     for before, after, expected in cases:
-        report = ReportDocument('资料', metadata={'changes': {'modules': [
+        current = ReportDocument('资料', modules=[ModuleProfile('private', 'owner', '干员', '模组',
+            phases=[{'level': 1, **after}])])
+        report = deepcopy(current)
+        report.metadata['changes'] = {'modules': [
             {'id': 'private', 'name': '模组', 'kind': 'modified', 'changes': [
-                {'field': 'phases', 'before': [{'level': 1, **before}], 'after': [{'level': 1, **after}]}]}]}})
+                {'field': 'phases', 'before': [{'level': 1, **before}], 'after': [{'level': 1, **after}]}]}]}
         original = deepcopy(as_jsonable(report))
+        assert semantic_blocks(report) == semantic_blocks(current)
         for text in (text_report(report), ''.join(VisibleText(render_html(report)).parts)):
             assert expected in text
             assert all(internal not in text for internal in ('token-a', 'token-b', 'unknown_ratio', '0.06', '0.08'))
@@ -376,7 +409,7 @@ def test_fallback_document_titles_hide_only_confirmed_identity_fallbacks():
         assert as_jsonable(report) == original
 
 
-def test_visible_attribute_changes_and_hidden_scope_changes_share_one_update_block():
+def test_current_attributes_and_scope_do_not_gain_history_blocks_from_either_legacy_shape():
     for old_scope, new_scope, notice in [
         ({'scope': {'validInMapTag': 'map-a'}}, {'scope': {'validInMapTag': 'map-b'}},
          '适用范围有变化，具体范围未确认'),
@@ -387,15 +420,16 @@ def test_visible_attribute_changes_and_hidden_scope_changes_share_one_update_blo
         after = [{'level': 1, **new_scope, 'attributes': [{'key': 'atk', 'label': '攻击', 'value': 30}]}]
         for values in ({'changes': [{'field': 'phases', 'before': before, 'after': after}]},
                        {'before': {'phases': before}, 'after': {'phases': after}}):
-            report = ReportDocument('资料', metadata={'changes': {'modules': [
-                {'name': '模组', 'kind': 'modified', **values}]}})
+            current = ReportDocument('资料', modules=[ModuleProfile('private', 'owner', '干员', '模组', phases=after)])
+            report = deepcopy(current)
+            report.metadata['changes'] = {'modules': [{'name': '模组', 'kind': 'modified', **values}]}
             original = deepcopy(as_jsonable(report))
-            blocks = [block for block in semantic_blocks(report) if any(key == '更新前' for key, _ in block.rows)]
-            assert len(blocks) == 1
-            rows = dict(blocks[0].rows)
-            assert '最终值：20' in rows['更新前'] and '最终值：30' in rows['更新后']
-            assert rows['变化'] == notice
+            assert semantic_blocks(report) == semantic_blocks(current)
+            assert text_report(report) == text_report(current)
+            assert render_html(report) == render_html(current)
+            assert layout_pages(report) == layout_pages(current)
             for text in (text_report(report), ''.join(VisibleText(render_html(report)).parts)):
-                assert text.count(notice) == 1
+                assert notice not in text
+                assert '30' in text and ('具体范围未确认' in text or '召唤物1' in text)
                 assert all(internal not in text for internal in ('map-a', 'map-b', 'token-a', 'token-b'))
             assert as_jsonable(report) == original

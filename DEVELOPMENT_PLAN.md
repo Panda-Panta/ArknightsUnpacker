@@ -889,3 +889,11 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 已普通快进同步同一私有main/test及D:\Tools\ArknightsUnpacker。507旧0.1.11程序项完整备份，替换8、499不变、无新增／删除；同步时118用户文件摘要保持。安装版启动5.56秒、重启5.17秒均通过，原5扫描／2资料快照payload、6新增干员／8新增模组、配置及原导出保持。启动前另备份22项数据库／设置／queue；正常查看产生4条成功任务，按旧20条上限回收4条旧成功记录，无预览需要回收；其余96保护文件与507程序项复核。证据为frozen-operator-verification.json、installed-verification.json和sync-result.json；回退为backup-0.1.11/与runtime-cleanup-backup/。
 
 已发布私有v0.1.12及ZIP／校验附件；ZIP为73,675,669字节，SHA256 5be395012552cdc1d6b246f99c3866bad81e37152304abaf5f2bedcdf4468c91，EXE SHA256 5ba8830f5fee8919378853f02415c55b02c2ad47873070ceea93c33091180566。清理本构建pyinstaller／tmp两个目录共17文件26,514,838字节，153输入、1521来源／安装／回退程序项及ZIP保持。当前／旧版本与必要回退、证据保留，未动其他构建／用户文件。仅后补本计划、验收与README，不改程序输入；最终refs与附件摘要由verify_remote.py登记release-result.json。复用上一轮工具，无新增领域流程或记忆更新。
+
+### 14.15 模组详情也仅保留当前资料（2026-11-01，实施中）
+
+用户进一步要求模组“XX更新”也不保留，现干员与模组统一只展示当前资料。删除模组详情追加历史的装配及共享语义层剩余跨版本历史段落；已删除条目只说明当前资料不存在。当前模组属性、未装备／各等级效果、召唤物、适用与解锁条件继续保留，模组新增／变化筛选及原历史快照和比较数据不改写。旧静态导出不迁改，新预览／导出均不构造“XX更新”。
+
+沿用个人模式与共享干净test基线59e458b；复用EntityView／profile_html／semantic_blocks及现有UI／报告回归，打包与清单备份工具沿用14.14。并行：update_filters独占UI装配、历史预览入口与GUI回归；entity_diff独占共享报告语义、已无消费者的历史渲染辅助函数及报告回归；主agent负责公共文档／版本、集成、实际冻结版新增模组详情与安装验证、Git和交付。临时证据为.work/module-current-only-20261101/。先红后绿，核对完整当前模组与无历史版本逐值一致，不用单纯改标题隐藏旧值；固定0.1.13后按既有授权交付同一私有仓库和D:\Tools\ArknightsUnpacker，不重跑无关的游戏解包验收。
+
+实现与源码验收：EntityView统一只渲染profile_html，删除无消费者的diff_html／changes_html；删除条目只提示当前不存在并禁预览／导出。semantic_blocks全部历史生成分支、3个历史专用helper和更新分组均删除，当前属性／效果／召唤物／潜能／条件与未装备／各级值的生成路径保留。UI红测2失败后相关41项通过，报告红测5失败后全部105项通过；两包互审无阻塞。主agent完整verify.ps1为453 passed／1 local deselected（90.30秒），有1条pytest缓存写入警告，未改游戏数据或比较缓存。证据为source-verification.log及ui-tests/、reports-tests/；制品与安装结果后补。
