@@ -50,7 +50,7 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 `gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
 
-`ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别；资源浏览在已有来源、目录、关键词与AB条件上叠加类型筛选。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
+`ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别。资源浏览选择具体类型后在当前来源全库匹配，关键词与AB条件继续叠加；暂时禁用目录导航／递归且保留原值，切回全部类型恢复原目录范围。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
 
 主要调用链：
 

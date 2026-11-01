@@ -917,3 +917,13 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 已普通快进同步同一私有main/test并更新D:\Tools\ArknightsUnpacker。完整备份507旧0.1.13程序项，替换8、499不变、无新增／删除；同步时118用户文件摘要保持。首次检查发现旧进程9024，替换前复核已退出且无活动任务，未发送关闭或强制终止请求，见graceful-close.json。安装版启动6.81秒、重启6.44秒通过，5扫描／2资料payload、既有实体结果、原查看／其他设置与导出保留，旧状态新增file_type默认None。另备份22项数据库／设置／queue，正常恢复／查看按20上限替换6条旧成功记录，非成功保留、无预览回收；其余96保护文件及507程序项复核。回退为backup-0.1.13/和runtime-cleanup-backup/，证据为frozen-explorer-verification.json、installed-verification.json、sync-result.json。
 
 已发布私有v0.1.14及ZIP／校验附件。ZIP为73,672,129字节，SHA256 d1548477556dc85fbf99367899eaddb8070572af9d61483488f8f4048b510861；EXE SHA256 a1d417462d5f6caefa76a659bcac7ab942d84cb80981566bb6e2fa64547a71b6。清理本构建pyinstaller／tmp共17文件26,508,709字节，1521项来源／安装／回退程序文件与ZIP再核不变；其他构建、旧发布、必要回退与用户文件保留。后补计划／验收／README不改153项程序输入，最终refs及附件摘要由verify_remote.py记录release-result.json。沿用既有工具，无新增领域流程或记忆更新。
+
+
+### 14.17 文件类型筛选直接显示全库结果（2026-11-01，实施中）
+
+用户提出资源浏览在筛选后直接跨目录显示全部匹配结果。现有refresh先按folder／recursive裁剪，导致选择类型后仍需寻找目录。新合同：选择具体file_type时，在当前来源视图的全部已索引记录中筛选，忽略folder与recursive；搜索和仅AB仍叠加。界面明确全库范围并暂时禁用目录导航／递归控件，保留原folder／recursive值；切回全部类型或清除筛选恢复原目录范围。无新增持久化字段，不改扫描、分类、比较、解包器或用户游戏文件；显式目录解包接口保持既有合同。
+
+沿用个人模式与共享干净test基线9eeea61。并行：update_filters独占ui/explorer.py及tests/gui/test_explorer_file_types.py，负责全库筛选、范围提示和UI行为回归；entity_diff独占tests/gui/test_explorer_file_type_state.py，负责带窄目录／非递归的真实保存恢复回归；主agent负责版本／文档、集成、真实快照冻结EXE及安装验证、Git和交付。复用现有category标签、ExplorerPage状态、scripts/verify.ps1／build.ps1及.work/explorer-file-types-20261101/清单交付工具；本次证据隔离于.work/explorer-global-filter-20261101/，适配为0.1.15。先证明原实现漏结果再验证修复及清除恢复，按既有授权更新同一私有main/test及D:\Tools\ArknightsUnpacker，保护历史、配置和原导出。
+
+
+实现与源码证据：具体类型在raw汇总全部目录记录、active遍历全部catalog，不再用folder前缀裁剪；关键词／AB仍相交。复用breadcrumb标明当前来源全库，控件仅切换enabled不写原folder／recursive。删除ExplorerPage.restore_state在refresh之后重复覆写breadcrumb的旧装配，保证重启提示一致；未增加状态字段。UI红测8失败后专项17项、相关GUI29项通过；状态先复现窄目录漏结果，再单独复现重启路径覆盖，最终12项通过，含真实MainWindow保存／重启／取消类型全链。两包只读互审无阻塞。完整scripts/verify.ps1为481 passed、1 skipped（主机不支持junction创建）、1 local deselected（221.85秒），另有既有pytest缓存权限警告；日志source-verification.log。不因本轮UI改动补跑未受影响的游戏解码／浏览器，冻结与安装验收后补。

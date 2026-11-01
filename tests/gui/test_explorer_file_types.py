@@ -1,4 +1,4 @@
-"""Resource-purpose filters compose with the explorer's existing source scopes."""
+"""Specific resource types search globally, restoring directory scope on clear."""
 from copy import deepcopy
 import time
 
@@ -64,20 +64,19 @@ def test_file_type_choices_reuse_common_labels_before_scan(qtbot):
     assert choices.count('剧情插图') == 1
 
 
-def test_original_file_types_compose_with_search_extension_directory_and_recursion(explorer):
+def test_specific_original_type_ignores_saved_directory_and_recursion_but_keeps_search_and_extension(explorer):
     before = deepcopy(as_jsonable(explorer.snapshot))
-    explorer.recursive.setChecked(True)
+    explorer.folder = 'avg/backgrounds'
+    explorer.recursive.setChecked(False)
+    explorer.refresh()
+    assert visible_paths(explorer) == {'avg/backgrounds/backdrop.ab'}
     choose_type(explorer, '剧情插图')
     assert visible_paths(explorer) == {'avg/images/current.AB', 'avg/images/alternate.bin', 'avg/images/deep/nested.ab'}
     explorer.ab_only.setChecked(True)
     assert visible_paths(explorer) == {'avg/images/current.AB', 'avg/images/deep/nested.ab'}
-    explorer.folder = 'avg/images'
-    explorer.recursive.setChecked(False)
-    assert visible_paths(explorer) == {'avg/images/current.AB'}
     explorer.search.setText('nested')
-    assert visible_paths(explorer) == set()
-    explorer.recursive.setChecked(True)
     assert visible_paths(explorer) == {'avg/images/deep/nested.ab'}
+    assert explorer.folder == 'avg/backgrounds' and not explorer.recursive.isChecked()
     assert as_jsonable(explorer.snapshot) == before
 
 
@@ -94,14 +93,37 @@ def test_effective_types_use_existing_categories_even_for_anonymous_or_missing_s
     assert visible_paths(explorer) == {'avg/images/current.AB'}
     explorer.folder = 'avg/backgrounds'
     explorer.refresh()
-    assert not visible_paths(explorer)
+    assert visible_paths(explorer) == {'avg/images/current.AB'}
     choose_type(explorer, '剧情背景')
     assert visible_paths(explorer) == {'avg/backgrounds/backdrop.ab'}
-    # Keep the established effective-resource scope: descendants are included
-    # by directory prefix regardless of the raw-file recursive checkbox.
     explorer.folder = 'avg'
     explorer.recursive.setChecked(False)
     assert visible_paths(explorer) == {'avg/backgrounds/backdrop.ab'}
+
+
+@pytest.mark.parametrize('layer', [0, 1])
+@pytest.mark.parametrize('recursive', [False, True])
+def test_global_type_scope_disables_navigation_and_restores_original_directory_on_all_types(explorer, layer, recursive):
+    explorer.folder = 'avg/backgrounds'
+    explorer.recursive.setChecked(recursive)
+    explorer.layer.setCurrentIndex(layer)
+    explorer.refresh()
+    original_paths = visible_paths(explorer)
+    choose_type(explorer, '剧情插图')
+    assert len(visible_paths(explorer)) == 3
+    assert '全库筛选' in explorer.breadcrumb.text()
+    assert ('全部已扫描资源' if layer == 0 else '全部生效资源') in explorer.breadcrumb.text()
+    assert not explorer.tree.isEnabled()
+    assert not explorer.up_button.isEnabled()
+    assert not explorer.recursive.isEnabled()
+    explorer.up_button.click()
+    explorer.recursive.click()
+    assert explorer.folder == 'avg/backgrounds' and explorer.recursive.isChecked() is recursive
+    explorer.file_type.setCurrentIndex(0)
+    assert visible_paths(explorer) == original_paths
+    assert explorer.tree.isEnabled() and explorer.up_button.isEnabled() and explorer.recursive.isEnabled()
+    assert explorer.breadcrumb.text() == str(explorer.root / 'avg/backgrounds')
+    assert explorer.folder == 'avg/backgrounds' and explorer.recursive.isChecked() is recursive
 
 
 def test_observed_custom_types_are_available_across_both_sources_and_refreshes(explorer):
@@ -132,6 +154,7 @@ def test_clear_file_type_recovers_empty_results_without_changing_directory_sourc
     explorer.search.setText('nothing-matches')
     assert '没有匹配' in explorer.empty_title.text()
     assert '文件类型' in explorer.empty.text()
+    assert '全库' in explorer.empty.text() and '当前目录' not in explorer.empty.text()
     assert explorer.clear_filters_button.isVisible()
     qtbot.mouseClick(explorer.clear_filters_button, Qt.MouseButton.LeftButton)
     assert explorer.file_type.currentData() is None
@@ -139,6 +162,21 @@ def test_clear_file_type_recovers_empty_results_without_changing_directory_sourc
     assert explorer.folder == 'avg/images' and explorer.recursive.isChecked()
     assert explorer.layer.currentIndex() == 1
     assert visible_paths(explorer) == {'avg/images/current.AB', 'avg/images/missing'}
+    assert explorer.tree.isEnabled() and explorer.recursive.isEnabled() and explorer.up_button.isEnabled()
+    assert explorer.breadcrumb.text() == str(explorer.root / 'avg/images')
+
+
+def test_catalog_only_global_filter_has_truthful_recoverable_empty_state(explorer):
+    explorer.show()
+    explorer.set_data(None, catalog=explorer.catalog)
+    explorer.layer.setCurrentIndex(1)
+    choose_type(explorer, '干员肖像')
+    assert not visible_paths(explorer)
+    assert '没有匹配' in explorer.empty_title.text()
+    assert '全库' in explorer.empty.text()
+    assert explorer.clear_filters_button.isVisible()
+    explorer.clear_filters()
+    assert len(visible_paths(explorer)) == 5
 
 
 @pytest.mark.parametrize('layer', [0, 1])
@@ -175,7 +213,7 @@ def test_explicit_recursive_directory_extraction_keeps_its_unfiltered_contract(e
     explorer.folder = 'avg/images'
     explorer.ab_only.setChecked(True)
     choose_type(explorer, '剧情背景')
-    assert not visible_paths(explorer)
+    assert visible_paths(explorer) == {'avg/backgrounds/backdrop.ab'}
     emitted = []
     explorer.extract_requested.connect(emitted.append)
     explorer.extract_directory()

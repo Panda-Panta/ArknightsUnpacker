@@ -105,10 +105,11 @@ def test_legacy_state_defaults_to_all_categories_and_keeps_safe_folder_scope(qtb
     assert (page.view.root / page.view.folder).resolve().is_relative_to(tmp_path.resolve())
 
 
-def test_real_main_window_settings_json_reopens_same_category_and_visible_results(qtbot, tmp_path, monkeypatch):
+def test_real_main_window_reopens_global_type_results_and_restores_saved_narrow_scope(qtbot, tmp_path, monkeypatch):
     game = tmp_path / 'game'
     resources = game / 'Arknights_Data/StreamingAssets/AB/Windows'
-    for relative in ('avg/images/story.ab', 'avg/images/story.bin', 'avg/backgrounds/story.ab'):
+    for relative in ('avg/images/story.ab', 'avg/images/story.bin', 'avg/images/deep/story-deep.ab',
+                     'avg/imgs/story-secondary.ab', 'avg/images/unmatched.ab', 'avg/backgrounds/story.ab'):
         target = resources / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b'UnityFS-state-fixture')
@@ -120,19 +121,29 @@ def test_real_main_window_settings_json_reopens_same_category_and_visible_result
     first.show()
     try:
         qtbot.waitUntil(lambda: first._view_state_ready and not first.queue.busy, timeout=10000)
-        folder = resources.relative_to(game).as_posix() + '/avg'
+        prefix = resources.relative_to(game).as_posix()
+        folder = prefix + '/avg/backgrounds'
         first.explorer.folder = folder
-        first.explorer.recursive.setChecked(True)
+        first.explorer.recursive.setChecked(False)
         first.explorer.ab_only.setChecked(True)
         first.explorer.search.setText('story')
+        first.explorer.refresh()
+        original_scope = {prefix + '/avg/backgrounds/story.ab'}
+        assert paths(first.explorer) == original_scope
         first.explorer.file_type.setCurrentIndex(first.explorer.file_type.findData('剧情插图'))
         first.explorer.refresh()
         visible = paths(first.explorer)
-        assert visible == {resources.relative_to(game).as_posix() + '/avg/images/story.ab'}
+        assert visible == {prefix + '/avg/images/story.ab', prefix + '/avg/images/deep/story-deep.ab',
+                           prefix + '/avg/imgs/story-secondary.ab'}
+        assert '全库筛选' in first.explorer.breadcrumb.text()
+        assert first.explorer.folder == folder
+        assert not first.explorer.recursive.isChecked()
         first.remember_view_state()
         first_services.save_config()
         settings = json.loads(first_services.config_file.read_text('utf-8'))
-        assert settings['view_states'][str(game.resolve())]['pages']['explorer']['file_type'] == '剧情插图'
+        saved = settings['view_states'][str(game.resolve())]['pages']['explorer']
+        assert saved == {'file_type': '剧情插图', 'folder': folder, 'recursive': False,
+                         'ab_only': True, 'search': 'story'}
     finally:
         first.close()
         first_services.shutdown()
@@ -151,10 +162,24 @@ def test_real_main_window_settings_json_reopens_same_category_and_visible_result
         qtbot.waitUntil(lambda: restored._view_state_ready and not restored.queue.busy, timeout=10000)
         assert restored.explorer.file_type.currentData() == '剧情插图'
         assert restored.explorer.folder == folder
-        assert restored.explorer.recursive.isChecked() and restored.explorer.ab_only.isChecked()
+        assert not restored.explorer.recursive.isChecked()
+        assert restored.explorer.ab_only.isChecked()
         assert restored.explorer.search.text() == 'story'
         assert paths(restored.explorer) == visible
         assert restored_services.config['view_states'] == settings['view_states']
+        assert '全库筛选' in restored.explorer.breadcrumb.text()
+        assert not restored.explorer.tree.isEnabled()
+        assert not restored.explorer.up_button.isEnabled()
+        assert not restored.explorer.recursive.isEnabled()
+        # Returning to all types restores the exact saved folder and recursion;
+        # the global result's unrelated directories do not become its new scope.
+        restored.explorer.file_type.setCurrentIndex(0)
+        assert restored.explorer.folder == folder
+        assert not restored.explorer.recursive.isChecked()
+        assert paths(restored.explorer) == original_scope
+        assert restored.explorer.tree.isEnabled()
+        assert restored.explorer.up_button.isEnabled()
+        assert restored.explorer.recursive.isEnabled()
     finally:
         restored.close()
         restored_services.shutdown()

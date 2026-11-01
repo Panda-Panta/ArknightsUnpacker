@@ -287,9 +287,18 @@ class ExplorerView(QWidget):
         self.refresh()
 
     def refresh(self, *_):
-        self.breadcrumb.setText(str(self.root / self.folder) if self._root_selected else '')
-        self.breadcrumb.setToolTip(self.breadcrumb.text())
-        self.up_button.setEnabled(bool(self.folder))
+        category = self.file_type.currentData()
+        global_filter = category is not None
+        if global_filter:
+            scope = '全部生效资源' if self.layer.currentIndex() == 1 else '全部已扫描资源'
+            self.breadcrumb.setText('全库筛选 · ' + scope)
+            self.breadcrumb.setToolTip(str(self.root) if self._root_selected else '选择游戏目录并扫描后显示全库结果。')
+        else:
+            self.breadcrumb.setText(str(self.root / self.folder) if self._root_selected else '')
+            self.breadcrumb.setToolTip(self.breadcrumb.text())
+        self.tree.setEnabled(not global_filter)
+        self.recursive.setEnabled(not global_filter)
+        self.up_button.setEnabled(bool(self.folder) and not global_filter)
         if self.layer.currentIndex() == 1:
             rows = []
             for resource in value(self.catalog, 'resources', {}).values():
@@ -301,12 +310,12 @@ class ExplorerView(QWidget):
                 rows.append({'path': relative, 'size': value(resource, 'size', 0), 'category': value(resource, 'category', '未知用途'),
                              'layer': value(resource, 'layer', ''), 'status': value(resource, 'status', 'unknown'),
                              'logical_key': value(resource, 'logical_key'), 'source_path': path, 'mtime_ns': 0})
-        elif self.recursive.isChecked():
+        elif global_filter or self.recursive.isChecked():
             rows = [r for group in self._directory_rows.values() for r in group]
         else:
             rows = self._directory_rows.get(self.folder or '.', [])
         query = self.search.text().casefold().strip()
-        prefix = self.folder.rstrip('/') + '/' if self.folder else ''
+        prefix = self.folder.rstrip('/') + '/' if self.folder and not global_filter else ''
         visible = []
         scope_count = 0
         for row in rows:
@@ -314,7 +323,7 @@ class ExplorerView(QWidget):
             if prefix and not path.startswith(prefix):
                 continue
             scope_count += 1
-            if self.file_type.currentData() and row.get('category') != self.file_type.currentData():
+            if global_filter and row.get('category') != category:
                 continue
             if self.ab_only.isChecked() and Path(path).suffix.casefold() != '.ab':
                 continue
@@ -339,16 +348,23 @@ class ExplorerView(QWidget):
             self.results.setCurrentWidget(self.table)
             return
         self.results.setCurrentWidget(self.empty_panel)
-        if self.snapshot is None:
+        global_filter = self.file_type.currentData() is not None
+        if self.snapshot is None and (self.layer.currentIndex() == 0 or self.catalog is None):
             self.empty_title.setText('尚未扫描资源')
             self.empty.setText('在上方选择游戏目录并扫描，完成后即可按目录浏览、预览和解包。')
         elif scope_count:
             self.empty_title.setText('没有匹配的文件')
-            self.empty.setText('当前目录有文件，但没有命中筛选条件。尝试调整文件类型或关键词，或清除筛选。')
+            self.empty.setText('全库资源没有命中筛选条件。尝试调整文件类型或关键词，或清除筛选恢复原目录。' if global_filter
+                               else '当前目录有文件，但没有命中筛选条件。尝试调整文件类型或关键词，或清除筛选。')
             self.clear_filters_button.show()
         elif self.layer.currentIndex() == 1:
-            self.empty_title.setText('当前范围没有生效资源')
-            self.empty.setText('可选择其他目录，或切换到“原始文件 · 全部来源”查看已扫描的文件。')
+            self.empty_title.setText('当前来源没有生效资源' if global_filter else '当前范围没有生效资源')
+            self.empty.setText('切换到“原始文件 · 全部来源”查看已扫描的文件，或重新扫描更新资源。' if global_filter
+                               else '可选择其他目录，或切换到“原始文件 · 全部来源”查看已扫描的文件。')
+        elif global_filter:
+            self.empty_title.setText('全库没有已索引文件')
+            self.empty.setText('重新扫描以更新资源索引，或清除筛选恢复原目录。')
+            self.clear_filters_button.show()
         else:
             prefix = self.folder.rstrip('/') + '/' if self.folder else ''
             has_descendants = any(

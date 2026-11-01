@@ -117,7 +117,6 @@ class ExplorerPage(PageController):
         if (self.view.root / folder).resolve().is_relative_to(self.view.root.resolve()):
             self.view.folder = folder
             self.view.refresh()
-            self.view.breadcrumb.setText(str(self.view.root / folder))
 
 
 class UpdatesPage(PageController):
