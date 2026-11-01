@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from PySide6.QtCore import Qt, Signal, QDir
+from PySide6.QtCore import Qt, Signal, QDir, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeView,
     QTableView, QFileSystemModel, QLineEdit, QComboBox, QCheckBox, QLabel, QTextBrowser,
     QPushButton, QMenu, QHeaderView, QAbstractItemView, QFrame, QStackedWidget)
 from .models import RecordsModel, value, size_text, time_text, STATUS, selected_records, is_resource_record
+from ..library.classifications import category_labels
 
 
 def category_description(path, category):
@@ -76,6 +77,18 @@ class ExplorerView(QWidget):
         tools.addWidget(self.ab_only)
         tools.addWidget(self.recursive)
         layout.addLayout(tools)
+        filters = QHBoxLayout()
+        filters.addWidget(QLabel('文件类型'))
+        self.file_type = QComboBox()
+        self.file_type.setObjectName('resourceFileType')
+        self.file_type.setAccessibleName('资源文件类型')
+        self.file_type.setToolTip('按目录用途筛选，例如剧情插图、剧情背景或干员头像。')
+        self.file_type.addItem('全部类型', None)
+        for category in category_labels():
+            self.file_type.addItem(category, category)
+        filters.addWidget(self.file_type)
+        filters.addStretch()
+        layout.addLayout(filters)
         self.splitter = QSplitter()
         self.splitter.setObjectName('resourceSplitter')
         self.splitter.setChildrenCollapsible(False)
@@ -223,6 +236,7 @@ class ExplorerView(QWidget):
         self.layer.currentIndexChanged.connect(self.refresh)
         self.ab_only.toggled.connect(self.refresh)
         self.recursive.toggled.connect(self.refresh)
+        self.file_type.currentIndexChanged.connect(self.refresh)
         self.refresh()
 
     def set_root(self, root):
@@ -237,11 +251,23 @@ class ExplorerView(QWidget):
     def set_data(self, snapshot, changes=None, catalog=None):
         self.snapshot, self.catalog = snapshot, catalog
         self.changes = {value(c, 'path'): value(c, 'kind') for c in value(changes, 'changes', [])}
+        selected = self.file_type.currentData()
+        categories = set(category_labels())
         self._directory_rows = {}
         for record in value(snapshot, 'files', []):
             row = {k: value(record, k) for k in ('path', 'size', 'mtime_ns', 'category', 'layer', 'sha256', 'hash_status', 'first_seen_at', 'error')}
             row['status'] = self.changes.get(row['path'], 'unchanged' if value(changes, 'baseline_id') else 'first_seen')
             self._directory_rows.setdefault(Path(row['path']).parent.as_posix(), []).append(row)
+            categories.add(row['category'])
+        categories.update(value(resource, 'category', '未知用途') for resource in value(catalog, 'resources', {}).values())
+        if selected:
+            categories.add(selected)
+        with QSignalBlocker(self.file_type):
+            self.file_type.clear()
+            self.file_type.addItem('全部类型', None)
+            for category in sorted(categories):
+                self.file_type.addItem(category, category)
+            self.file_type.setCurrentIndex(max(0, self.file_type.findData(selected)))
         self.refresh()
 
     def select_directory(self, index):
@@ -288,6 +314,8 @@ class ExplorerView(QWidget):
             if prefix and not path.startswith(prefix):
                 continue
             scope_count += 1
+            if self.file_type.currentData() and row.get('category') != self.file_type.currentData():
+                continue
             if self.ab_only.isChecked() and Path(path).suffix.casefold() != '.ab':
                 continue
             if query and query not in (path + ' ' + row.get('category', '')).casefold():
@@ -298,8 +326,11 @@ class ExplorerView(QWidget):
         self.update_empty_state(scope_count)
 
     def clear_filters(self):
-        self.search.clear()
-        self.ab_only.setChecked(False)
+        with QSignalBlocker(self.search), QSignalBlocker(self.ab_only), QSignalBlocker(self.file_type):
+            self.search.clear()
+            self.ab_only.setChecked(False)
+            self.file_type.setCurrentIndex(0)
+        self.refresh()
 
     def update_empty_state(self, scope_count):
         self.clear_filters_button.hide()
@@ -313,7 +344,7 @@ class ExplorerView(QWidget):
             self.empty.setText('在上方选择游戏目录并扫描，完成后即可按目录浏览、预览和解包。')
         elif scope_count:
             self.empty_title.setText('没有匹配的文件')
-            self.empty.setText('当前目录有文件，但没有命中筛选条件。尝试缩短关键词，或清除筛选。')
+            self.empty.setText('当前目录有文件，但没有命中筛选条件。尝试调整文件类型或关键词，或清除筛选。')
             self.clear_filters_button.show()
         elif self.layer.currentIndex() == 1:
             self.empty_title.setText('当前范围没有生效资源')

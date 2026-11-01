@@ -903,3 +903,11 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 已普通快进同步同一私有main/test并更新D:\Tools\ArknightsUnpacker：完整备份507旧0.1.12程序项，替换8、499不变、无新增／删除；同步时118用户文件摘要保持。安装版启动7.88秒、重启7.72秒均通过，原5扫描／2资料快照payload、6新增干员／8新增模组、设置与原导出保持。另备份22项数据库／设置／queue，正常恢复／查看产生6条新成功任务并按原20上限回收6条旧成功记录，非成功保留、无预览回收；其余96保护文件与507程序项再核。证据为frozen-module-verification.json、installed-verification.json、sync-result.json；回退为backup-0.1.12/与runtime-cleanup-backup/。
 
 已发布私有v0.1.13与ZIP／校验附件。ZIP为73,672,034字节、SHA256 b293d54952b3c433a39964954f3706899b56fa76900596bf3fe88b487458e61e；EXE SHA256 22de25d8f3a8a041f8cd5fb0982e5d1d3f86b83163a7b71cba10d4c90af50ba2。按真实路径清理本构建pyinstaller／tmp共17文件26,503,078字节，1521项来源／安装／回退程序文件与ZIP再次核验不变；原用户文件、其他构建与旧发布保留。后补计划／验收／README不改153项程序输入，最终refs及附件摘要由verify_remote.py记录release-result.json。本轮复用既有工具，无新增领域流程或记忆更新。
+
+### 14.16 资源浏览按文件类型筛选（2026-11-01，实施中）
+
+在资源浏览页增加与更新记录同口径的“文件类型”下拉框，默认全部类型，包含剧情插图等用途标签；原始文件与当前生效资源均按各自已有category字段过滤，支持与搜索／仅.ab／目录范围及包含子目录组合。复用library.classifications.category_labels及观测到的自定义类别，不另建分类表或更改解包器；全选当前结果与选中预览／解包只使用可见记录。清除筛选恢复全部类型并保留目录与子目录范围；显式“整个目录递归解包”仍按原约定处理整个目录。查看状态按标签保存，旧状态缺字段默认全部类型，重新扫描和恢复保持选择。
+
+沿用个人模式与共享干净test基线39c91ff。并行：update_filters独占explorer.py下拉框、刷新／空状态及GUI组合筛选回归；entity_diff独占pages.py的ExplorerPage状态保存恢复及独立状态回归；接口固定为view.file_type（QComboBox，itemData为用途标签或None）。主agent负责版本／文档、集成、真实保存快照的冻结筛选／重启与安装验证、Git和交付。复用0.1.13清单／打包／备份工具，证据为.work/explorer-file-types-20261101/；以0.1.14交付同一私有仓库与D:\Tools\ArknightsUnpacker，保护数据／设置／原导出，不重跑无关游戏解析或资源提取。
+
+实现与源码验收：新下拉框独立第二行，两个来源均按已有category叠加筛选；规则／snapshot／catalog类别和当前选择合并，切换来源与重新载入不丢选择。状态按标签保存，旧／缺字段默认全部，自定义类别可恢复；清除只重置类型／关键词／AB，选中动作据可见模型取路径，显式整目录保持旧合同。UI先12项红测后相关44项通过，补强旧生效视图范围边界后单项1通过；状态先12项红测后相关32项通过，含真实AppServices／MainWindow写settings后重启且禁止重扫／解码。两包互审无阻塞。主agent完整verify.ps1为477 passed／1 local deselected（102.45秒），仅pytest缓存写入警告；后续冻结／安装结果单独登记。

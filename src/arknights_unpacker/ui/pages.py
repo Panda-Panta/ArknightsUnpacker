@@ -95,15 +95,23 @@ class ExplorerPage(PageController):
 
     def save_state(self):
         return {'folder': self.view.folder, 'recursive': self.view.recursive.isChecked(),
-                'ab_only': self.view.ab_only.isChecked(), 'search': self.view.search.text()}
+                'ab_only': self.view.ab_only.isChecked(), 'search': self.view.search.text(),
+                'file_type': self.view.file_type.currentData()}
 
     def legacy_state(self, state):
         return {'folder': state.get('explorer_folder', ''), 'recursive': state.get('explorer_recursive', False),
-                'ab_only': state.get('explorer_ab', False), 'search': state.get('explorer_search', '')}
+                'ab_only': state.get('explorer_ab', False), 'search': state.get('explorer_search', ''),
+                'file_type': None}
 
     def restore_state(self, state):
         self.view.recursive.setChecked(bool(state.get('recursive', False)))
         self.view.ab_only.setChecked(bool(state.get('ab_only', False)))
+        category = state.get('file_type')
+        if not isinstance(category, str) or not category.strip():
+            category = None
+        if category is not None and self.view.file_type.findData(category) < 0:
+            self.view.file_type.addItem(category, category)
+        self.view.file_type.setCurrentIndex(max(0, self.view.file_type.findData(category)))
         self.view.search.setText(state.get('search', ''))
         folder = str(state.get('folder', ''))
         if (self.view.root / folder).resolve().is_relative_to(self.view.root.resolve()):
