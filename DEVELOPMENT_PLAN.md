@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.14已交付；资源浏览文件类型筛选及状态恢复见第14.16节；干员与模组当前资料、更新记录用途／删除筛选见第14.13–15节。既有交付证据见各增量记录。
+> 状态：Windows 0.1.15源码与本机已更新；全库类型筛选见第14.17节，远端发行附件待授权。0.1.14及之前交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -919,7 +919,7 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 已发布私有v0.1.14及ZIP／校验附件。ZIP为73,672,129字节，SHA256 d1548477556dc85fbf99367899eaddb8070572af9d61483488f8f4048b510861；EXE SHA256 a1d417462d5f6caefa76a659bcac7ab942d84cb80981566bb6e2fa64547a71b6。清理本构建pyinstaller／tmp共17文件26,508,709字节，1521项来源／安装／回退程序文件与ZIP再核不变；其他构建、旧发布、必要回退与用户文件保留。后补计划／验收／README不改153项程序输入，最终refs及附件摘要由verify_remote.py记录release-result.json。沿用既有工具，无新增领域流程或记忆更新。
 
 
-### 14.17 文件类型筛选直接显示全库结果（2026-11-01，实施中）
+### 14.17 文件类型筛选直接显示全库结果（2026-11-01，源码与本机已交付，远端发行待授权）
 
 用户提出资源浏览在筛选后直接跨目录显示全部匹配结果。现有refresh先按folder／recursive裁剪，导致选择类型后仍需寻找目录。新合同：选择具体file_type时，在当前来源视图的全部已索引记录中筛选，忽略folder与recursive；搜索和仅AB仍叠加。界面明确全库范围并暂时禁用目录导航／递归控件，保留原folder／recursive值；切回全部类型或清除筛选恢复原目录范围。无新增持久化字段，不改扫描、分类、比较、解包器或用户游戏文件；显式目录解包接口保持既有合同。
 
@@ -927,3 +927,12 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 
 
 实现与源码证据：具体类型在raw汇总全部目录记录、active遍历全部catalog，不再用folder前缀裁剪；关键词／AB仍相交。复用breadcrumb标明当前来源全库，控件仅切换enabled不写原folder／recursive。删除ExplorerPage.restore_state在refresh之后重复覆写breadcrumb的旧装配，保证重启提示一致；未增加状态字段。UI红测8失败后专项17项、相关GUI29项通过；状态先复现窄目录漏结果，再单独复现重启路径覆盖，最终12项通过，含真实MainWindow保存／重启／取消类型全链。两包只读互审无阻塞。完整scripts/verify.ps1为481 passed、1 skipped（主机不支持junction创建）、1 local deselected（221.85秒），另有既有pytest缓存权限警告；日志source-verification.log。不因本轮UI改动补跑未受影响的游戏解码／浏览器，冻结与安装验收后补。
+
+
+0.1.15干净来源1d7744f0debdfc6c084f883c1b28a03e0afdcf82，构建20261101-164024-4bbc5afa；153源输入与提交、507程序项及ZIP逐项SHA／CRC通过。冻结空库原生启动5.44秒；真实保存快照停在无剧情插图的背景目录且recursive=False，首次18.33秒、重启10.25秒均得到全库318项剧情插图，与独立扫描category计数一致；导航禁用、全库提示与原folder／False保持。将隔离副本保存状态恢复为全部类型后9.81秒显示原目录100项，导航恢复。三次扫描／资料payload不变，原生截图已查看；未重扫／解码游戏。
+
+已普通快进同步既有私有main/test并更新D:\Tools\ArknightsUnpacker：旧0.1.14的507程序项完整备份核验，替换8、499不变、无新增／删除；同步时118用户文件摘要保留，目标无占用进程。安装启动11.77秒、重启8.69秒通过，原5扫描／2资料payload、6新增干员／8新增模组、全部其他设置及原导出保持。启动前另备份22项数据库／设置／queue；正常查看按既有20条上限替换6条旧成功记录，非成功保留，无预览回收，其余96保护文件及507程序项复核。回退为backup-0.1.14/和runtime-cleanup-backup/；收据frozen-explorer-verification.json、installed-verification.json、sync-result.json。
+
+本机ZIP为73,674,637字节，SHA256 0a1c6d8883bfd303b83da02243e3ce3990cddf16ce095d5b90284f4ea72eb949；EXE SHA256 50c1fee50410a536c8b9100a11c5245c3790775d52e2df93eb39fcc5510e3ae0。已清理本构建pyinstaller／tmp共17文件26,510,602字节，1521项来源／安装／回退程序文件及ZIP再核不变；其他构建、旧版与用户文件保留。
+
+远端发行未执行：创建／推送v0.1.15持久标签并上传ZIP与校验附件的命令在CreateProcess之前被自动审批拒绝，理由为本次只明确请求功能和本机更新，尚未明确授权远端发行附件；未换路径绕过。源码main/test已同步，本机已更新，0.1.14发行附件仍保留。需用户明确允许后才能继续该发行步骤；待授权版verify_remote.py --pending-release只读核对分支、构建输入、标签／发行缺席和旧附件。后补仅计划／README／验收记录，不改153程序输入，无需重建。继续复用既有工具与操作说明，无新增领域流程或记忆更新。
