@@ -76,7 +76,7 @@ def test_multiple_modules_render_one_complete_png_beyond_old_page_height(tmp_pat
     for index in range(1, 5):
         for level in (1, 2, 3):
             assert f"阶段终点{index}{level}" in actual
-    assert "最终尾部终点" in actual
+    assert "最终尾部终点" not in actual
     assert actual.count(document.title) == 1
     assert sum(text.startswith("第 ") and " 页" in text for text, _, _ in drawn) == 1
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 from pathlib import Path
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QTableView, QPushButton, QAbstractItemView, QLineEdit, QCheckBox, QMenu, QFrame,
     QStackedWidget)
 from .models import RecordsModel, value, size_text, time_text, STATUS, selected_records, is_resource_record
+from ..library.classifications import category_labels
 
 
 class UpdatesView(QWidget):
@@ -53,6 +54,24 @@ class UpdatesView(QWidget):
         self.ab_only.toggled.connect(self.refresh)
         row.addWidget(self.ab_only)
         layout.addLayout(row)
+        filters = QHBoxLayout()
+        filters.addWidget(QLabel('文件类型'))
+        self.file_type = QComboBox()
+        self.file_type.setObjectName('updatesFileType')
+        self.file_type.setAccessibleName('更新记录文件类型')
+        self.file_type.setToolTip('按目录用途筛选，例如剧情插图、剧情背景或干员头像。')
+        self.file_type.addItem('全部类型', None)
+        for category in category_labels():
+            self.file_type.addItem(category, category)
+        self.file_type.currentIndexChanged.connect(self.refresh)
+        filters.addWidget(self.file_type)
+        self.exclude_deleted = QCheckBox('排除已删除文件')
+        self.exclude_deleted.setObjectName('updatesExcludeDeleted')
+        self.exclude_deleted.setChecked(True)
+        self.exclude_deleted.toggled.connect(self.refresh)
+        filters.addWidget(self.exclude_deleted)
+        filters.addStretch()
+        layout.addLayout(filters)
         records_header = QHBoxLayout()
         records_title = QLabel('文件记录')
         records_title.setProperty('role', 'sectionTitle')
@@ -134,6 +153,20 @@ class UpdatesView(QWidget):
 
     def set_data(self, snapshot, changes, hours=24):
         self.snapshot, self.changes, self.hours = snapshot, changes, hours
+        selected = self.file_type.currentData()
+        categories = set(category_labels())
+        records = list(value(snapshot, 'files', []))
+        for change in value(changes, 'changes', []):
+            records.extend(record for record in (value(change, 'before'), value(change, 'after')) if record)
+        categories.update(value(record, 'category', '未知用途') for record in records)
+        if selected:
+            categories.add(selected)
+        with QSignalBlocker(self.file_type):
+            self.file_type.clear()
+            self.file_type.addItem('全部类型', None)
+            for category in sorted(categories):
+                self.file_type.addItem(category, category)
+            self.file_type.setCurrentIndex(max(0, self.file_type.findData(selected)))
         self.refresh()
 
     def refresh(self, *_):
@@ -170,6 +203,10 @@ class UpdatesView(QWidget):
             kind = value(change, 'kind', 'unchanged') if baseline else 'first_seen'
             status = STATUS.get(kind, kind)
             category = value(record, 'category', '未知用途')
+            if self.exclude_deleted.isChecked() and kind == 'removed':
+                continue
+            if self.file_type.currentData() and category != self.file_type.currentData():
+                continue
             if self.ab_only.isChecked() and Path(path).suffix.casefold() != '.ab':
                 continue
             if query and query not in f'{path} {category} {status}'.casefold():
@@ -192,7 +229,7 @@ class UpdatesView(QWidget):
             self.results.setCurrentWidget(self.empty_panel)
             if keys:
                 self.empty_title.setText('没有匹配的更新记录')
-                self.empty.setText('筛选后没有记录。尝试缩短关键词，或清除“仅 .ab”等筛选条件。')
+                self.empty.setText('筛选后没有记录。尝试调整文件类型、关键词或“仅 .ab”；需要查看删除记录时，取消勾选“排除已删除文件”。')
                 self.clear_filters_button.show()
             elif not baseline and self.mode.currentIndex() in (1, 3):
                 self.empty_title.setText('尚无可比较的文件基线')
@@ -202,8 +239,12 @@ class UpdatesView(QWidget):
                 self.empty.setText('当前范围没有记录。可切换“显示范围”，或调整顶部“扫描选项”中的时间窗口后重新扫描。此列表反映本机文件观测，不代表实际发布时间。')
 
     def clear_filters(self):
-        self.search.clear()
-        self.ab_only.setChecked(False)
+        with QSignalBlocker(self.search), QSignalBlocker(self.ab_only), QSignalBlocker(self.file_type), QSignalBlocker(self.exclude_deleted):
+            self.search.clear()
+            self.ab_only.setChecked(False)
+            self.file_type.setCurrentIndex(0)
+            self.exclude_deleted.setChecked(True)
+        self.refresh()
 
     def selected_paths(self, *, images_only=False):
         if self.snapshot is None:

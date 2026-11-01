@@ -233,6 +233,7 @@ class EntityChangeSet:
     operators: list[dict[str, Any]] = field(default_factory=list)
     modules: list[dict[str, Any]] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
+    comparison_version: int = 0
 
 
 class ExportFormat(str, Enum):

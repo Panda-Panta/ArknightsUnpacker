@@ -5,6 +5,12 @@ from arknights_unpacker.paths import resource_root
 _RULES_PATH=resource_root()/'resources/folder_rules.json'
 _RULES=json.loads(_RULES_PATH.read_text(encoding='utf-8-sig'))
 
+def category_labels() -> tuple[str, ...]:
+    """Known resource-purpose labels for UI filters, from the classification rules."""
+    return tuple(sorted({label for group in ('resource', 'specific', 'system')
+                         for label in _RULES[group].values()}))
+
+
 def classify(relative: str, layer: str='other') -> str:
     p=relative.replace('\\','/').lower().strip('/')
     if layer in ('base','hot'):

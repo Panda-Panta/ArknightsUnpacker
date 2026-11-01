@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 
-from ..contracts import ReportDocument, ReportOptions, ReportSelection, as_jsonable
+from ..contracts import ReportDocument, ReportOptions, ReportSelection
 
 TEMPLATE_VERSION = '2.3.0'
 
@@ -20,7 +20,7 @@ def validate_options(options: ReportOptions) -> None:
 
 
 def compose_report(selection: ReportSelection, options: ReportOptions | None = None) -> ReportDocument:
-    """Freeze the already calculated profile values; never calculate game values."""
+    """Freeze current profiles without attaching cross-version comparisons."""
     options = deepcopy(options or ReportOptions())
     validate_options(options)
     names = [p.name for p in selection.operators]
@@ -28,19 +28,5 @@ def compose_report(selection: ReportSelection, options: ReportOptions | None = N
                '模组资料合集' if selection.modules and not names else '干员与模组资料')
     document = ReportDocument(options.title or default, deepcopy(selection.operators), deepcopy(selection.modules), options,
         {'template_version': TEMPLATE_VERSION, 'generated_at': datetime.now().astimezone().isoformat(timespec='seconds'),
-         'changes': as_jsonable(deepcopy(selection.changes)) if selection.changes else None,
          'evidence_boundary': '资料由所选本地数据快照生成；数值由领域模型提供，报告不重新计算。'})
-    restrict_changes(document)
     return document
-
-
-def restrict_changes(document: ReportDocument) -> None:
-    """Keep comparison rows scoped to the entities actually present in this page."""
-    changes = document.metadata.get('changes')
-    if not changes:
-        return
-    operators = {profile.char_id for profile in document.operators}
-    modules = {profile.equip_id for profile in document.modules}
-    modules.update(module.get('equip_id', module.get('id')) for profile in document.operators for module in profile.modules)
-    changes['operators'] = [c for c in changes.get('operators', []) if c.get('char_id', c.get('id')) in operators]
-    changes['modules'] = [c for c in changes.get('modules', []) if c.get('equip_id', c.get('id')) in modules]

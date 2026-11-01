@@ -138,7 +138,8 @@ class UpdatesPage(PageController):
 
     def save_state(self):
         return {'mode': self.view.mode.currentIndex(), 'ab_only': self.view.ab_only.isChecked(),
-                'search': self.view.search.text()}
+                'search': self.view.search.text(), 'file_type': self.view.file_type.currentData(),
+                'exclude_deleted': self.view.exclude_deleted.isChecked()}
 
     def legacy_state(self, state):
         return {'mode': state.get('update_mode', 2), 'ab_only': state.get('update_ab', False),
@@ -147,6 +148,11 @@ class UpdatesPage(PageController):
     def restore_state(self, state):
         self.view.mode.setCurrentIndex(max(0, min(3, int(state.get('mode', 2)))))
         self.view.ab_only.setChecked(bool(state.get('ab_only', False)))
+        category = state.get('file_type')
+        if category and self.view.file_type.findData(category) < 0:
+            self.view.file_type.addItem(category, category)
+        self.view.file_type.setCurrentIndex(max(0, self.view.file_type.findData(category)))
+        self.view.exclude_deleted.setChecked(bool(state.get('exclude_deleted', True)))
         self.view.search.setText(state.get('search', ''))
 
 
@@ -211,17 +217,19 @@ class EntityPage(PageController):
 
     def save_state(self):
         rows = selected_records(self.view.table)
-        return {'search': self.view.search.text(), 'only_changes': self.view.only_changes.isChecked(),
-                'only_new': self.view.only_new.isChecked(),
-                'selected_id': str(rows[0]['id']) if len(rows) == 1 else None,
-                'module_id': self.view.module_choice.currentData()}
+        state = {'search': self.view.search.text(), 'only_new': self.view.only_new.isChecked(),
+                 'selected_id': str(rows[0]['id']) if len(rows) == 1 else None,
+                 'module_id': self.view.module_choice.currentData()}
+        if self.kind == 'modules':
+            state['only_changes'] = self.view.only_changes.isChecked()
+        return state
 
     def legacy_state(self, state):
         return state.get(self.kind, {})
 
     def restore_state(self, state):
         self.view.search.setText(state.get('search', ''))
-        self.view.only_changes.setChecked(bool(state.get('only_changes', False)))
+        self.view.only_changes.setChecked(self.kind == 'modules' and bool(state.get('only_changes', False)))
         self.view.only_new.setChecked(bool(state.get('only_new', False)))
         for index, row in enumerate(self.view.model.rows):
             if str(row['id']) == state.get('selected_id'):

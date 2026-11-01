@@ -171,13 +171,13 @@ def manifest_under(directory):
     return path, json.loads(path.read_text('utf-8'))
 
 
-def test_dispatch_preserves_order_page_names_scoped_changes_and_index(tmp_path):
+def test_dispatch_preserves_order_page_names_current_profiles_and_index(tmp_path):
     from arknights_unpacker.contracts import (EntityChangeSet, ExportFormat, ModuleProfile,
         OperatorProfile, ReportOptions, ReportSelection)
     from arknights_unpacker.reports import compose_report, export_report
 
-    operators = [OperatorProfile('char/one', '甲', summary={'profession': '术师'}, metadata={'version': 'v1'}),
-                 OperatorProfile('char:two', '乙', metadata={'version': 'v2'})]
+    operators = [OperatorProfile('char/one', '甲', summary={'profession': '术师'}, trait='当前特性甲', metadata={'version': 'v1'}),
+                 OperatorProfile('char:two', '乙', trait='当前特性乙', metadata={'version': 'v2'})]
     module = ModuleProfile('equip:one', 'char/one', '甲', '共同模组', phases=[{'level': 1, 'trait': '完整模组效果'}])
     changes = EntityChangeSet('before', 'after', operators=[
         {'id': profile.char_id, 'kind': 'modified', 'changes': [
@@ -195,7 +195,8 @@ def test_dispatch_preserves_order_page_names_scoped_changes_and_index(tmp_path):
     assert [item.title for item in html] == ['甲', '乙', '模组资料合集', '混合资料 · 目录']
     for item, own, other in zip(html[:2], ('甲', '乙'), ('乙', '甲')):
         text = Path(item.path).read_text('utf-8')
-        assert f'旧特性{own}' in text and f'旧特性{other}' not in text
+        assert f'当前特性{own}' in text and f'当前特性{other}' not in text
+        assert '旧特性' not in text
     assert '完整模组效果' in Path(html[2].path).read_text('utf-8')
     index = Path(html[-1].path).read_text('utf-8')
     from urllib.parse import quote

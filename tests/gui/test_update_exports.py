@@ -28,7 +28,7 @@ def test_updates_can_filter_ab_select_all_and_request_only_images(qtbot, tmp_pat
     view = populated_updates(qtbot, tmp_path)
     assert not view.images_button.isEnabled()
     view.ab_only.setChecked(True)
-    assert view.model.rowCount() == 3
+    assert view.model.rowCount() == 2
     view.table.selectAll()
     received = []
     view.images_requested.connect(received.append)
@@ -50,6 +50,7 @@ def test_sort_keeps_selected_update_source_and_deleted_rows_cannot_export(qtbot,
     view.images_button.click()
     assert received == [[str(tmp_path / 'z-last.ab')]]
     view.table.clearSelection()
+    view.exclude_deleted.setChecked(False)
     gone = next(i for i, row in enumerate(view.model.rows) if row['path'] == 'gone.ab')
     view.table.selectRow(gone)
     assert not view.images_button.isEnabled()

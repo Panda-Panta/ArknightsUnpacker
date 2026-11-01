@@ -118,6 +118,8 @@ class AppServices:
         cannot make it the reference for the next scan or table read.
         """
         from .library import discover_installation, resolve_resources
+        from .gamedata import compare_entities
+        from .gamedata.diff import COMPARISON_VERSION
         cancel = cancel or CancelToken()
         cancel.check()
         emit({"type": "progress", "message": "正在恢复已保存的扫描与解析结果…"})
@@ -128,6 +130,19 @@ class AppServices:
         cancel.check()
         data, entity_changes, baseline = self.store.latest_data_result(installation.profile_id)
         cancel.check()
+        if data is not None and (entity_changes is None or entity_changes.comparison_version != COMPARISON_VERSION):
+            comparison_baseline = baseline
+            if comparison_baseline is None and entity_changes and entity_changes.baseline_id:
+                comparison_baseline = self.store.get_data_snapshot(entity_changes.baseline_id,
+                                                                   profile_id=installation.profile_id)
+            # Re-evaluate saved results after comparison-rule fixes. An automatic
+            # baseline remains automatic; only explicit selections set self.baseline.
+            if comparison_baseline is not None or not entity_changes or not entity_changes.baseline_id:
+                emit({"type": "progress", "message": "正在重新核对已保存资料的新增与变化…"})
+                entity_changes = replace(compare_entities(comparison_baseline, data), current_id=data.snapshot_id)
+                cancel.check()
+                self.store.save_data_changes(installation.profile_id, data, entity_changes, baseline=baseline)
+            cancel.check()
         catalog = resolve_resources(snapshot) if snapshot is not None else ResourceCatalog(installation)
         catalog.installation = installation
         cancel.check()
@@ -270,7 +285,7 @@ class AppServices:
         target = validate_output(output, root)
         spec = spec or BuildSpec()
         options = options or ReportOptions()
-        selected = ReportSelection(changes=self.entity_changes)
+        selected = ReportSelection()
         total = len(operator_ids) + len(module_ids)
         for i, char_id in enumerate(operator_ids):
             cancel.check()

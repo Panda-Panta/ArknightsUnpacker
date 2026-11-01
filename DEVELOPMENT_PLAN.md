@@ -849,3 +849,21 @@ Tools实际原生启动6.92秒／重启5.86秒，成功记录127→20；先备�
 ZIP `ArknightsUnpacker-0.1.10-win64.zip` 为73,672,204字节，SHA-256 `db38d9beb2bbaf923b5cccf7c3e8b7f8da6e77ee48da30ae9ce179ac5a0c39fe`；EXE SHA-256 `4a9f96bbee76bb648edee6ae0093a597c5dde1240628a9f061bf13425b433a79`。私有 [v0.1.10 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.10) 的远端main/test/tag、两附件大小／GitHub摘要及旧0.1.9发布保持已核验。tag指向制品来源提交，后补README／本计划／验收记录不改153构建输入，最终refs由verify_remote.py再核验并写release-result.json。
 
 验证绝对路径、链接边界与清单后清理本构建17项中间文件（26,503,126字节），另清理未发布旧候选包及其缓存526项（284,639,887字节）；两次均核对当前制品／安装／回退1521程序项及发布ZIP不变。保留初次失败正文、截图、收据与隔离运行快照，保留正式旧发布、用户文件与必要回退；清单在cleanup-{preflight,result}.json与superseded-cleanup-{preflight,result}.json。
+
+### 14.13 实体变化判定、当前资料导出与更新记录筛选（2026-11-01，源码已验收，交付中）
+
+目标：按用户后续要求，干员页只保留“只看新增”并忽略旧变化筛选状态；模组保留新增／变化，排除仅展示时间改变的条目。所有新导出的资料只包含当前角色和模组参数，移除跨版本变化前后对照；更新记录增加按用途分类的文件类型下拉框（包含剧情插图），以及默认勾选的“排除已删除文件”。保留模组未装备／各等级的当前效果与属性、首次历史未知和不兼容快照保护、现有文件时间／基线范围与搜索／仅.ab组合筛选。旧报告、资料快照和游戏文件不迁改，历史变化结果在原基线下重新判定并缓存规则版本，设置兼容恢复。
+
+基线／资源：个人模式，共享干净test提交70cf856；复用gamedata/diff.py、ui/updates.py、ui/pages.py、reports的compose_report/model语义入口、folder_rules.json分类、tests/gamedata与tests/gui／reports及scripts/verify.ps1、build.ps1。根因待复现，优先用相同内容但不同来源／版本的快照及真实历史副本核对，不预设“所有变化均为误报”。证据和临时产物独立放.work/entity-update-filters-20261101/。
+
+并行批次：entity_diff负责gamedata差分及独立回归，调查旧快照／已存变化恢复的影响并向主agent交接；update_filters负责updates.py、仅UpdatesPage状态及独立GUI回归；主agent负责报告组装／导出回归、AppServices与公共装配（若需要）、文档、集成验证及交付。各包独占文件，不递归派工，不自行操作Git或安装。
+
+验收：真实构建入口比较相同内容、单个干员／共享技能／模组变化、新增／删除与不兼容快照；Qt筛选须与真实差分一致。导出的JSON／TXT／HTML／PNG共享当前资料，均不带跨版本before／after段落，模组三阶段照常保留。更新记录验证类型、删除开关默认值／切换、组合条件、清除和旧状态恢复。完成相关回归、完整工程检查及独立审查；按既有已核实交付目标串行固定候选、构建和同步，程序与用户数据的验证分别记录。
+
+根因与边界：Tools库的隔离副本确认78.2.0→79.0.0原存440干员／12模组差分；440干员包含6新增、434已有原始或语义变化，428项仅原始变化（含stunImmune等真实未展示参数），不能一律当作误报删除。模块4项仅uniEquipShowEnd展示截止时间变化，不应当作当前参数变化。仅忽略已实证的干员sortIndex与模组uniEquipShowEnd，保留获取／解锁条件、低等级技能和未展示玩法字段。当前应筛得6新增干员与8新增模组，源库副本取证期间摘要未变。
+
+性能与恢复：旧比较先as_jsonable深拷贝所有来源，再过滤来源，真实440干员对照耗时54.454秒。实体包补等值的提前业务投影；主agent为EntityChangeSet添加comparison_version（旧值默认0，新规则1），restore仅在旧规则且原基线可读时重算并保存变化结果，后续直接恢复；显式基线与自动基线含义不变，快照payload不重写。首次完整套件发现1项旧JSON变化断言需随新需求更新，另1项未修改JobHistory原子替换偶发WinError5；保留现场后作定向复核，不声称已修复无关IO。
+
+源码结果：最终实际源码全量历史差分3.664秒，与旧差分仅排除4个ShowEnd-only模组后完整结构逐值相等，摘要97a3ccc340922725d36313b5d946c63379ebb4b47a349252305613e02d0d9853。独立审查发现旧库无result_state时缓存缺口，已通过既有save_data_changes补齐并先红后绿；快照payload、自动／显式基线语义保留。独立领域70项、审查领域35项、缓存3项及新增GUI／导出回归通过。最终verify.ps1为444 passed／1失败／1 local deselected（70.67秒）；唯一失败的旧图片atlas用例因PNG原子替换WinError5，保留extraction-result.json并在新目录单项复核1 passed（0.32秒），未改提取引擎或声称根治偶发IO。首次JobHistory失败也有限复核通过。
+
+真实Windows Qt及生产服务从同一原Tools库副本恢复79.0.0，首次重算并恢复6.563秒，干员仅新增显示6／440，模组变化显示8／521；实际剧情插图排除删除后64条、取消排除70条。1050×700截图已查看；四格式实际导出1新增干员与2新增模组，JSON逐字段等于当前领域模型、各三级保留且不含跨版本变化集。原库SHA256为13b5f03ef1430ddba4493480f497adfeecfca57a7bbb4c209d4c671c44cf737c，验收前后不变；副本扫描／资料payload不变，未重扫或解码游戏。首个验收脚本未先处理Qt启动事件，造成空列表断言失败，改正等待入口后通过，不作为产品缺陷。证据为real-source-final/receipt.json及三页截图、entity-diff/{real-diff,projection-performance}-receipt.json、source-final-verification.log、review-root/。

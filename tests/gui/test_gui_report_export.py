@@ -161,7 +161,7 @@ def test_first_inventory_never_becomes_all_new(qtbot, tmp_path):
     window.refresh_entities()
     assert window.operators.model.rows[0]['status'] == 'unknown'
     assert not window.operators.export_new.isEnabled()
-    window.operators.only_changes.setChecked(True)
+    window.operators.only_new.setChecked(True)
     assert window.operators.model.rowCount() == 0
 
 
@@ -172,7 +172,7 @@ def test_comparable_current_records_do_not_count_as_changes(qtbot, tmp_path):
     rows = services.operators()
     rows[0]['status'] = 'current'
     window.operators.set_rows(rows, services.entity_changes, services.gamedata)
-    window.operators.only_changes.setChecked(True)
+    window.operators.only_new.setChecked(True)
     assert window.operators.model.rowCount() == 0
 
 

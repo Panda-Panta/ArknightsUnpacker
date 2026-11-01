@@ -1,6 +1,6 @@
 # 实际工程结构
 
-更新：2026-10-23。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新：2026-11-01。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
@@ -46,7 +46,7 @@ ArknightsUnpacker/
 └─ DEVELOPMENT_PLAN.md           完整主计划及最终事实记录
 ```
 
-Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG／HTML／TXT；JSON 保留完整资料和字段证据。Unity 解码运行在独立进程中，GUI 线程只处理界面与结果。
+Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG／HTML／TXT；JSON 保留完整当前资料和字段证据。`compose_report`及`export_report`不附带跨版本变化集，界面历史详情继续使用独立变化数据；模组当前各等级对照不受影响。Unity 解码运行在独立进程中，GUI 线程只处理界面与结果。
 
 `gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
 

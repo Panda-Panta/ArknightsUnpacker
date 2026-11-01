@@ -235,7 +235,9 @@ class CatalogStore:
         from ..gamedata import compare_entities
         data = loads_snapshot(row['payload'])
         previous = loads_snapshot(prior['payload']) if prior else None
-        return data, compare_entities(previous, data), None
+        changes = compare_entities(previous, data)
+        self.save_data_changes(profile_id, data, changes)
+        return data, changes, None
 
     def latest_data_snapshot(self, profile_id: str) -> GameDataSnapshot | None:
         with self._connect() as db:

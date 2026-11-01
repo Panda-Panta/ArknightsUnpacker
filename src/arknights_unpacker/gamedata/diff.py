@@ -1,20 +1,40 @@
 """Stable entity differences across compatible complete snapshots."""
+from dataclasses import fields, is_dataclass
+
 from ..contracts import EntityChangeSet, as_jsonable
 from .operators import build_operator
 from .modules import build_module
 from .repository import equipment, is_badge, stable_digest
 
+COMPARISON_VERSION = 1
+
 
 def _business(value):
+    if is_dataclass(value):
+        # Read fields without asdict's recursive copy: provenance is large and
+        # discarded below, including the sources repeated on every attribute.
+        value = {field.name: getattr(value, field.name) for field in fields(value)}
     if isinstance(value, dict):
-        return {key:_business(item) for key,item in value.items() if key not in ('metadata', 'source', 'sources', 'diagnostics', 'comparison')}
-    if isinstance(value, list):
+        return {str(key):_business(item) for key,item in value.items() if str(key) not in ('metadata', 'source', 'sources', 'diagnostics', 'comparison')}
+    if isinstance(value, (list, tuple, set)):
         return [_business(x) for x in value]
-    return value
+    return as_jsonable(value)
+
+
+def _raw_module_metadata(record):
+    if not isinstance(record, dict):
+        return record
+    # This timestamp controls presentation of a newly promoted module.
+    # Keep the separate uniEquipGetTime, unlock conditions and unknown fields.
+    return {key: value for key, value in record.items()
+            if key != 'uniEquipShowEnd'}
 
 
 def _raw_operator(data, char_id):
     ch = data.tables.get('character_table', {}).get(char_id)
+    if isinstance(ch, dict):
+        # New characters can shift every existing character's display order.
+        ch = {key: value for key, value in ch.items() if key != 'sortIndex'}
     result = {'character':ch, 'building':data.tables.get('building_data', {}).get('chars', {}).get(char_id), 'skills':{}, 'buffs':{}, 'modules':{}}
     for ref, owners in data.tables.get('_indexes', {}).get('reverse', {}).items():
         if char_id not in owners:
@@ -25,7 +45,7 @@ def _raw_operator(data, char_id):
         elif table == 'skill_table':
             result['skills'][key] = data.tables.get(table, {}).get(key)
         elif table == 'battle_equip_table':
-            result['modules'][key] = {'battle':data.tables.get(table, {}).get(key), 'meta':equipment(data.tables).get(key)}
+            result['modules'][key] = {'battle':data.tables.get(table, {}).get(key), 'meta':_raw_module_metadata(equipment(data.tables).get(key))}
     return result
 
 
@@ -42,7 +62,8 @@ def _without_text(value):
 
 
 def compare_entities(old, new):
-    result = EntityChangeSet(old.snapshot_id if old else None, new.snapshot_id)
+    result = EntityChangeSet(old.snapshot_id if old else None, new.snapshot_id,
+                             comparison_version=COMPARISON_VERSION)
     if old is None:
         result.diagnostics.append('首次发现，历史未知：已建立快照，不确认已有实体为新增。')
         return result
@@ -77,8 +98,8 @@ def compare_entities(old, new):
     ids = old_ids | new_ids
     for char_id in sorted(ids):
         before_raw, after_raw = _raw_operator(old, char_id), _raw_operator(new, char_id)
-        before = _business(as_jsonable(build_operator(old, char_id))) if char_id in old_chars else {}
-        after = _business(as_jsonable(build_operator(new, char_id))) if char_id in new_chars else {}
+        before = _business(build_operator(old, char_id)) if char_id in old_chars else {}
+        after = _business(build_operator(new, char_id)) if char_id in new_chars else {}
         changes = _fields(before, after)
         raw_changed = stable_digest(before_raw) != stable_digest(after_raw)
         if not changes and not raw_changed:
@@ -101,11 +122,11 @@ def compare_entities(old, new):
     old_eq = {k:v for k,v in equipment(old.tables).items() if not is_badge(v)}
     new_eq = {k:v for k,v in equipment(new.tables).items() if not is_badge(v)}
     for equip_id in sorted(old_eq.keys() | new_eq.keys()):
-        before = _business(as_jsonable(build_module(old, equip_id))) if equip_id in old_eq else {}
-        after = _business(as_jsonable(build_module(new, equip_id))) if equip_id in new_eq else {}
+        before = _business(build_module(old, equip_id)) if equip_id in old_eq else {}
+        after = _business(build_module(new, equip_id)) if equip_id in new_eq else {}
         changes = _fields(before, after)
-        raw_before = [old_eq.get(equip_id), old.tables.get('battle_equip_table', {}).get(equip_id)]
-        raw_after = [new_eq.get(equip_id), new.tables.get('battle_equip_table', {}).get(equip_id)]
+        raw_before = [_raw_module_metadata(old_eq.get(equip_id)), old.tables.get('battle_equip_table', {}).get(equip_id)]
+        raw_after = [_raw_module_metadata(new_eq.get(equip_id)), new.tables.get('battle_equip_table', {}).get(equip_id)]
         raw_changed = stable_digest(raw_before) != stable_digest(raw_after)
         if not changes and not raw_changed:
             continue

@@ -55,7 +55,7 @@ def test_new_modules_button_exports_one_named_collection(qtbot, tmp_path):
         payload = json.loads(next(Path(a.path) for a in job.artifacts if a.format == 'json').read_text('utf-8'))
         assert payload['title'] == '本次新增模组'
         assert {module['equip_id'] for module in payload['modules']} == set(added)
-        assert {change['equip_id'] for change in payload['metadata']['changes']['modules']} == set(added)
+        assert 'changes' not in payload['metadata']
         assert job.request['options']['module_image_layout'] == 'single'
         assert job.request['options']['title'] == '本次新增模组'
         assert len(services.entity_changes.modules) == 3

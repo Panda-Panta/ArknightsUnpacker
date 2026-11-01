@@ -33,7 +33,7 @@ def test_semantic_does_not_mutate_and_distinguishes_missing(selection):
     document = compose_report(selection, ReportOptions())
     selection.operators[0].attributes[0]['value'] = 0
     assert document.operators[0].attributes[0]['value'] == 1065
-    assert document.metadata['changes']['baseline_id'] == 'old'
+    assert 'changes' not in document.metadata
     broken = OperatorProfile('broken', '缺数据', diagnostics=['skills: missing table'])
     doc = compose_report(ReportSelection([broken]), ReportOptions())
     assert doc.metadata['template_version']
@@ -53,8 +53,8 @@ def test_safe_offline_batch_full_content(tmp_path, selection):
     sidecar = next(Path(a.path) for a in artifacts if a.format == 'json')
     data = json.loads(sidecar.read_text('utf-8'))
     assert data['operators'][0]['attributes'][0]['value'] == 1065
-    assert data['metadata']['changes']['modules'][0]['before']['name'] == '旧模组'
-    assert '旧模组' in text
+    assert 'changes' not in data['metadata']
+    assert '旧模组' not in text
     repeated = export_report(document, tmp_path, {ExportFormat.JSON})
     assert Path(repeated[0].path).parent != sidecar.parent
     manifest=json.loads((sidecar.parent.parent/'manifest.json').read_text('utf8'))
@@ -164,19 +164,20 @@ def test_real_clem_profile_player_view_and_lossless_sidecar(tmp_path):
     assert 'clz_Torappu' in sidecar and 'field_evidence' in sidecar and 'blackboard' in sidecar
 
 
-def test_changes_scoped_to_page_and_readable_field_deltas(tmp_path):
+def test_current_profiles_export_without_cross_version_deltas(tmp_path):
     from arknights_unpacker.reports.model import text_report
-    p1,p2 = OperatorProfile('a','甲'),OperatorProfile('b','乙')
+    p1,p2 = OperatorProfile('a','甲',trait='当前特性甲'),OperatorProfile('b','乙',trait='当前特性乙')
     changes = EntityChangeSet('old','new',operators=[
         {'id':'a','name':'甲','kind':'modified','changes':[{'field':'trait','before':'旧特性甲','after':'新特性甲'}]},
         {'id':'b','name':'乙','kind':'modified','changes':[{'field':'trait','before':'旧特性乙','after':'新特性乙'}]}])
     doc = compose_report(ReportSelection([p1],changes=changes),ReportOptions())
-    assert len(doc.metadata['changes']['operators']) == 1
-    assert '旧特性甲' in text_report(doc) and '新特性甲' in text_report(doc)
+    assert 'changes' not in doc.metadata
+    assert '当前特性甲' in text_report(doc) and '旧特性甲' not in text_report(doc)
     artifacts = export_report(compose_report(ReportSelection([p1,p2],changes=changes),ReportOptions()),tmp_path,{ExportFormat.HTML})
     a_page = next(Path(a.path) for a in artifacts if a.title=='甲')
     content = a_page.read_text('utf-8')
-    assert '旧特性甲' in content and '旧特性乙' not in content
+    assert '当前特性甲' in content and '当前特性乙' not in content
+    assert '旧特性甲' not in content and '旧特性乙' not in content
 
 
 def test_draft_badge_and_module_recipient_sections():

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
 import json
@@ -7,7 +8,7 @@ import re
 from uuid import uuid4
 
 from ..contracts import ExportFormat, ReportArtifact, ReportDocument, as_jsonable, CancelToken, CancelledError, null_progress
-from .compose import validate_options, restrict_changes
+from .compose import validate_options
 from .exporters import ExportContext, dispatch_exports
 
 
@@ -60,6 +61,9 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
     cancel.check()
     target = Path(target).expanduser().resolve()
     _check_source_paths(document, target)
+    # Older saved documents may still carry historical comparisons. Export only
+    # the current profiles, leaving the caller's document and old files intact.
+    document = replace(document, metadata={key: value for key, value in document.metadata.items() if key != 'changes'})
     # Bounded filenames keep ordinary Windows paths under MAX_PATH without
     # requiring a machine-wide long-path setting.
     if len(str(target)) > 160:
@@ -82,7 +86,6 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
     for index, operator in enumerate(document.operators, 1):
         single = deepcopy(document)
         single.title, single.operators, single.modules = operator.name, [deepcopy(operator)], []
-        restrict_changes(single)
         identity = sha256(operator.char_id.encode('utf-8')).hexdigest()[:8]
         prefix = f'{index:03d}_{safe_filename(operator.char_id, 20)}_{identity}'
         name = safe_filename(prefix + '_' + operator.name + '_' + str(operator.metadata.get('version', 'unknown')), name_budget)
@@ -91,7 +94,6 @@ def export_report(document: ReportDocument, target: Path, formats: set[ExportFor
         single = deepcopy(document)
         single.title = '模组资料合集' if document.modules and document.operators else document.title
         single.operators = []
-        restrict_changes(single)
         documents.append((single, 'modules' if document.modules else 'report', '', '', ''))
     try:
         context = ExportContext(document=document, directory=directory, stem=stem, documents=documents,

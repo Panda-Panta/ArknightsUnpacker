@@ -99,8 +99,11 @@ class EntityView(QWidget):
         self.search.setAccessibleName('搜索模组资料' if kind == 'modules' else '搜索干员资料')
         self.search.setClearButtonEnabled(True)
         tools.addWidget(self.search, 1)
-        self.only_changes = QCheckBox('只看新增／变化')
-        tools.addWidget(self.only_changes)
+        self.only_changes = QCheckBox('只看新增／变化', self)
+        if kind == 'modules':
+            tools.addWidget(self.only_changes)
+        else:
+            self.only_changes.hide()
         self.only_new = QCheckBox('只看新增')
         tools.addWidget(self.only_new)
         self.clear_filters_button = QPushButton('清除筛选')
@@ -300,7 +303,7 @@ class EntityView(QWidget):
     def refresh(self, *_):
         query = self.search.text().strip().casefold()
         rows = [r for r in self.all_rows if not query or query in ' '.join(str(v) for v in r.values()).casefold()]
-        if self.only_changes.isChecked():
+        if self.kind == 'modules' and self.only_changes.isChecked():
             rows = [r for r in rows if r.get('status') not in ('unknown', 'unchanged', '')]
         if self.only_new.isChecked():
             rows = [r for r in rows if r.get('status') in ('added', 'new')]

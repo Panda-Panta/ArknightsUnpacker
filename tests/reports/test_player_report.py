@@ -108,10 +108,12 @@ def test_readable_formats_remove_technical_fields_without_losing_gameplay_or_jso
     assert as_jsonable(report) == before
     artifacts = export_report(report, tmp_path, {ExportFormat.JSON})
     saved = json.loads(Path(artifacts[0].path).read_text('utf-8'))
-    assert saved == before
+    expected = deepcopy(before)
+    expected['metadata'].pop('changes')
+    assert saved == expected
     assert saved['operators'][0]['skills'][0]['blackboard'] == {'raw_blackboard_key': 1.5}
     assert saved['modules'][0]['phases'][0]['scope']['validModeIndices'] == [987654]
-    assert saved['metadata']['changes']['operators'][0]['changes'][1]['field'] == 'raw_private_field'
+    assert 'changes' not in saved['metadata']
     entries = [block.entry_id for block in semantic_blocks(report) if block.entry_id]
     assert 'skill:char_private_id:skchr_private_1' in entries
     assert 'module:char_private_id:uniequip_private_id' in entries
