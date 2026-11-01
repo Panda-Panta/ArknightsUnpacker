@@ -75,15 +75,53 @@ def worker_entry(request_file: str) -> int:
             sys.stderr = previous_stderr
 
 
+def worker_server_entry(server_directory: str) -> int:
+    """Reuse decoder imports for interactive requests, with task-local IPC.
+
+    A process crash still belongs to this worker, never to the GUI. No loaded
+    bundles or decoded outputs are cached between requests: every selection
+    reads its current source again. Idle exit also bounds retained imports.
+    """
+    root = Path(server_directory)
+    settings = json.loads((root / "server.json").read_text(encoding="utf-8"))
+    idle_timeout = float(settings.get("idle_timeout", 60))
+    command_file = root / "command.json"
+    last_request = time.monotonic()
+    while True:
+        if command_file.exists():
+            command = json.loads(command_file.read_text(encoding="utf-8"))
+            command_file.unlink()
+            request_file = Path(command["request_file"])
+            # The parent can distinguish a completed idle exit from a crash
+            # after extraction has started, and must never replay the latter.
+            (request_file.parent / "started").touch()
+            worker_entry(str(request_file))
+            last_request = time.monotonic()
+        elif time.monotonic() - last_request >= idle_timeout:
+            return 0
+        else:
+            time.sleep(0.025)
+
+
 class WorkerRunner:
     def __init__(self, work_root: Path):
         self.work_root = Path(work_root).expanduser().resolve()
         self._active = set()
         self._lock = threading.Lock()
+        self._reusable_lock = threading.Lock()
+        self._preview_server = None
+        self._preview_idle_timeout = 60.0
+        self._closed = False
 
-    def run(self, operation: str, args: dict, emit=null_progress, cancel: CancelToken | None = None):
+    def run(self, operation: str, args: dict, emit=null_progress, cancel: CancelToken | None = None, *, reusable=False):
         cancel = cancel or CancelToken()
         cancel.check()
+        if reusable:
+            if operation not in {"objects", "extract"}:
+                raise ValueError("仅交互资源浏览可复用工作进程")
+            return self._run_reusable(operation, args, emit, cancel)
+        if self._closed:
+            raise RuntimeError("工作进程管理器已关闭")
         task = self.work_root / uuid.uuid4().hex
         task.mkdir(parents=True, exist_ok=False)
         result = task / "result.json"
@@ -121,10 +159,12 @@ class WorkerRunner:
                         emit({"type": "log", "message": line.strip()})
 
         with (task / "worker.log").open("w", encoding="utf-8") as log:
-            proc = subprocess.Popen(cmd, cwd=task, stdout=log, stderr=log,
-                                    text=True, encoding="utf-8", errors="replace", env=env,
-                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             with self._lock:
+                if self._closed:
+                    raise RuntimeError("工作进程管理器已关闭")
+                proc = subprocess.Popen(cmd, cwd=task, stdout=log, stderr=log,
+                                        text=True, encoding="utf-8", errors="replace", env=env,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 self._active.add(proc)
 
             try:
@@ -157,8 +197,141 @@ class WorkerRunner:
 
     def shutdown(self):
         with self._lock:
+            self._closed = True
             processes = list(self._active)
         for proc in processes:
             if proc.poll() is None:
                 proc.terminate()
+        for proc in processes:
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=3)
+        with self._lock:
+            self._active.difference_update(processes)
+
+    def _start_preview_server(self):
+        previous = self._preview_server
+        if previous is not None:
+            with self._lock:
+                self._active.discard(previous[0])
+        root = self.work_root / ("interactive-" + uuid.uuid4().hex)
+        root.mkdir(parents=True, exist_ok=False)
+        atomic_json(root / "server.json", {"idle_timeout": self._preview_idle_timeout})
+        cmd = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            cmd += ["-X", "utf8", "-m", "arknights_unpacker"]
+        cmd += ["--worker-server", str(root)]
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+        if not getattr(sys, "frozen", False):
+            src = str(Path(__file__).resolve().parents[1])
+            env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
+        with (root / "worker.log").open("w", encoding="utf-8") as log:
+            # Registration and shutdown share the same lock, so closing the
+            # service cannot miss a process that is being launched here.
+            with self._lock:
+                if self._closed:
+                    raise RuntimeError("工作进程管理器已关闭")
+                proc = subprocess.Popen(cmd, cwd=root, stdout=log, stderr=log,
+                                        text=True, encoding="utf-8", errors="replace", env=env,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                self._active.add(proc)
+        self._preview_server = proc, root
+        return proc, root
+
+    def _run_reusable(self, operation, args, emit, cancel):
+        # Usually the GUI queue already serializes these calls; also handle
+        # independent service callers without making lock waits uncancellable.
+        while not self._reusable_lock.acquire(timeout=0.05):
+            cancel.check()
+            if self._closed:
+                raise RuntimeError("工作进程管理器已关闭")
+        try:
+            cancel.check()
+            if self._closed:
+                raise RuntimeError("工作进程管理器已关闭")
+            task = self.work_root / uuid.uuid4().hex
+            task.mkdir(parents=True, exist_ok=False)
+            result = task / "result.json"
+            marker = task / "cancel"
+            req = task / "request.json"
+            atomic_json(req, {"operation": operation, "args": args,
+                              "result_file": str(result), "cancel_file": str(marker)})
+            server = self._preview_server
+            proc, root = server if server is not None and server[0].poll() is None else self._start_preview_server()
+            atomic_json(root / "command.json", {"request_file": str(req)})
+            event_file = task / "events.jsonl"
+            event_offset = 0
+            cancelled_at = None
+            idle_retry = False
+
+            def drain_events():
+                nonlocal event_offset
+                if not event_file.exists():
+                    return
+                with event_file.open("r", encoding="utf-8") as stream:
+                    stream.seek(event_offset)
+                    while True:
+                        start = stream.tell()
+                        line = stream.readline()
+                        if not line or not line.endswith("\n"):
+                            event_offset = start
+                            break
+                        event_offset = stream.tell()
+                        try:
+                            emit(json.loads(line))
+                        except (ValueError, TypeError):
+                            emit({"type": "log", "message": line.strip()})
+
+            try:
+                while not result.exists():
+                    drain_events()
+                    if cancel.cancelled:
+                        if cancelled_at is None:
+                            marker.touch()
+                            cancelled_at = time.monotonic()
+                        elif time.monotonic() - cancelled_at > 2.0 and proc.poll() is None:
+                            proc.terminate()
+                            try:
+                                proc.wait(timeout=3)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                                proc.wait(timeout=3)
+                    if proc.poll() is not None:
+                        # Idle timeout can race command publication. Retry only
+                        # if the process never began this task; never replay an
+                        # extraction whose worker crashed after touching files.
+                        if (not idle_retry and proc.returncode == 0 and
+                                not (task / "started").exists() and not cancel.cancelled and not self._closed):
+                            proc, root = self._start_preview_server()
+                            atomic_json(root / "command.json", {"request_file": str(req)})
+                            idle_retry = True
+                            continue
+                        break
+                    time.sleep(0.025)
+                drain_events()
+                cancel.check()
+                payload = json.loads(result.read_text(encoding="utf-8")) if result.exists() else {}
+                if payload.get("status") != "succeeded":
+                    detail = payload.get("error", "工作进程未返回有效结果")
+                    raise RuntimeError(f"{detail}\n诊断日志：{root / 'worker.log'}")
+                return payload["value"]
+            except BaseException:
+                # Exceptions from progress consumers must not leave an old task
+                # running when the next caller posts a new command.
+                if not result.exists() and proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=3)
+                raise
+            finally:
+                if proc.poll() is not None:
+                    with self._lock:
+                        self._active.discard(proc)
+        finally:
+            self._reusable_lock.release()
 

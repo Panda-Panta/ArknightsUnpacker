@@ -169,7 +169,6 @@ class AppServices:
 
     def load_data(self, root, emit=null_progress, cancel=None):
         from .gamedata import load_gamedata, compare_entities
-        from .library import load_catalog
         cancel = cancel or CancelToken()
         installation = self._installation(root)
         previous = self.baseline or self.store.latest_data_snapshot(installation.profile_id)
@@ -190,7 +189,11 @@ class AppServices:
         data = self.store.save_data_snapshot(installation.profile_id, data, changes, baseline=self.baseline)
         changes = replace(changes, current_id=data.snapshot_id)
         self.gamedata, self.entity_changes = data, changes
-        self.catalog = load_catalog(installation)
+        # Entity checks only need the verified core tables. Inventorying every
+        # resource here delays their presentation and repeats the next scan.
+        # Preserve the last captured catalog; a file scan refreshes it explicitly.
+        if self.catalog is None:
+            self.catalog = ResourceCatalog(installation, diagnostics=['资源清单尚未扫描；核心资料已可使用。'])
         emit({"type": "progress", "message": f"核心数据已读取：{len(self.operators())} 名干员，{len(self.modules())} 个模组"})
         return data
 
@@ -250,7 +253,7 @@ class AppServices:
         return build_module(self._need_data(), equip_id, spec or BuildSpec())
 
     def objects(self, path, emit=null_progress, cancel=None):
-        return self.runner.run("objects", {"path": str(path)}, emit, cancel)
+        return self.runner.run("objects", {"path": str(path)}, emit, cancel, reusable=True)
 
     def extract(self, paths, output, kinds=None, object_ids=None, mode="auto", emit=null_progress, cancel=None, *, remember_output=True):
         root = str(self.installation.root) if self.installation else self.config.get("game_root", "")
@@ -270,7 +273,10 @@ class AppServices:
         request = ExtractionRequest([str(p) for p in paths], str(task_target), mode,
                                     kinds or ["image", "text", "audio", "spine"], root,
                                     object_ids or {}, request_id)
-        value = self.runner.run("extract", as_jsonable(request), emit, cancel)
+        if remember_output:
+            value = self.runner.run("extract", as_jsonable(request), emit, cancel)
+        else:
+            value = self.runner.run("extract", as_jsonable(request), emit, cancel, reusable=True)
         value["output_root"] = str(task_target)
         if remember_output:
             self.config["output_root"] = str(target)

@@ -43,6 +43,7 @@ def test_omitting_optional_page_keeps_scan_load_queue_and_state_working(qtbot, t
     game = tmp_path / 'game'
     game.mkdir()
     window.root_edit.setText(str(game))
+    window.scan_priority.setCurrentIndex(window.scan_priority.findData('files_only'))
     window.scan()
     wait_idle(qtbot, window)
     window.load_data()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 from arknights_unpacker.contracts import (DecodedTable, SourceRef, TableSourceSet, ResourceCatalog, null_progress)
 from .decoder import decode_table_bytes, DECODER_VERSION
@@ -21,9 +22,18 @@ def _sha(path):
 def _check(cancel):
     if cancel: cancel.check()
 
+@lru_cache(maxsize=32)
+def _table_pattern(names):
+    # A real IDX has hundreds of thousands of assets but only a dozen target
+    # tables. Prepare their exact alternatives once, retaining longest-name
+    # precedence and the original lowercase hash/extension boundaries.
+    alternatives='|'.join(re.escape(n) for n in sorted(names,key=lambda n:(-len(n),n)))
+    return re.compile(r'(?P<table>'+alternatives+r')(?:[0-9a-f]+)?(?:\.bytes|\.json|\.txt)?') if alternatives else re.compile(r'(?!)')
+
 def _table_name(value,names):
     value=Path(str(value).replace('\\','/')).name
-    return next((n for n in sorted(names,key=len,reverse=True) if re.fullmatch(re.escape(n)+r'(?:[0-9a-f]+)?(?:\.bytes|\.json|\.txt)?',value)),None)
+    match=_table_pattern(frozenset(names)).fullmatch(value)
+    return match.group('table') if match else None
 
 def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None):
     result={}

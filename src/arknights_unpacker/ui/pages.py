@@ -86,12 +86,15 @@ class ExplorerPage(PageController):
     def data_loaded(self):
         services = self.window.services
         root = value(services.installation, 'root')
-        if root and self.view.root != Path(root):
-            self.set_root(root)
+        if root:
+            root_changed = self.view.root != Path(root)
+            if root_changed:
+                self.set_root(root)
             physical = services.scan_snapshot
             matches = physical is not None and Path(value(physical, 'root', '')) == Path(root)
-            self.view.set_data(physical if matches else None,
-                               services.file_changes if matches else None, services.catalog)
+            snapshot = physical if matches else None
+            if root_changed or self.view.snapshot is not snapshot or self.view.catalog is not services.catalog:
+                self.view.set_data(snapshot, services.file_changes if matches else None, services.catalog)
 
     def save_state(self):
         return {'folder': self.view.folder, 'recursive': self.view.recursive.isChecked(),

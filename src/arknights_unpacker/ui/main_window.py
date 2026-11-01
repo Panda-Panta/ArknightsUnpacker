@@ -39,6 +39,8 @@ class MainWindow(QMainWindow):
         self.services = services
         self._scan_pending = False
         self._load_pending = False
+        self._scan_job = None
+        self._load_job = None
         self._monitor_stamp = None
         self._dialogs = []
         self._dialog_jobs = {}
@@ -83,6 +85,8 @@ class MainWindow(QMainWindow):
         self.queue.settled.connect(self._job_settled)
         self.queue.message.connect(self.show_status)
         self.queue.changed.connect(self._queue_changed)
+        self.queue.changed.connect(self._scan_state)
+        self.queue.changed.connect(self._load_state)
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -116,8 +120,18 @@ class MainWindow(QMainWindow):
         self.choose_root_button = QPushButton('选择目录…')
         self.choose_root_button.clicked.connect(self.choose_root)
         root_row.addWidget(self.choose_root_button)
+        self.scan_priority = QComboBox()
+        self.scan_priority.setObjectName('scanPriority')
+        self.scan_priority.setAccessibleName('检查方式')
+        self.scan_priority.addItem('干员 / 模组优先', 'data_first')
+        self.scan_priority.addItem('仅检查干员 / 模组', 'data_only')
+        self.scan_priority.addItem('仅扫描资源文件', 'files_only')
+        self.scan_priority.setCurrentIndex(max(0, self.scan_priority.findData(services.config.get('scan_priority', 'data_first'))))
+        self.scan_priority.setToolTip('资料优先：先显示干员、模组检查结果，再扫描全部资源。仅检查资料可跳过全库扫描。')
+        self.scan_priority.currentIndexChanged.connect(self._save_scan_priority)
+        root_row.addWidget(self.scan_priority)
         self.scan_button = QPushButton('扫描 / 检查更新')
-        self.scan_button.setToolTip('与程序旁已保存的完整扫描比较，不会删除原有历史结果。')
+        self.scan_button.setToolTip('按所选方式检查；干员和模组以完整资料基线判断新增，资源文件与保存的扫描比较。')
         self.scan_button.setProperty('primary', True)
         self.scan_button.setObjectName('scanButton')
         self.scan_button.clicked.connect(self.scan)
@@ -277,7 +291,7 @@ class MainWindow(QMainWindow):
         else:
             self.refresh_entities()
             self.refresh_history()
-        self.restore_view_state()
+            self.restore_view_state()
         self._view_state_ready = True
         has_results = self.services.scan_snapshot is not None or self.services.gamedata is not None
         self.refresh_session_label(restored=has_results)
@@ -330,6 +344,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(self.queue.busy)
         self.root_edit.setEnabled(not self.queue.busy)
         self.choose_root_button.setEnabled(not self.queue.busy)
+        self.scan_priority.setEnabled(not self.queue.busy)
         self.pages.queue_changed()
         self._refresh_history_actions()
         if self._closing and not self.queue.busy:
@@ -342,8 +357,8 @@ class MainWindow(QMainWindow):
             self.scan()
 
     def scan(self):
-        if self._scan_pending:
-            self.show_status('扫描已在队列中。')
+        if self._scan_pending or self._load_pending:
+            self.show_status('扫描或资料检查已在队列中。')
             return
         root = self.root_edit.text().strip()
         if not root:
@@ -357,14 +372,40 @@ class MainWindow(QMainWindow):
         self.services.config.update(game_root=root, hours=hours)
         self.services.save_config()
         self.pages.set_root(root)
+        self._scan_job = None
         self._scan_pending = True
         self.scan_button.setEnabled(False)
-        job = self.queue.submit('扫描游戏目录' + ('（严格校验）' if strict else ''),
+        mode = self.scan_priority.currentData()
+        if mode == 'files_only':
+            self._submit_file_scan(root, hours, strict)
+        else:
+            self.load_data()
+            self._scan_job = self._load_job
+            if mode == 'data_first':
+                priority_job = self._load_job
+                def continue_inventory(job):
+                    if job is not priority_job:
+                        return
+                    self.queue.settled.disconnect(continue_inventory)
+                    # A resource-only folder may have no core tables. Keep its
+                    # file scan usable, while retaining the failed data job.
+                    if not job.token.cancelled and not self._closing:
+                        self._scan_pending = True
+                        self.scan_button.setEnabled(False)
+                        self._submit_file_scan(root, hours, strict)
+                self.queue.settled.connect(continue_inventory)
+
+    def _save_scan_priority(self, *_):
+        self.services.config['scan_priority'] = self.scan_priority.currentData()
+        self.services.save_config()
+
+    def _submit_file_scan(self, root, hours, strict):
+        # submit emits changed before returning; an old completed job must not
+        # release the pending flag for the new request during that signal.
+        self._scan_job = None
+        self._scan_job = self.queue.submit('扫描游戏目录' + ('（严格校验）' if strict else ''),
                                lambda **kw: self.services.scan(root, hours=hours, strict=strict, **kw),
                                self.scanned, request={'operation': 'scan', 'root': root, 'hours': hours, 'strict': strict})
-        # Failure and cancellation must also release the scan button.
-        self.queue.changed.connect(self._scan_state)
-        self._scan_job = job
 
     def _scan_state(self):
         job = getattr(self, '_scan_job', None)
@@ -401,10 +442,10 @@ class MainWindow(QMainWindow):
             return
         self.settings.commit()
         self.remember_view_state()
+        self._load_job = None
         self._load_pending = True
         self._load_job = self.queue.submit('解析核心数据', lambda **kw: self.services.load_data(root, **kw), self.data_loaded,
                                           request={'operation': 'load_data', 'root': root, 'locale': self.services.config.get('data_locale', 'unknown')})
-        self.queue.changed.connect(self._load_state)
 
     def _load_state(self):
         job = getattr(self, '_load_job', None)

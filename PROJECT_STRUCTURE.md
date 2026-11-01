@@ -57,6 +57,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 `library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ObjectsDialog`负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
 
+0.1.18 的 `jobs.py` 通过 `__main__.py --worker-server` 为对象列表和临时资源预览按需复用单个隔离解码进程，保留逐任务请求、结果、取消和事件；每次重新读取源文件，不缓存 Unity 环境，闲置约60秒／退出回收。正式解包和核心表继续一次性进程。`main_window.py` 提供三种检查方式，默认资料检查结束后再提交全文件扫描，取消不启动后续阶段；核心表缺失保留失败任务并继续默认文件扫描。`application.load_data` 只刷新资料，保留既有文件扫描与 catalog，没有扫描时创建明确空 catalog。`library.scan` 用目录栈携带相对路径和 DirEntry 元数据；`resolver` 每层预计算相对前缀、同次 live 观测共享父目录元数据，snapshot 恢复不访问游戏文件。`ui.explorer` 按 catalog/root 缓存当前资源基础行，在更换数据或目录根时失效，搜索及用途筛选复用这些行。
+
 `ui/profile_navigation.py`给干员右侧现有QTextBrowser添加紧凑目录，目录与profile_html共用同一最终semantic_blocks，按序号创建内部锚点；EntityView负责换角色／空状态时重置导航，PNG预览窗口不增加目录。干员与模组的only_changes均为隐藏兼容属性，不参与筛选或状态保存，旧状态恢复时忽略；后勤额外通用提示Block已移除，真实阶段条目及JSON原始字段保留。
 
 主要调用链：

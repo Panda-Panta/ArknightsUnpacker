@@ -243,6 +243,8 @@ def main() -> int:
                                       "report_theme_options": [window.settings.theme.itemData(i) for i in range(window.settings.theme.count())],
                                       "report_theme_labels": [window.settings.theme.itemText(i) for i in range(window.settings.theme.count())],
                                       "queue_idle": not window.queue.busy,
+                                      "scan_priority": window.scan_priority.currentData(),
+                                      "scan_priority_options": [window.scan_priority.itemData(i) for i in range(window.scan_priority.count())],
                                       "successful_jobs": sum(job.status == '成功' for job in window.queue.jobs),
                                       "preview_cleanup": window.preview_cache.last_cleanup,
                                       "preview_cleanup_warnings": window.preview_cache.warnings,

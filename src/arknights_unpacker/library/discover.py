@@ -10,7 +10,10 @@ BASE_PARTS = ('Arknights_Data','StreamingAssets','AB','Windows')
 HOT_PARTS = ('Arknights_Data','PersistentData','Bundles')
 
 def is_reparse(path: Path) -> bool:
-    info=path.lstat()
+    return is_reparse_stat(path.lstat())
+
+def is_reparse_stat(info: os.stat_result) -> bool:
+    """Recognize links and Windows junctions from no-follow metadata."""
     return stat.S_ISLNK(info.st_mode) or bool(getattr(info,'st_file_attributes',0) & 0x400)
 
 def safe_path(root: Path, relative: str, *, check_links: bool = True) -> Path:

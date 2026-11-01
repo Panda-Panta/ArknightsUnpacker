@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 from arknights_unpacker.contracts import GameInstallation,ScanSnapshot,ScanOptions,FileRecord,CancelToken,CancelledError,null_progress,as_jsonable
-from .discover import discover_installation,is_reparse
+from .discover import discover_installation,is_reparse_stat
 from .classifications import classify
 from .resolver import collect_manifests
 
@@ -16,11 +16,6 @@ CHUNK_SIZE=1024*1024
 def validate_hours(hours:float)->float:
     if not math.isfinite(hours) or hours<=0:raise ValueError('时间窗口必须是有限的正数')
     return hours
-
-def _location(path:Path,installation:GameInstallation):
-    for layer,folder in installation.source_roots.items():
-        if path.is_relative_to(folder):return layer,path.relative_to(folder).as_posix()
-    return 'other',path.relative_to(installation.root).as_posix()
 
 def _digest(path:Path,token:CancelToken,emit)->tuple[str,os.stat_result]:
     for attempt in range(2):
@@ -55,24 +50,40 @@ def scan_installation(source:GameInstallation|ScanSnapshot,options:ScanOptions|N
     # Core data is carried by anonymous bundles/IDX; manifest and config are
     # also hashed on every quick scan. Other newly discovered files are hashed
     # after an established baseline; the first inventory is explicitly unknown.
-    roots=list(installation.source_roots.values()) if options.resource_only else [installation.root]
-    stack=list(roots)
+    # Every entry comes from an enumerated child of the selected root. Carry its
+    # relative spelling through the stack instead of rebuilding Path ancestors
+    # several times for every file in a large installation.
+    source_roots=installation.source_roots
+    layer_prefixes=[]
+    for layer,folder in source_roots.items():
+        prefix=folder.relative_to(installation.root).as_posix()
+        layer_prefixes.append((layer,'' if prefix=='.' else prefix))
+    roots=list(source_roots.values()) if options.resource_only else [installation.root]
+    stack=[]
+    for folder in roots:
+        prefix=folder.relative_to(installation.root).as_posix()
+        stack.append((folder,'' if prefix=='.' else prefix))
     try:
         token.check()
         while stack:
-            folder=stack.pop();token.check()
+            folder,parent_relative=stack.pop();token.check()
             try:
                 with os.scandir(folder) as entries:
                     for entry in entries:
                         token.check();path=Path(entry.path)
                         try:
-                            if is_reparse(path):
-                                snapshot.errors.append(f'已跳过链接/reparse: {path}');continue
-                            if entry.is_dir(follow_symlinks=False):stack.append(path);continue
-                            if not entry.is_file(follow_symlinks=False):continue
                             info=entry.stat(follow_symlinks=False)
-                            layer,logical=_location(path,installation)
-                            relative=path.relative_to(installation.root).as_posix()
+                            if is_reparse_stat(info):
+                                snapshot.errors.append(f'已跳过链接/reparse: {path}');continue
+                            relative=(parent_relative+'/' if parent_relative else '')+entry.name
+                            if entry.is_dir(follow_symlinks=False):stack.append((path,relative));continue
+                            if not entry.is_file(follow_symlinks=False):continue
+                            layer,logical='other',relative
+                            relative_key=relative.casefold()
+                            for candidate,prefix in layer_prefixes:
+                                if not prefix or relative_key.startswith(prefix.casefold()+'/'):
+                                    layer,logical=candidate,relative[len(prefix)+1:] if prefix else relative
+                                    break
                             before=old.get(relative.casefold())
                             record=FileRecord(relative,info.st_size,info.st_mtime_ns,path.suffix.lower(),layer,classify(logical,layer),first_seen_at=(before.first_seen_at if before and before.first_seen_at is not None else started))
                             metadata_changed=before is not None and (before.size,before.mtime_ns)!=(info.st_size,info.st_mtime_ns)

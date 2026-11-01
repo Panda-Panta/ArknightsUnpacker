@@ -54,6 +54,7 @@ class ExplorerView(QWidget):
         self.folder = ''
         self._root_selected = False
         self._directory_rows = {}
+        self._resource_rows = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
@@ -241,6 +242,7 @@ class ExplorerView(QWidget):
 
     def set_root(self, root):
         self.root = Path(root)
+        self._resource_rows = None
         self.folder = ''
         self._root_selected = True
         self.fs.setRootPath(str(self.root))
@@ -250,6 +252,7 @@ class ExplorerView(QWidget):
 
     def set_data(self, snapshot, changes=None, catalog=None):
         self.snapshot, self.catalog = snapshot, catalog
+        self._resource_rows = None
         self.changes = {value(c, 'path'): value(c, 'kind') for c in value(changes, 'changes', [])}
         selected = self.file_type.currentData()
         categories = set(category_labels())
@@ -300,16 +303,7 @@ class ExplorerView(QWidget):
         self.recursive.setEnabled(not global_filter)
         self.up_button.setEnabled(bool(self.folder) and not global_filter)
         if self.layer.currentIndex() == 1:
-            rows = []
-            for resource in value(self.catalog, 'resources', {}).values():
-                path = value(resource, 'path')
-                try:
-                    relative = Path(path).relative_to(self.root).as_posix() if path else value(resource, 'logical_key', '')
-                except ValueError:
-                    relative = str(path)
-                rows.append({'path': relative, 'size': value(resource, 'size', 0), 'category': value(resource, 'category', '未知用途'),
-                             'layer': value(resource, 'layer', ''), 'status': value(resource, 'status', 'unknown'),
-                             'logical_key': value(resource, 'logical_key'), 'source_path': path, 'mtime_ns': 0})
+            rows = self._current_resource_rows()
         elif global_filter or self.recursive.isChecked():
             rows = [r for group in self._directory_rows.values() for r in group]
         else:
@@ -333,6 +327,24 @@ class ExplorerView(QWidget):
         self.model.replace(visible)
         self.update_selection()
         self.update_empty_state(scope_count)
+
+    def _current_resource_rows(self):
+        # Catalog/root changes invalidate these display rows. Search, category
+        # and directory filters can then reuse paths instead of converting the
+        # entire active manifest again for every keystroke.
+        if self._resource_rows is None:
+            rows = []
+            for resource in value(self.catalog, 'resources', {}).values():
+                path = value(resource, 'path')
+                try:
+                    relative = Path(path).relative_to(self.root).as_posix() if path else value(resource, 'logical_key', '')
+                except ValueError:
+                    relative = str(path)
+                rows.append({'path': relative, 'size': value(resource, 'size', 0), 'category': value(resource, 'category', '未知用途'),
+                             'layer': value(resource, 'layer', ''), 'status': value(resource, 'status', 'unknown'),
+                             'logical_key': value(resource, 'logical_key'), 'source_path': path, 'mtime_ns': 0})
+            self._resource_rows = rows
+        return self._resource_rows
 
     def clear_filters(self):
         with QSignalBlocker(self.search), QSignalBlocker(self.ab_only), QSignalBlocker(self.file_type):

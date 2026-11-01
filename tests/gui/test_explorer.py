@@ -82,6 +82,7 @@ def wait_idle(qtbot, window):
 
 def test_scan_filter_multiselect_and_no_automatic_core_load(qtbot, tmp_path):
     window, services = make_window(qtbot, tmp_path)
+    window.scan_priority.setCurrentIndex(window.scan_priority.findData('files_only'))
     game = tmp_path / 'game'
     game.mkdir()
     window.root_edit.setText(str(game))

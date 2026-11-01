@@ -18,12 +18,17 @@ def test_preview_output_is_not_saved_but_formal_output_is(tmp_path, monkeypatch,
     target = tmp_path / 'p'
     source = tmp_path / 'source.ab'
     source.write_bytes(b'read-only fixture')
-    monkeypatch.setattr(service.runner, 'run', lambda *args: {'status': 'succeeded', 'outputs': []})
+    calls = []
+    def run(*args, **kwargs):
+        calls.append(kwargs)
+        return {'status': 'succeeded', 'outputs': []}
+    monkeypatch.setattr(service.runner, 'run', run)
     service.gamedata = GameDataSnapshot('fixture', '1', '1', {})
     monkeypatch.setattr(service, 'operator_profile', lambda *args: OperatorProfile('char_fixture', '预览测试'))
     try:
         if operation == 'extract':
             service.extract([str(source)], target, remember_output=remember)
+            assert calls == ([{}] if remember else [{'reusable': True}])
         else:
             service.export(['char_fixture'], [], target, {ExportFormat.JSON}, remember_output=remember)
         expected = target if remember else official

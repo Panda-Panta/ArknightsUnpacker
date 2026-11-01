@@ -38,6 +38,19 @@ def _object_paths(env):
         except AttributeError: pass
     return result
 
+def _object_name(obj):
+    # UnityPy's name-only reader avoids parsing texture/audio/MonoBehaviour
+    # payloads merely to populate the inventory. Keep the existing fallback
+    # for formats where the installed type tree has no name-peek node.
+    try:
+        peek=getattr(obj,'peek_name',None)
+        name=peek() if callable(peek) else None
+        if isinstance(name,str):return name
+    except Exception:
+        pass
+    try:return getattr(obj.read(),'m_Name','')
+    except Exception:return ''
+
 def list_bundle_objects(path):
     path=Path(path)
     with path.open('rb') as stream:head=stream.read(16)
@@ -49,8 +62,7 @@ def list_bundle_objects(path):
     for obj in env.objects:
         name=''
         if obj.type.name in {'TextAsset','Texture2D','Sprite','AudioClip','VideoClip','Material','MonoBehaviour'}:
-            try: name=getattr(obj.read(),'m_Name','')
-            except Exception: pass
+            name=_object_name(obj)
         item={'id':str(obj.path_id),'type':obj.type.name,'name':name,'logical_path':paths.get(str(obj.path_id),'')}
         if obj.type.name=='VideoClip':item['previewable']=False
         items.append(item)

@@ -7,9 +7,10 @@ verification. Short manifest tokens are preserved and never called corruption.
 """
 from __future__ import annotations
 import re
+import stat
 from pathlib import Path
 from arknights_unpacker.contracts import GameInstallation, ScanSnapshot, ResourceCatalog, ResolvedResource
-from .discover import discover_installation, safe_path, is_reparse
+from .discover import safe_path, is_reparse_stat
 from .manifests import read_manifest
 from .classifications import classify
 
@@ -26,6 +27,29 @@ def collect_manifests(installation:GameInstallation)->tuple[dict,list[str]]:
 
 def _index(manifest):
     return {x['name'].replace('\\','/'):x for x in manifest.get('abInfos',[]) if isinstance(x,dict) and isinstance(x.get('name'),str)}
+
+def _live_file_stat(folder, name, path, directories):
+    """Observe each shared parent once; never follow a reparse candidate.
+
+    This cache belongs to one catalog observation, like the captured metadata in
+    the snapshot branch. It is not reused when the game is checked again.
+    The relative path has already passed safe_path's syntax validation.
+    """
+    parts=name.split('/')
+    parent=''
+    for part in parts[:-1]:
+        parent=(parent+'/' if parent else '')+part
+        if parent not in directories:
+            try:directories[parent]=(folder/parent).lstat()
+            except (FileNotFoundError,NotADirectoryError):directories[parent]=None
+        info=directories[parent]
+        if info is not None and is_reparse_stat(info):
+            raise ValueError(f'不跟随链接: {folder/parent}')
+        if info is None or not stat.S_ISDIR(info.st_mode):return None
+    try:info=path.lstat()
+    except (FileNotFoundError,NotADirectoryError):return None
+    if is_reparse_stat(info):raise ValueError(f'不跟随链接: {path}')
+    return info if stat.S_ISREG(info.st_mode) else None
 
 def resolve_resources(source:ScanSnapshot|GameInstallation)->ResourceCatalog:
     if isinstance(source,ScanSnapshot):
@@ -46,22 +70,26 @@ def resolve_resources(source:ScanSnapshot|GameInstallation)->ResourceCatalog:
         return catalog
     base_entries=_index(manifests.get('base',{}))
     active_entries=_index(active)
+    source_roots=[(layer,folder,folder.relative_to(installation.root).as_posix())
+                  for layer,folder in installation.source_roots.items()]
+    directories={layer:{} for layer,_,_ in source_roots}
     for name,item in active_entries.items():
         token=str(item.get('md5',''))
         kind='md5' if re.fullmatch('[0-9a-fA-F]{32}',token) else 'short_token' if re.fullmatch('[0-9a-fA-F]{4}',token) else 'unknown'
         result=ResolvedResource(name,None,expected_hash=token,category=classify(name,'base'),metadata={'manifest_entry':item,'active_layer':active_layer,'hash_kind':kind,'content_verified':False,'candidates':[]})
         candidates=[]
         try:
-            for layer,folder in installation.source_roots.items():
-                p=safe_path(folder,name,check_links=records is None)
-                relative=p.relative_to(installation.root).as_posix()
+            for layer,folder,prefix in source_roots:
+                p=safe_path(folder,name,check_links=False)
+                relative=name if prefix=='.' else prefix+'/'+name
                 if records is not None:
                     rec=records.get(relative.casefold())
                     if rec is None:continue
                     size=rec.size;error=rec.error
                 else:
-                    if not p.is_file():continue
-                    info=p.stat();size=info.st_size;error=None
+                    info=_live_file_stat(folder,name,p,directories[layer])
+                    if info is None:continue
+                    size=info.st_size;error=None
                 candidate={'path':str(p),'layer':layer,'size':size,'error':error}
                 candidates.append(candidate)
         except (OSError,ValueError) as exc:
