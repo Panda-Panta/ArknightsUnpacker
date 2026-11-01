@@ -501,11 +501,12 @@ def semantic_blocks(document: ReportDocument) -> list[Block]:
             blocks.append(Block('模组', [('状态', _missing(profile, '模组', ('module', 'equip', '模组')))], group='模组'))
     for index, module in enumerate(document.modules, 1):
         blocks.extend(_module_blocks(as_jsonable(module), fallback_id=f'index-{index}'))
-    if document.metadata.get('changes'):
+    # Operator dossiers show current parameters, including their modules.
+    # Only standalone module history views retain cross-version comparison.
+    if document.metadata.get('changes') and not document.operators:
         changes = document.metadata['changes']
-        names = {profile.char_id: profile.name for profile in document.operators}
-        names.update({profile.equip_id: profile.name for profile in document.modules})
-        for category in ('operators','modules'):
+        names = {profile.equip_id: profile.name for profile in document.modules}
+        for category in ('modules',):
             for index, change in enumerate(changes.get(category, []), 1):
                 identity = change.get('id') or change.get('equip_id') or change.get('char_id')
                 raw_name = change.get('name') or names.get(identity)

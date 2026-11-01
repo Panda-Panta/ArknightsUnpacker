@@ -99,8 +99,9 @@ def test_readable_formats_remove_technical_fields_without_losing_gameplay_or_jso
         for phrase in ('狙击', '分支未确认', '657', '战术技能1', '战术技能2', '战术技能3',
                        '第3技能完整效果', '制造专长', '部署费用-1', '战术模组', '1级', '2级', '3级',
                        '精英2', '60级', '仅指定作战模式生效', '可确认的中文玩法', '具体范围未确认',
-                       '召唤物1', '召唤物2', '生命上限', '旧技能效果', '新技能效果', '效果未确认'):
+                       '召唤物1', '召唤物2', '生命上限', '效果未确认'):
             assert phrase in output
+        assert '旧技能效果' not in output and '新技能效果' not in output
         for internal in ('raw_', 'char_private', 'skchr_private', 'uniequip_private', 'token_private',
                          'map_private', '987654', '912345', 'SHA-256', 'JSON', '诊断', '来源与诊断',
                          '资料口径与版本', '干员ID', '模组ID', '技能ID'):
@@ -117,6 +118,77 @@ def test_readable_formats_remove_technical_fields_without_losing_gameplay_or_jso
     entries = [block.entry_id for block in semantic_blocks(report) if block.entry_id]
     assert 'skill:char_private_id:skchr_private_1' in entries
     assert 'module:char_private_id:uniequip_private_id' in entries
+
+
+def test_legacy_operator_history_of_every_field_and_linked_modules_cannot_change_current_rendering():
+    current = document()
+    current.metadata.pop('changes')
+    current.operators[0].building_skills = [
+        {'slot': 1, 'name': '早期制造专长', 'description': '生产效率+10%',
+         'room': 'MANUFACTURE', 'unlock': {'phase': 'PHASE_0', 'level': 1}},
+        {'slot': 1, 'name': '后期制造专长', 'description': '生产效率+25%',
+         'room': 'MANUFACTURE', 'unlock': {'phase': 'PHASE_2', 'level': 30}},
+    ]
+    legacy = deepcopy(current)
+    operator = as_jsonable(current.operators[0])
+    module = as_jsonable(current.modules[0])
+    # Cover every profile field and both legacy history shapes. The boundary
+    # must exclude the history itself, regardless of its labels or payload.
+    legacy.metadata['changes'] = {
+        'operators': [{'id': operator['char_id'], 'name': operator['name'], 'kind': 'modified',
+            'before': {'name': '历史干员旧值', 'trait': '历史特性旧值'},
+            'after': {'name': '历史干员新值', 'trait': '历史特性新值'},
+            'changes': [{'field': key, 'before': f'历史字段旧值-{key}', 'after': value}
+                        for key, value in operator.items()]}],
+        'modules': [{'id': module['equip_id'], 'name': module['name'], 'kind': 'modified',
+            'changes': [{'field': 'phases', 'before': [{'level': 1, 'trait': '历史模组旧值'}],
+                         'after': module['phases']}]}],
+    }
+    original = deepcopy(as_jsonable(legacy))
+    assert semantic_blocks(legacy) == semantic_blocks(current)
+    assert text_report(legacy) == text_report(current)
+    assert render_html(legacy) == render_html(current)
+    assert layout_pages(legacy) == layout_pages(current)
+    text = text_report(legacy)
+    assert all(value in text for value in ('657', '第3技能完整效果', '早期制造专长', '后期制造专长',
+                                           '生产效率+10%', '生产效率+25%', '精英0、1级', '精英2、30级',
+                                           '未装备', '1级', '2级', '3级', '第3级特性效果'))
+    assert not any(block.group == '更新对照' for block in semantic_blocks(legacy))
+    assert as_jsonable(legacy) == original
+
+
+def test_operator_only_legacy_change_document_does_not_create_an_update_report():
+    current = ReportDocument('资料')
+    legacy = deepcopy(current)
+    legacy.metadata['changes'] = {'operators': [
+        {'name': '历史干员', 'kind': 'modified', 'changes': [
+            {'field': 'attributes', 'before': [{'key': 'atk', 'value': 100}],
+             'after': [{'key': 'atk', 'value': 200}]},
+            {'field': 'building_skills', 'before': [{'name': '旧后勤', 'description': '旧效果'}],
+             'after': [{'name': '新后勤', 'description': '新效果'}]},
+        ]}]}
+    assert semantic_blocks(legacy) == semantic_blocks(current)
+    assert text_report(legacy) == text_report(current)
+    assert render_html(legacy) == render_html(current)
+    assert layout_pages(legacy) == layout_pages(current)
+
+
+def test_standalone_module_history_stays_available_without_operator_history():
+    report = ReportDocument('模组资料', metadata={'changes': {'modules': [
+        {'name': '模组', 'kind': 'modified', 'changes': [
+            {'field': 'phases', 'before': [{'level': 1, 'attributes': [{'key': 'atk', 'value': 20}]}],
+             'after': [{'level': 1, 'attributes': [{'key': 'atk', 'value': 30}]}]},
+        ]}]}})
+    mixed = deepcopy(report)
+    mixed.metadata['changes']['operators'] = [
+        {'name': '历史干员', 'kind': 'modified', 'changes': [
+            {'field': 'trait', 'before': '历史特性旧值', 'after': '历史特性新值'}]}]
+    assert semantic_blocks(mixed) == semantic_blocks(report)
+    assert text_report(mixed) == text_report(report)
+    assert render_html(mixed) == render_html(report)
+    assert layout_pages(mixed) == layout_pages(report)
+    assert '更新前' in text_report(mixed) and '更新后' in text_report(mixed)
+    assert '最终值：20' in text_report(mixed) and '最终值：30' in text_report(mixed)
 
 
 def test_potential_effects_keep_confirmed_labels_without_guessing_units():

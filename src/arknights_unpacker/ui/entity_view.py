@@ -293,7 +293,7 @@ class EntityView(QWidget):
         self.summary.setText('尚未解析。点击“解析核心数据”建立当前目录的资料快照。')
         self.diagnostics.clear()
         self.diagnostics.hide()
-        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看属性、技能及更新变化。</p>')
+        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看当前属性、技能、后勤及模组资料。</p>')
         self.module_choice.blockSignals(True)
         self.module_choice.clear()
         self.module_choice.addItem('无模组 · 满级／满潜／满信赖', None)
@@ -377,7 +377,7 @@ class EntityView(QWidget):
         if len(rows) != 1:
             title = f'已选择 {len(rows):,} 项资料' if rows else '从列表中选择一项'
             description = ('点击列表中的一行查看详情；下方可预览或导出所选资料。' if self._has_loaded
-                           else '解析完成后，可查看属性、技能及更新变化。资料中的诊断与来源将随导出保留。')
+                           else '解析完成后，可查看当前属性、技能、后勤及模组资料。完整来源随 JSON 资料保存。')
             self.details.setHtml(f'<h2>{title}</h2><p>{description}</p>')
             return
         if len(rows) == 1:
@@ -391,7 +391,9 @@ class EntityView(QWidget):
                 self.module_choice.blockSignals(False)
                 self.details.setPlainText('正在读取当前资料…')
             if rows[0].get('status') == 'removed':
-                self.details.setHtml('<h2>已删除的资料</h2>' + self.diff_html(str(rows[0]['id'])))
+                self.details.setHtml('<h2>已删除的资料</h2>' +
+                    ('<p>当前快照中已无此干员，无法查看或导出当前资料。</p>' if self.kind == 'operators'
+                     else self.diff_html(str(rows[0]['id']))))
                 return
             spec = BuildSpec(module_id=self.module_choice.currentData())
             self.profile_requested.emit(entity_id, spec)
@@ -399,7 +401,8 @@ class EntityView(QWidget):
     def set_profile(self, profile):
         self.current_profile = profile
         entity_id = value(profile, 'char_id') if self.kind == 'operators' else value(profile, 'equip_id')
-        self.details.setHtml(profile_html(profile) + self.diff_html(str(entity_id)))
+        self.details.setHtml(profile_html(profile) +
+            (self.diff_html(str(entity_id)) if self.kind == 'modules' else ''))
         if self.kind == 'operators':
             current = self.module_choice.currentData()
             self.module_choice.blockSignals(True)

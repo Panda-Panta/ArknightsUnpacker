@@ -193,6 +193,7 @@ def main() -> int:
                                       "gamedata_id": getattr(services.gamedata, 'snapshot_id', None),
                                       "operators": len(services.operators()), "modules": len(services.modules()),
                                       "operator_changes_filter_hidden": window.operators.only_changes.isHidden() if window.operators else None,
+                                      "operator_details_text": window.operators.details.toPlainText() if window.operators else '',
                                       "module_changes_filter_hidden": window.modules.only_changes.isHidden() if window.modules else None,
                                       "update_file_types": [window.updates.file_type.itemData(i) for i in range(window.updates.file_type.count())] if window.updates else [],
                                       "update_exclude_deleted": window.updates.exclude_deleted.isChecked() if window.updates else None,

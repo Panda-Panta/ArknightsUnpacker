@@ -138,7 +138,7 @@ def test_real_reference_detail_uses_readable_report_blocks_and_keeps_evidence(qt
     assert '&lt;img src=x' in escaped
 
 
-def test_detail_diff_uses_semantic_changes_without_raw_evidence(qtbot):
+def test_direct_operator_history_detail_omits_all_cross_version_sections(qtbot):
     from PySide6.QtWidgets import QTextBrowser
     from arknights_unpacker.ui.report_preview import changes_html
     changes = EntityChangeSet('before', 'after', operators=[{
@@ -150,9 +150,7 @@ def test_detail_diff_uses_semantic_changes_without_raw_evidence(qtbot):
     qtbot.addWidget(browser)
     browser.setHtml(changes_html(changes, 'operators', 'char_fixture'))
     text = browser.toPlainText()
-    assert '更新前' in text and '更新后' in text
-    assert '旧技能' in text and '新技能' in text and '<测试说明>' in text
-    assert 'hidden-getter' not in text and 'raw_fields_only' not in text
+    assert text == ''
 
 
 def test_first_inventory_never_becomes_all_new(qtbot, tmp_path):
