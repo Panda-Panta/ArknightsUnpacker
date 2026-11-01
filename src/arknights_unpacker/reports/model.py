@@ -487,8 +487,6 @@ def semantic_blocks(document: ReportDocument) -> list[Block]:
             blocks.append(Block('天赋 · ' + _player_name(talent.get('name'), '未命名天赋'), rows, group='天赋'))
         if not profile.talents:
             blocks.append(Block('天赋', [('状态', _missing(profile, '天赋', ('talent','天赋')))], group='天赋'))
-        if any('slot' in skill for skill in profile.building_skills):
-            blocks.append(Block('后勤技能', [('说明', '升级后的技能替换同一位置的旧技能。')], group='后勤'))
         for skill in profile.building_skills:
             blocks.append(Block('后勤 · ' + _player_name(skill.get('name'), '未命名后勤技能'), _complete_rows(skill, ('description','room','unlock'), {'name'}), group='后勤'))
         if not profile.building_skills:

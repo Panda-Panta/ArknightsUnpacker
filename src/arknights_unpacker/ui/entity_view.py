@@ -100,10 +100,7 @@ class EntityView(QWidget):
         self.search.setClearButtonEnabled(True)
         tools.addWidget(self.search, 1)
         self.only_changes = QCheckBox('只看新增／变化', self)
-        if kind == 'modules':
-            tools.addWidget(self.only_changes)
-        else:
-            self.only_changes.hide()
+        self.only_changes.hide()
         self.only_new = QCheckBox('只看新增')
         tools.addWidget(self.only_new)
         self.clear_filters_button = QPushButton('清除筛选')
@@ -196,8 +193,14 @@ class EntityView(QWidget):
         self.details.setObjectName(kind + 'Details')
         self.details.setOpenExternalLinks(False)
         self.details.document().setDocumentMargin(18)
-        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看属性、技能及更新变化。资料中的诊断与来源将随导出保留。</p>')
-        detail_layout.addWidget(self.details)
+        self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看当前属性、技能、后勤及模组资料。</p>')
+        self.profile_navigation = None
+        if kind == 'operators':
+            from .profile_navigation import ProfileNavigation
+            self.profile_navigation = ProfileNavigation(self.details, detail)
+            detail_layout.addWidget(self.profile_navigation)
+        self.navigation = self.profile_navigation
+        detail_layout.addWidget(self.details, 1)
         split.addWidget(detail)
         split.setStretchFactor(0, 5)
         split.setStretchFactor(1, 6)
@@ -293,6 +296,8 @@ class EntityView(QWidget):
         self.summary.setText('尚未解析。点击“解析核心数据”建立当前目录的资料快照。')
         self.diagnostics.clear()
         self.diagnostics.hide()
+        if self.profile_navigation is not None:
+            self.profile_navigation.clear()
         self.details.setHtml('<h2>从列表中选择一项</h2><p>解析完成后，可查看当前属性、技能、后勤及模组资料。</p>')
         self.module_choice.blockSignals(True)
         self.module_choice.clear()
@@ -303,8 +308,6 @@ class EntityView(QWidget):
     def refresh(self, *_):
         query = self.search.text().strip().casefold()
         rows = [r for r in self.all_rows if not query or query in ' '.join(str(v) for v in r.values()).casefold()]
-        if self.kind == 'modules' and self.only_changes.isChecked():
-            rows = [r for r in rows if r.get('status') not in ('unknown', 'unchanged', '')]
         if self.only_new.isChecked():
             rows = [r for r in rows if r.get('status') in ('added', 'new')]
         self.model.replace(rows)
@@ -326,7 +329,7 @@ class EntityView(QWidget):
             self.load_requested.emit()
 
     def update_empty_state(self):
-        self.clear_filters_button.setEnabled(bool(self.search.text() or self.only_changes.isChecked() or self.only_new.isChecked()))
+        self.clear_filters_button.setEnabled(bool(self.search.text() or self.only_new.isChecked()))
         if self.model.rows:
             self.list_stack.setCurrentWidget(self.table)
             return
@@ -375,6 +378,8 @@ class EntityView(QWidget):
         rows = selected_records(self.table)
         self.update_count()
         if len(rows) != 1:
+            if self.profile_navigation is not None:
+                self.profile_navigation.clear()
             title = f'已选择 {len(rows):,} 项资料' if rows else '从列表中选择一项'
             description = ('点击列表中的一行查看详情；下方可预览或导出所选资料。' if self._has_loaded
                            else '解析完成后，可查看当前属性、技能、后勤及模组资料。完整来源随 JSON 资料保存。')
@@ -385,12 +390,16 @@ class EntityView(QWidget):
             if entity_id != self._active_entity_id:
                 self._active_entity_id = entity_id
                 self.current_profile = None
+                if self.profile_navigation is not None:
+                    self.profile_navigation.clear()
                 self.module_choice.blockSignals(True)
                 self.module_choice.clear()
                 self.module_choice.addItem('无模组 · 满级／满潜／满信赖', None)
                 self.module_choice.blockSignals(False)
                 self.details.setPlainText('正在读取当前资料…')
             if rows[0].get('status') == 'removed':
+                if self.profile_navigation is not None:
+                    self.profile_navigation.clear()
                 entity_type = '干员' if self.kind == 'operators' else '模组'
                 self.details.setHtml(f'<h2>已删除的资料</h2><p>当前快照中已无此{entity_type}，无法查看或导出当前资料。</p>')
                 return
@@ -399,7 +408,10 @@ class EntityView(QWidget):
 
     def set_profile(self, profile):
         self.current_profile = profile
-        self.details.setHtml(profile_html(profile))
+        if self.profile_navigation is not None:
+            self.profile_navigation.set_profile(profile)
+        else:
+            self.details.setHtml(profile_html(profile))
         if self.kind == 'operators':
             current = self.module_choice.currentData()
             self.module_choice.blockSignals(True)

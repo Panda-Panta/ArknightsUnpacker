@@ -227,8 +227,6 @@ class EntityPage(PageController):
         state = {'search': self.view.search.text(), 'only_new': self.view.only_new.isChecked(),
                  'selected_id': str(rows[0]['id']) if len(rows) == 1 else None,
                  'module_id': self.view.module_choice.currentData()}
-        if self.kind == 'modules':
-            state['only_changes'] = self.view.only_changes.isChecked()
         return state
 
     def legacy_state(self, state):
@@ -236,7 +234,7 @@ class EntityPage(PageController):
 
     def restore_state(self, state):
         self.view.search.setText(state.get('search', ''))
-        self.view.only_changes.setChecked(self.kind == 'modules' and bool(state.get('only_changes', False)))
+        self.view.only_changes.setChecked(False)
         self.view.only_new.setChecked(bool(state.get('only_new', False)))
         for index, row in enumerate(self.view.model.rows):
             if str(row['id']) == state.get('selected_id'):

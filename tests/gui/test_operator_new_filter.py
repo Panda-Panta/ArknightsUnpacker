@@ -1,16 +1,16 @@
-"""Operators expose additions only; module comparison filters remain available."""
+"""Both entity pages expose additions as their only status filter."""
 from arknights_unpacker.contracts import EntityChangeSet
 from arknights_unpacker.ui.entity_view import EntityView
 from test_explorer import make_window
 
 
-def test_operator_page_offers_only_new_filter_and_module_keeps_changes(qtbot):
+def test_operator_and_module_pages_offer_only_the_new_filter(qtbot):
     for kind in ('operators', 'modules'):
         view = EntityView(kind)
         qtbot.addWidget(view)
         view.show()
         assert view.only_new.isVisible()
-        assert view.only_changes.isVisible() == (kind == 'modules')
+        assert not view.only_changes.isVisible()
 
 
 def test_only_new_excludes_existing_changes_and_initial_inventory(qtbot):

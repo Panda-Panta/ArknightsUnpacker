@@ -119,10 +119,13 @@ def main() -> int:
     parser.add_argument("--smoke-test", metavar="JSON", help=argparse.SUPPRESS)
     parser.add_argument("--preview-source", help=argparse.SUPPRESS)
     parser.add_argument("--preview-kind", choices=('image', 'audio', 'video', 'text'), default='image', help=argparse.SUPPRESS)
+    parser.add_argument("--profile-navigation-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.preview_source and not args.smoke_test:
         parser.error('--preview-source requires --smoke-test')
+    if args.profile_navigation_test and (not args.smoke_test or args.preview_source):
+        parser.error('--profile-navigation-test requires --smoke-test without --preview-source')
     from .application import AppServices
     try:
         services = AppServices(args.data_dir, output_root=args.output_dir)
@@ -173,12 +176,57 @@ def main() -> int:
         receipt = validate_output(validate_data_root(Path(args.smoke_test)),
                                   args.game_root or services.config.get("game_root"))
         smoke_started = time.monotonic()
+        profile_navigation_proof = {}
+        profile_navigation_target = None
         def record():
+            nonlocal profile_navigation_target
+            rescheduled = False
             if window.queue.busy or window._restore_pending:
                 if time.monotonic() - smoke_started < 25:
                     QTimer.singleShot(100, record)
                     return
             try:
+                if args.profile_navigation_test:
+                    view = window.operators
+                    navigation = getattr(view, 'profile_navigation', None)
+                    if navigation is None or view.current_profile is None or navigation.sections.count() < 2:
+                        if time.monotonic() - smoke_started < 25:
+                            rescheduled = True
+                            QTimer.singleShot(100, record)
+                            return
+                        raise AssertionError('Operator profile directory was not restored')
+                    if profile_navigation_target is None:
+                        profile_navigation_target = next((i for i in range(navigation.sections.count())
+                            if navigation.sections.itemData(i) is not None and '后勤' in navigation.sections.itemText(i)), None)
+                        assert profile_navigation_target is not None, 'No real building-skill directory entry'
+                        navigation.sections.setCurrentIndex(profile_navigation_target)
+                        rescheduled = True
+                        QTimer.singleShot(180, record)
+                        return
+                    target_scroll = view.details.verticalScrollBar().value()
+                    assert target_scroll > 0, 'Directory did not scroll the actual details browser'
+                    navigation.back_to_top.click()
+                    top_scroll = view.details.verticalScrollBar().value()
+                    assert top_scroll == 0, top_scroll
+                    navigation.sections.setCurrentIndex(profile_navigation_target)
+                    profile_navigation_proof.update(operator_id=view.current_profile.char_id,
+                        building_skill_count=len(view.current_profile.building_skills),
+                        titles=[navigation.sections.itemText(i) for i in range(navigation.sections.count())],
+                        anchor=navigation.sections.itemData(profile_navigation_target),
+                        target_scroll=target_scroll, top_scroll=top_scroll)
+                    module_view = window.modules
+                    assert module_view.only_changes.isHidden() and not module_view.only_changes.isChecked()
+                    old_new = module_view.only_new.isChecked()
+                    module_view.only_new.setChecked(False)
+                    all_modules = module_view.model.rowCount()
+                    module_view.only_new.setChecked(True)
+                    new_modules = module_view.model.rowCount()
+                    expected_new = sum(row.get('status') in ('added', 'new') for row in module_view.all_rows)
+                    assert new_modules == expected_new > 0
+                    module_view.only_new.setChecked(old_new)
+                    profile_navigation_proof.update(all_modules=all_modules, filtered_new_modules=new_modules,
+                                                    expected_new_modules=expected_new)
+                    assert '升级后的技能替换同一位置的旧技能。' not in view.details.toPlainText()
                 image_path = receipt.with_suffix(".png")
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 window.grab().save(str(image_path))
@@ -203,6 +251,7 @@ def main() -> int:
                                       "operators": len(services.operators()), "modules": len(services.modules()),
                                       "operator_changes_filter_hidden": window.operators.only_changes.isHidden() if window.operators else None,
                                       "operator_details_text": window.operators.details.toPlainText() if window.operators else '',
+                                      "profile_navigation": profile_navigation_proof,
                                       "module_changes_filter_hidden": window.modules.only_changes.isHidden() if window.modules else None,
                                       "module_details_text": window.modules.details.toPlainText() if window.modules else '',
                                       "explorer_file_types": [window.explorer.file_type.itemData(i) for i in range(window.explorer.file_type.count())] if window.explorer else [],
@@ -225,7 +274,8 @@ def main() -> int:
                                                       for name in ('arrow-down.svg', 'arrow-up.svg', 'check.svg')},
                                       "jobs": [{"job_id": job.job_id, "title": job.title, "status": job.status} for job in window.queue.jobs]})
             finally:
-                window.close()
+                if not rescheduled:
+                    window.close()
         QTimer.singleShot(1800, record)
         QTimer.singleShot(30000, lambda: app.exit(1))
     return app.exec()

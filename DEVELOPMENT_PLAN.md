@@ -963,3 +963,15 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 ZIP ArknightsUnpacker-0.1.16-win64.zip为83,009,917字节，SHA256 120a2ee0f8209c9df8e69afa98f197d430f4dbdebd12bc413658e9fd7a3ab465；EXE SHA256 c50d8577b7afb5fecc5deed7d69874743ca947be4b56adc1653e1d97593458a7。按真实路径清理本构建pyinstaller／tmp共17文件26,614,848字节，1603项来源／安装／回退程序文件及ZIP再核保持；其他版本、失败证据与用户文件保留。
 
 远端附件待授权：创建／推送v0.1.16标签和上传ZIP／校验的命令在CreateProcess之前被自动审批拒绝，原因是此前明确同意仅覆盖v0.1.15，本轮未明确授权0.1.16发行；未换路径绕过。源码main/test和本机交付已完成，旧0.1.15附件保留；待用户同意后继续。后补仅计划／README／验收，不改157程序输入；verify_remote.py --pending-release只读核对最终分支、输入一致性、v0.1.16标签／发行缺席与旧附件。继续复用既有交付工具，无新增需要写入个人记忆的内容。
+
+
+### 14.19 干员详情目录、后勤提示精简与模组仅新增（2026-11-01，实施中）
+
+用户要求干员单项资料增加目录导航，明确只加页面右侧详情，不改点击预览后的PNG窗口；删除多余“后勤技能说明”；模组只保留“只看新增”。已定位通用后勤提示来自reports/model.py在存在slot时额外生成的“后勤技能／说明：升级后的技能替换同一位置的旧技能。”；只删此额外Block，保留实际后勤名称／说明／设施／解锁条件与缺失提示。干员右侧用常驻紧凑目录下拉和返回顶部，按实际资料章节生成锚点，换角色／空状态清空导航；模组隐藏并停用only_changes，旧字段恢复时忽略、重新保存不保留，only_new及跨筛选勾选／导出保持。
+
+沿用个人模式、共享干净test基线2c34643。并行：entity_diff独占新增ui/profile_navigation.py及report_preview.py的profile_html／blocks_html导航锚点与专属测试；update_filters独占ui/entity_view.py／pages.py的模组筛选与右侧导航装配及GUI／状态测试；preview_sources独占reports/model.py的后勤额外提示移除及报告回归。共享接口为ProfileNavigation(browser,parent=None)，set_profile(profile)负责填充目录并更新browser，clear()只重置导航；目录只在operators右侧装配，现有details QTextBrowser和PNG预览API保留。主agent负责版本／文档、集成、真实保存快照的原生／冻结／安装验收、Git和交付。复用语义Block、Qt内部锚点、scripts/verify.ps1／build.ps1及.work/resource-preview-20261101/清单交付工具，证据隔离.work/profile-navigation-20261101/，0.1.17候选。完整GUI检查使用已验证的非受限环境，旧媒体验证边界仍保留，不重跑无关游戏扫描／解码或音视频矩阵。当前没有0.1.16或0.1.17远端发行授权，沿用已明确边界仅同步源码main/test与D:\Tools\ArknightsUnpacker，本轮不尝试创建发行标签或附件。
+
+
+实现与局部证据：报告层删2行额外后勤提示，原技能/slot/解锁/设施及缺失状态不改；报告红1失败后19项及全集106项通过。目录与最终semantic_blocks共用列表，序号锚点避开名称注入，同名条目独立定位；标题前缀重复另取得1失败后修正，导航最终8项及相关27项通过。模组旧changes可见/生效/恢复的3项红证据已修复，EntityView导航未装配也取得1项红证据，最终相关36项通过；only_new、跨筛选勾选与导出范围保持。各包互审无阻塞，用户明确的PNG预览窗范围保持。
+
+原生源码使用隔离的真实79.0.0保存快照，选能天使并加载右侧目录；初版标题前缀精简前的两次原生检查均实际滚动到后勤y=2478、返回顶部0，521模组筛出8项新增，两项真后勤保留，旧only_changes从两页新保存状态移除，扫描／资料payload保持。此后仅精简目录重复前缀，正文及锚点未变；最终候选冻结／安装将再核对。主agent显式--profile-navigation-test只用于此原生验收，不在常规启动中操作筛选。完整工程检查和制品/本机结果后补，不重扫游戏或重复无关音视频验收。

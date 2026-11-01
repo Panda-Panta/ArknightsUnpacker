@@ -250,11 +250,15 @@ def _escaped_text(text):
     return escape(str(text), quote=True).replace('\n', '<br>')
 
 
-def blocks_html(blocks):
+PROFILE_ANCHOR_PREFIX = 'profile-section-'
+
+
+def blocks_html(blocks, *, anchor_prefix=None):
     """Qt's rich text subset: no scripts, remote assets, or recursive raw evidence."""
     parts = []
-    for block in blocks:
-        parts.append('<h2>' + _escaped_text(block.title) + '</h2>')
+    for index, block in enumerate(blocks, 1):
+        anchor = '<a name="' + _escaped_text(f'{anchor_prefix}{index}') + '"></a>' if anchor_prefix else ''
+        parts.append('<h2>' + anchor + _escaped_text(block.title) + '</h2>')
         if block.rows:
             parts.append('<table border="1" cellspacing="0" cellpadding="5" width="100%">')
             for key, text in block.rows:
@@ -270,12 +274,14 @@ def blocks_html(blocks):
     return ''.join(parts)
 
 
-def profile_html(profile):
+def profile_html(profile, *, blocks=None):
     document = ReportDocument(title=profile.name,
         operators=[profile] if isinstance(profile, OperatorProfile) else [],
         modules=[profile] if isinstance(profile, ModuleProfile) else [])
+    if blocks is None:
+        blocks = semantic_blocks(document)
     badge = '<div style="font-size:10px; font-weight:700; color:#0093a2; letter-spacing:1px; margin-bottom:4px;">PRTS // LOCAL DOSSIER ARCHIVE</div>'
-    body = badge + '<h1>' + _escaped_text(document.title) + '</h1>' + blocks_html(semantic_blocks(document))
+    body = '<a name="' + PROFILE_ANCHOR_PREFIX + '0"></a>' + badge + '<h1>' + _escaped_text(document.title) + '</h1>' + blocks_html(blocks, anchor_prefix=PROFILE_ANCHOR_PREFIX)
     body += '<p class="footer-note">完整来源、字段读取证据及原始结构随 JSON 资料保存。</p>'
     css = (
         'body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif; color: #1c2834; background-color: #ffffff; padding: 6px; } '

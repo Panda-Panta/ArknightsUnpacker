@@ -315,6 +315,8 @@ def test_explicit_branch_names_are_preserved_and_raw_branch_ids_are_not_names():
 
 
 def test_all_building_stages_keep_duplicate_names_unlocks_and_missing_effects(tmp_path):
+    from arknights_unpacker.ui.report_preview import profile_html
+
     skills = [
         {'id': 'raw_buff_1', 'slot': 1, 'name': '后勤专长', 'description': '生产效率+10%',
          'room': 'MANUFACTURE', 'unlock': {'phase': 'PHASE_0', 'level': 1}},
@@ -328,20 +330,43 @@ def test_all_building_stages_keep_duplicate_names_unlocks_and_missing_effects(tm
     blocks = [block for block in semantic_blocks(report) if block.group == '后勤']
     entries = [block for block in blocks if block.title.startswith('后勤 · ')]
     assert len(entries) == 3
+    assert blocks == entries, 'The building section should contain actual skill stages without a generic explanation entry.'
     assert [dict(block.rows)['解锁条件'] for block in entries] == ['精英0、1级', '精英2、30级', '精英1、40级']
     assert [block.title for block in entries].count('后勤 · 后勤专长') == 2
     assert dict(entries[-1].rows)['说明'] == '效果未确认'
-    for text in (text_report(report), ''.join(VisibleText(render_html(report)).parts)):
-        assert text.count('后勤 · 后勤专长') == 2
+    png = ''.join(line.text for page in layout_pages(report) for line in page)
+    qt_details = ''.join(VisibleText(profile_html(report.operators[0])).parts)
+    for text in (text_report(report), ''.join(VisibleText(render_html(report)).parts), png, qt_details):
         assert all(phrase in text for phrase in ('生产效率+10%', '生产效率+25%', '精英2、30级', '精英1、40级',
-                                                '效果未确认', '升级后的技能替换同一位置的旧技能。'))
+                                                '制造站', '效果未确认'))
+        assert '升级后的技能替换同一位置的旧技能。' not in text
         assert 'raw_buff' not in text and 'slot' not in text and '槽号' not in text
     artifacts = export_report(report, tmp_path, {ExportFormat.JSON})
     assert json.loads(Path(artifacts[0].path).read_text('utf-8')) == original
     assert as_jsonable(report) == original
-    for skill in skills:
+    legacy = deepcopy(report)
+    for skill in legacy.operators[0].building_skills:
         skill.pop('slot')
-    assert '升级后的技能替换' not in text_report(report)
+    assert semantic_blocks(legacy) == semantic_blocks(report)
+    assert as_jsonable(report) == original
+
+
+def test_empty_building_skills_keep_the_missing_data_status_without_generic_explanation():
+    from arknights_unpacker.ui.report_preview import profile_html
+
+    report = ReportDocument('资料', operators=[OperatorProfile('owner', '干员')])
+    original = deepcopy(as_jsonable(report))
+    blocks = [block for block in semantic_blocks(report) if block.group == '后勤']
+    assert len(blocks) == 1 and blocks[0].title == '后勤技能'
+    assert len(blocks[0].rows) == 1 and blocks[0].rows[0][0] == '状态'
+    status = blocks[0].rows[0][1]
+    assert status
+    png = ''.join(line.text for page in layout_pages(report) for line in page)
+    qt_details = ''.join(VisibleText(profile_html(report.operators[0])).parts)
+    for text in (text_report(report), ''.join(VisibleText(render_html(report)).parts), png, qt_details):
+        assert status in text
+        assert '升级后的技能替换同一位置的旧技能。' not in text
+    assert as_jsonable(report) == original
 
 
 def test_real_operator_building_stages_all_reach_readable_reports():
