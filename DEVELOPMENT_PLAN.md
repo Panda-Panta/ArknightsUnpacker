@@ -985,7 +985,7 @@ ZIP ArknightsUnpacker-0.1.16-win64.zip为83,009,917字节，SHA256 120a2ee0f8209
 
 本轮未尝试创建0.1.17标签或发行附件，最后已发布下载仍为v0.1.15；只读verify_remote.py --pending-release核对最终main/test、158程序输入及旧附件，收据release-result.json。后补仅计划／README／验收记录，不改构建输入，无需重建程序。
 
-### 14.20 加载、资料优先与交互预览提速（2026-11-01，实施中）
+### 14.20 加载、资料优先与交互预览提速（2026-11-01，源码与本机已交付）
 
 用户主要先检查新增干员／模组，同时要求提升启动、文件扫描和 .ab 图片等预览速度。沿用个人模式、现有 test 和程序架构；主 agent 负责 application.py、main_window.py 的检查方式与分阶段调度、集成、文档和交付。startup_perf 独占 ui/explorer.py 的启动瓶颈及专属回归；scan_perf 独占 library/scan.py、resolver.py、discover.py 及扫描回归；preview_perf 独占 jobs.py、__main__.py、extraction/engine.py、unity.py 及进程复用回归，三包实际并行。证据分存 .work/loading-performance-20261101/{startup,scanner,preview}/，不修改用户 data 或游戏文件。
 
@@ -998,3 +998,11 @@ ZIP ArknightsUnpacker-0.1.16-win64.zip为83,009,917字节，SHA256 120a2ee0f8209
 主窗顺序／data-only／文件模式、取消和不遍历全库先取得6失败1通过的红证据再通过；独立审查另复现并修复重复检查时旧job指针提前解锁，以及data-only换安装保留旧资源行的问题，补正式回归。同轮原生真实GUI资料440／521在文件扫描启动前显示，完整扫描17,081文件成功，UI计时1204次；该次核心阶段68.92秒、总79.20秒，尚有核心表等待，未用此证明核心解析已经足够快。追加 table_perf 独占 extraction/tables.py 和新匹配回归：cProfile定位200,122次名称匹配27.35秒／整组110.39秒，拟复用正则匹配器而不改变实际表解码或来源稳定性，证据在tables子目录。scan_perf负责该包独立审查。
 
 初轮受限Windows Qt完整验证在媒体测试0xc0000008退出，保留source-verification.log；此前一次设置保存遭WinError5，单项重验通过，未为偶发环境异常修改原子写入。旧两处测试明确使用files_only验证原有手动核心解析流程，避免把新默认自动检查当成重复解析错误。最终统一检查改在项目先前已验证的非受限offscreen环境；实际原生源码／冻结／安装证据分别记录，不将环境退出说成产品根因已修复。
+
+最终统一检查577 passed／1 local deselected（182.22秒）；table匹配与相关29项另通过。表定位ABBA为8.73／10.08→1.93／1.98秒，全部12表内容SHA一致，完整新读取30.72秒（不和旧profile整组计算比例）。表包独立审查20项、31,500边界匹配、真实归一化snapshot_id与sources完全一致，compare_entities为0干员／0模组变化；两项主窗修复另由原审查者复核11项通过，无阻塞发现。
+
+干净候选f0661ee499780267a05327d7fceaff9f8919fb4a，构建20261101-210322-e6f77b81，158源输入与提交逐项一致，548程序项与ZIP逐项SHA／CRC通过。冻结实际EXE图片／音频／视频／文本分别4.81／7.02／6.72／1.88秒，视频13个1920×1080有效帧；非自动播放、静音播放／暂停seek／关闭释放、源摘要及预览回收通过。该计时包括整个显式原生验收流程，不能当作连续切换图片的服务耗时。此后没有重复全游戏解码。
+
+候选普通快进同步既有私有main/test后，按预览备份548旧0.1.17程序项再更新D:\Tools\ArknightsUnpacker，替换8、540保持、无新增／删除；同步时221用户文件SHA保持。安装启动6.61秒／重启6.42秒，原5扫描／2资料payload、440／521资料、6新增干员／8新增模组、筛选／设置／exports保持；这是本轮实际启动验收，不能据源码restore局部结果宣称整机冷启动同比提速。另以安装EXE及隔离数据5.19秒完成真实1600×900图片自动预览与关闭回收。启动前备份12项运行元数据；未删除旧任务、无旧预览回收，209其他保护文件和548程序项再核。截图已查看；备份backup-0.1.17/及runtime-cleanup-backup/，收据sync-result.json、installed-verification.json、native/{frozen,installed}/summary.json。
+
+ZIP83,024,512字节，SHA256 7f6bd6b8b2ae2261a764b58ec3443e5833160634ac8d5bada6041c3cc8fb04c9；EXE SHA256 703955a8a290faf9cdba607037cb50729bb46432524c08ac849a87fe300d1033。按既有核验脚本清理本构建中间文件，清单及保留文件复核见cleanup-result.json；旧构建、回退、用户文件及本次原始证据保留。复用既有清单交付工具并在本任务保存参数化副本，无新领域流程或个人记忆更新。后补仅本计划／README／验收，不改变158程序输入；最终verify_remote.py --pending-release只读核对main/test、输入一致性、新版发行缺席与旧0.1.15附件保持，不创建标签或上传附件。
