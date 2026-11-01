@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 import os
 import uuid
 from pathlib import Path
@@ -11,6 +10,7 @@ from arknights_unpacker.contracts import ExtractionResult, CancelledError, null_
 from .unity import load_bundle, raw_text
 from .decoder import decode_text_bytes
 from .images import full_texture_sprite_aliases, material_alpha_pairs, texture_image
+from arknights_unpacker.library.preview_types import source_preview_type
 
 def safe_component(name):
     name=re.sub(r'[<>:"/\\|?*\x00-\x1f]','_',str(name)).strip(' .')
@@ -39,13 +39,21 @@ def _object_paths(env):
     return result
 
 def list_bundle_objects(path):
-    env=load_bundle(Path(path));paths=_object_paths(env);items=[]
+    path=Path(path)
+    with path.open('rb') as stream:head=stream.read(16)
+    candidate=source_preview_type(path)
+    if candidate and not head.startswith((b'UnityFS',b'UnityRaw',b'UnityWeb')):
+        return [{'id':'source','type':candidate[0],'name':path.name,
+                 'logical_path':path.name,'previewable':True}]
+    env=load_bundle(path);paths=_object_paths(env);items=[]
     for obj in env.objects:
         name=''
-        if obj.type.name in {'TextAsset','Texture2D','Sprite','AudioClip','Material','MonoBehaviour'}:
+        if obj.type.name in {'TextAsset','Texture2D','Sprite','AudioClip','VideoClip','Material','MonoBehaviour'}:
             try: name=getattr(obj.read(),'m_Name','')
             except Exception: pass
-        items.append({'id':str(obj.path_id),'type':obj.type.name,'name':name,'logical_path':paths.get(str(obj.path_id),'')})
+        item={'id':str(obj.path_id),'type':obj.type.name,'name':name,'logical_path':paths.get(str(obj.path_id),'')}
+        if obj.type.name=='VideoClip':item['previewable']=False
+        items.append(item)
     return items
 
 def run_extraction(request,emit=null_progress,cancel=None):
@@ -62,6 +70,13 @@ def run_extraction(request,emit=null_progress,cancel=None):
     def complete_source(source):
         check()
         emit({'kind':'source_complete','source':str(source)})
+    def copy_source(source,target):
+        with source.open('rb') as original,target.open('wb') as copied:
+            while True:
+                check()
+                block=original.read(1024*1024)
+                if not block:break
+                copied.write(block)
     def save(source,obj_id,name,suffix,content,kind,*,group=None,metadata=None,flat=False):
         check()
         bucket=output if flat and not group else output/(safe_component(source.stem)+'_'+hashlib.sha256(str(source.resolve()).encode()).hexdigest()[:10])
@@ -99,17 +114,30 @@ def run_extraction(request,emit=null_progress,cancel=None):
                 result.errors.append({'source':str(source),'error':'输入不是文件'});continue
             try:
                 with source.open('rb') as f: head=f.read(16)
-                if source.suffix.lower()=='.usm':
-                    if request.mode=='raw':save(source,'source',source.stem,'.usm',lambda p:shutil.copyfile(source,p),'video_source')
+                candidate=source_preview_type(source)
+                if candidate and not head.startswith((b'UnityFS',b'UnityRaw',b'UnityWeb')):
+                    selected=set(request.object_ids.get(raw_path,request.object_ids.get(str(source),[])))
+                    if selected and not (selected & ({'source','manifest'} if source.suffix.lower()=='.idx' else {'source'})):
+                        result.skipped.append({'source':str(source),'reason':'未选中源文件对象'});continue
+                    source_kind=candidate[1]
+                    if source_kind not in kinds and not (source_kind=='spine' and 'text' in kinds):
+                        result.skipped.append({'source':str(source),'reason':'源文件不属于所选资源类型'});continue
+                    if source.suffix.lower()=='.usm':
+                        if request.mode=='raw':save(source,'source',source.stem,'.usm',lambda p:copy_source(source,p),'video_source')
+                        else:
+                            from .usm import extract_usm
+                            extract_usm(source,save,check,emit)
+                    elif source.suffix.lower()=='.idx':
+                        from .manifest import read_resource_manifest
+                        data=read_resource_manifest(source)
+                        save(source,'manifest',source.stem,'.json',json.dumps(data,ensure_ascii=False,indent=2).encode(),'manifest')
                     else:
-                        from .usm import extract_usm
-                        extract_usm(source,save,check,emit)
+                        output_kind={'text':'text_raw','spine':'spine_source'}.get(source_kind,source_kind)
+                        save(source,'source',source.stem,source.suffix,lambda p:copy_source(source,p),output_kind,
+                             metadata={'passthrough':True})
+                    complete_object(source,'source')
                     complete_source(source)
                     continue
-                if source.suffix.lower()=='.idx':
-                    from .manifest import read_resource_manifest
-                    data=read_resource_manifest(source)
-                    save(source,'manifest',source.stem,'.json',json.dumps(data,ensure_ascii=False,indent=2).encode(),'manifest');complete_source(source);continue
                 if not head.startswith((b'UnityFS',b'UnityRaw',b'UnityWeb')):
                     result.skipped.append({'source':str(source),'reason':'不支持的文件签名'});continue
                 env=load_bundle(source)

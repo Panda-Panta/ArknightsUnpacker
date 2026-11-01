@@ -23,7 +23,7 @@ def test_object_save_copies_original_bytes_after_preview_zoom(qtbot, tmp_path, m
     game.mkdir()
     source = original_png(tmp_path / 'cache' / 'original.png')
     target = tmp_path / 'exports' / 'original.png'
-    dialog = ObjectsDialog(str(game / 'portrait.ab'))
+    dialog = ObjectsDialog(str(game / 'portrait.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     dialog.show_file(source)
     dialog.image_zoom.setValue(250)
@@ -39,7 +39,7 @@ def test_original_save_does_not_overwrite_or_write_in_game(qtbot, tmp_path, monk
     game = tmp_path / 'game'
     game.mkdir()
     source = original_png(tmp_path / 'cache' / 'original.png')
-    dialog = ObjectsDialog(str(game / 'portrait.ab'))
+    dialog = ObjectsDialog(str(game / 'portrait.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     dialog.show_file(source)
     warnings = []
@@ -75,7 +75,7 @@ def test_report_save_uses_current_original_page_after_zoom(qtbot, tmp_path, monk
 
 def test_text_preview_disables_original_image_save(qtbot, tmp_path):
     source = original_png(tmp_path / 'cache' / 'original.png')
-    dialog = ObjectsDialog(str(tmp_path / 'game' / 'portrait.ab'))
+    dialog = ObjectsDialog(str(tmp_path / 'game' / 'portrait.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     dialog.show_file(source)
     assert dialog.save_original_button.isEnabled()

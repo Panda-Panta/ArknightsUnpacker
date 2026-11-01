@@ -46,9 +46,10 @@ class SettingsView(QWidget):
         form.addRow('解包方式', self.mode)
         kinds_row = QHBoxLayout()
         self.kinds = {}
-        for key, name in [('image', '图片'), ('text', '文本／数据'), ('audio', '音频'), ('spine', 'Spine')]:
+        for key, name in [('image', '图片'), ('text', '文本／数据'), ('audio', '音频'), ('video', '视频'), ('spine', 'Spine')]:
             check = QCheckBox(name)
-            check.setChecked(key in config.get('extraction_kinds', ['image', 'text', 'audio', 'spine']))
+            check.setChecked(bool(config.get('extraction_video', True)) if key == 'video' else
+                             key in config.get('extraction_kinds', ['image', 'text', 'audio', 'spine']))
             self.kinds[key] = check
             kinds_row.addWidget(check)
         form.addRow('资源类型', kinds_row)
@@ -160,6 +161,7 @@ class SettingsView(QWidget):
     def commit(self):
         self.config.update(output_root=self.output.text().strip(), extraction_mode=self.mode.currentData(),
                            extraction_kinds=[key for key, check in self.kinds.items() if check.isChecked()],
+                           extraction_video=self.kinds['video'].isChecked(),
                            formats=[fmt.value for fmt, check in self.formats.items() if check.isChecked()],
                            report_width=self.width.value(), report_font_size=self.font_size.value(),
                            report_module_image_layout=self.module_image_layout.currentData(),

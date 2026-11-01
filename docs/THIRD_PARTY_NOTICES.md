@@ -18,7 +18,7 @@
 | 组件 | 版本／来源 | 当前发行材料中的声明 |
 | --- | --- | --- |
 | Python | 3.12 x64；[Python](https://www.python.org/) | PSF 等组合许可，构建时收集实际解释器 `LICENSE.txt`。 |
-| PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only；wheel 附 `LicenseRef-Qt-Commercial.txt`，并不证明本项目持有商业许可。只收集实际用到的 Qt Core／Gui／Widgets 与必要插件，动态 DLL 留在目录式包中，可替换；不包含 QtWebEngine。保留 Qt 许可补充原文与来源记录，不据此宣称已完成所有对外分发条件核查。 |
+| PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only；wheel 附 `LicenseRef-Qt-Commercial.txt`，并不证明本项目持有商业许可。只收集实际用到的 Qt Core／Gui／Widgets／Multimedia／MultimediaWidgets 与必要插件，动态 DLL 留在目录式包中，可替换；不包含 QtWebEngine。保留 Qt 许可补充原文与来源记录，不据此宣称已完成所有对外分发条件核查。 |
 | UnityPy | 1.25.3；[上游](https://github.com/K0lb3/UnityPy) | MIT；包含其运行数据及动态类，完整 wheel LICENSE 随包。 |
 | flatbuffers / numpy / lz4 | 25.12.19 / 2.2.6 / 4.4.5 | 分别保留 wheel 的 Apache／BSD 等完整声明；numpy LICENSE 包含其本地库的多项声明。 |
 | Pillow / pycryptodome / bson | 11.3.0 / 3.23.0 / 0.5.10 | 保留各 wheel 的 LICENSE 原文，Pillow 含底层图像库声明，pycryptodome 含多来源声明。 |
@@ -37,7 +37,7 @@ FMOD 为 Firelight Technologies 产品；原生 DLL 条件应查 [FMOD 官方许
 
 ## FFmpeg 与可选视频处理
 
-当前便携包**不分发 FFmpeg／FFprobe 可执行程序**。`ffmpeg-python` 是 Python 包，不是 FFmpeg 二进制。USM 自动模式已通过 WannaCRI 分离视频／音频流，本机样本为 IVF／SFA；原始模式才复制源 USM。程序在 `PATH` 找到用户自行安装的 FFmpeg 后，可复制视频流、将音频转换为 AAC 并封装 MKV；未找到时保留分离流并记录状态。可用的 FFprobe 会用于记录流信息。
+0.1.16起，Qt Multimedia播放器随包收集锁定PySide6 wheel自带的FFmpeg媒体插件及动态库；本机avutil-59／avcodec-61／avformat-61的license接口均返回“LGPL version 2.1 or later”，随包补入GNU官方LGPL 2.1原文及来源摘要，Addons的METADATA／所附声明也按清单保留。它们用于本地音视频播放。当前便携包**不分发 FFmpeg／FFprobe 可执行程序**。`ffmpeg-python` 是 Python 包，不是 FFmpeg 二进制。USM 自动模式已通过 WannaCRI 分离视频／音频流，本机样本为 IVF／SFA；原始模式才复制源 USM。程序在 `PATH` 找到用户自行安装的 FFmpeg 后，可复制视频流、将音频转换为 AAC 并封装 MKV；未找到时保留分离流并记录状态。可用的 FFprobe 会用于记录流信息。
 
 本机 USM 样本已完成 FFprobe 音视频流核对及 FFmpeg 前一秒实际解码，证据覆盖该样本的分流、封装和短段解码，不等同于全部视频的完整播放验收。外部 FFmpeg 的许可随用户实际安装的构建选项及其来源而变化；本工具不把 Python 包的许可扩展至该外部程序。完整测试覆盖由项目 README 与 M9／引擎验收记录维护。
 

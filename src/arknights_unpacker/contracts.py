@@ -140,7 +140,7 @@ class ExtractionRequest:
     paths: list[str]
     output_root: str
     mode: str = "auto"
-    kinds: list[str] = field(default_factory=lambda: ["image", "text", "audio", "spine"])
+    kinds: list[str] = field(default_factory=lambda: ["image", "text", "audio", "spine", "video"])
     source_root: str = ""
     object_ids: dict[str, list[str]] = field(default_factory=dict)
     request_id: str = ""

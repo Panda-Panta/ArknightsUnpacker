@@ -936,3 +936,19 @@ ZIP ArknightsUnpacker-0.1.11-win64.zip为73,675,290字节，SHA256 ecef4ac475a4f
 本机ZIP为73,674,637字节，SHA256 0a1c6d8883bfd303b83da02243e3ce3990cddf16ce095d5b90284f4ea72eb949；EXE SHA256 50c1fee50410a536c8b9100a11c5245c3790775d52e2df93eb39fcc5510e3ae0。已清理本构建pyinstaller／tmp共17文件26,510,602字节，1521项来源／安装／回退程序文件及ZIP再核不变；其他构建、旧版与用户文件保留。
 
 远端发行续作：创建／推送v0.1.15持久标签并上传ZIP与校验附件的命令在CreateProcess之前被自动审批拒绝，理由为当时只明确请求功能和本机更新，尚未明确授权远端发行附件；拒绝时未换路径绕过。源码main/test已同步，本机已更新，0.1.14发行附件仍保留。用户随后明确回复“是的”，同意创建标签并上传已验证的ZIP与校验文件；本次沿用既有Git／gh完成私有v0.1.15发布，注解标签指向构建来源1d7744f，远端两附件大小／SHA均与本机一致，旧0.1.14附件未变。verify_remote.py已核对153源输入、main/test、标签与附件并写release-result.json。此次仅补发行与文档，没有重建或重复启动程序。后补仅计划／README／验收记录，不改153程序输入，无需重建。继续复用既有工具与操作说明，无新增领域流程或记忆更新。
+
+
+### 14.18 右侧自动多媒体预览（2026-11-01，实施中）
+
+用户要求检测到可预览资源后自动预览图片、视频、音频等，并进一步明确使用截图右侧的文件信息区域，集成显示。现有ObjectsDialog需手动点预览，只显示首个提取产物，音视频落入UTF-8文本分支，图片在下方被150–320高度限制。采用左侧对象列表＋右侧可伸缩预览面板，文件名／尺寸放简短状态栏；读取对象后选中首个可预览对象并自动解码，切换单个对象后防抖更新，可关闭自动预览。图片默认适应可用区域并保留原图保存；音视频使用现有PySide6 QtMultimedia，提供播放／暂停／进度／音量，默认不自动播放；文本／JSON可读显示，未知二进制显示有界十六进制，不把音视频当乱码。多产物可切换且优先解码格式；Spine组成文件可查看纹理／结构，不把结构查看声称为完整动画播放。保留手动预览、选择解包、游戏目录写保护和临时预览租约；选择变化或关闭后旧任务不得覆盖当前预览、重新打开窗口或删除在用文件。
+
+方案取舍：增加底部图片区仍难兼顾音视频和宽高；独立预览窗口已被用户明确修正；右侧统一面板直接复用现有对象选择／任务／缓存入口，符合当前要求且无需外部浏览器或新增播放框架。Qt6.8官方QMediaPlayer／QVideoWidget说明与本机已安装QtMultimedia已核对；现有FFmpeg／FFprobe为可用的可选USM封装工具，不新增全局工具安装。沿用个人模式和共享干净test基线f91b7d1。复用ui/report_preview.py、main_window.py、preview_cache.py、extraction/engine.py／usm.py及既有预览生命周期测试、scripts/verify.ps1／build.ps1；原始证据隔离.work/resource-preview-20261101/。
+
+分工并行：entity_diff独占新增ui/resource_preview.py与其面板测试，负责图片／文本／二进制／音视频播放器；update_filters独占report_preview.py的ObjectsDialog及对象自动预览／旧预览生命周期测试，负责右侧装配、防抖、代次和租约；preview_sources独占extraction/engine.py及新增源文件回归，负责USM／独立媒体对象识别、选择解码和可靠产物。主agent负责MainWindow预览请求合并／当前代次校验、浏览文件可预览判定、打包依赖／版本／文档、集成与实际冻结／安装验收、Git及交付。接口为ResourcePreviewWidget.show_files(outputs)/show_file(path)/clear()/shutdown()及ObjectsDialog.preview_generation、show_files(outputs, preview_lease=None, generation=None)、preview_failed(message, generation=None)；保持原extract_requested三参数信号。工程入口和真实游戏样本沿用既有记录，先取得失败证据，再按类型和关闭／切换生命周期验证；默认0.1.16候选，沿用已确认的私有仓库与D:\Tools\ArknightsUnpacker交付目标，保护历史／设置／导出。
+
+
+实现／源码证据：右侧ResourcePreviewWidget已装配，单对象自动预览、250ms防抖、代次拒收过期结果、每窗口单个在途＋最新待处理请求均落地。解码预览按对象类型强制auto且remember_output=False，正式导出设置独立；JSON／媒体源可直接浏览，视频类型新增默认勾选并以extraction_video保存，旧选择保留。新共享映射位于library/preview_types.py，GUI不导入整个extraction包。面板10项offscreen及10项原生Windows通过，暂停→seek→立即clear→source空→删文件两平台各5次通过；ObjectsDialog新7项红后相关28项通过，源处理新31项及引擎全集90项通过，主窗自动／合并／关闭／设置4项通过，各包互审无阻塞。
+
+真实媒体曾复现Qt6.8.3/PySide6.8.3直接stop卡住，按官方setSource空URL的停止契约清源，未增加延迟、线程或修改租约。已核对官方PYSIDE-3478修复efa7c27d8448d9054432bfa62f0b714f701e67d7与6.8.3绑定中setSource允许释放GIL的差异；该解释与双平台矩阵一致，不冒称取得C++完整线程栈。未升级依赖；打包补QtMultimedia／Widgets、Addons声明及FFmpeg DLL的LGPL2.1原文，DLL许可接口和文件来源均已记录。官方依据：https://github.com/pyside/pyside-setup/commit/efa7c27d8448d9054432bfa62f0b714f701e67d7 。
+
+原生源码用真实71_i01.ab完整显示1600×900图片（7.19秒），真实AudioClip静音播放、暂停seek／关闭通过（9.78秒），真实USM优先可播放MKV并收到12个1920×1080视频帧（9.09秒）；缓存释放和源文件摘要保持，图片截图已查看。文本初次夹具误放在当前游戏根之外，被已有输入保护正确拒绝；改用隔离的合法目录夹具后3.56秒通过，未修改保护代码或用户游戏文件。首轮完整verify为532通过、1旧用例失败、1junction跳过、1local未选（184.50秒）；失败因旧断言把JSON视为不可解包，按新增直接文本支持更新预期和精确路径后，统一verify定向6项通过。完整最终检查及冻结／安装结果后补；临时证据、失败日志均留本任务目录。

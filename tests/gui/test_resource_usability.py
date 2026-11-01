@@ -104,7 +104,9 @@ def test_resource_filter_recovery_clears_stale_details_and_preserves_scope(explo
     assert explorer.model.rowCount() == 2
     explorer.table.selectAll()
     assert '已选 2 项' in explorer.count.text()
-    assert '可解包 1 项' in explorer.count.text()
+    # Standalone JSON is now a supported preview/extraction source too.
+    assert '可解包 2 项' in explorer.count.text()
+    assert set(explorer.selected_paths()) == {str(tmp_path / 'fixture.ab'), str(tmp_path / 'notes.json')}
     explorer.table.clearSelection()
     assert '选择一个文件' in explorer.details.toPlainText()
 

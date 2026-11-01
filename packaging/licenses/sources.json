@@ -26,5 +26,12 @@
     "status": "downloaded",
     "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2",
     "bytes": 965
+  },
+  {
+    "name": "LGPL-2.1.txt",
+    "url": "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt",
+    "status": "downloaded",
+    "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+    "bytes": 26419
   }
 ]

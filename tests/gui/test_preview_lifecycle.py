@@ -31,7 +31,7 @@ def test_object_preview_cache_is_removed_when_its_dialog_closes(qtbot, tmp_path)
         return ExtractionResult(status='succeeded', outputs=[{'path': str(text)}])
 
     services.extract = extract
-    window.objects(str(package))
+    window.objects(str(package), auto_preview=False)
     wait_idle(qtbot, window)
     dialog = window._dialogs[-1]
     dialog.table.selectRow(0)
@@ -49,7 +49,7 @@ def test_object_preview_cache_is_removed_when_its_dialog_closes(qtbot, tmp_path)
 
 def test_switching_display_releases_only_the_previous_owned_preview(qtbot, tmp_path):
     cache = PreviewCache(tmp_path / 'data')
-    dialog = ObjectsDialog(str(tmp_path / 'game' / 'fixture.ab'))
+    dialog = ObjectsDialog(str(tmp_path / 'game' / 'fixture.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     first, second = cache.allocate('objects'), cache.allocate('objects')
     for lease, content in [(first, 'first'), (second, 'second')]:
@@ -76,14 +76,14 @@ def test_closed_dialog_does_not_accept_late_producer_results(qtbot, tmp_path):
     lease = cache.allocate('objects')
     source = lease.path / 'late.txt'
     source.write_text('late producer result', encoding='utf-8')
-    dialog = ObjectsDialog(str(tmp_path / 'fixture.ab'))
+    dialog = ObjectsDialog(str(tmp_path / 'fixture.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     dialog.track_preview(lease)
-    original = dialog.preview.toPlainText()
     dialog.reject()
     assert dialog.preview_closed and source.exists()
+    closed_text = dialog.preview.toPlainText()
     dialog.show_file(source, preview_lease=lease)
-    assert dialog.preview.toPlainText() == original
+    assert dialog.preview.toPlainText() == closed_text
     lease.finish()
     assert not lease.path.exists()
 

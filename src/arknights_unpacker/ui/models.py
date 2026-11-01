@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, Qt
+from ..library.preview_types import source_preview_type
 
 
 def value(obj, key, default=None):
@@ -88,4 +89,4 @@ def selected_records(table):
 
 def is_resource_record(record):
     return value(record, 'layer') in ('base', 'hot') or Path(value(record, 'path', '')).suffix.casefold() in {
-        '.ab', '.bin', '.usm', '.idx', '.bytes', '.acb', '.awb'}
+        '.ab', '.bin', '.usm', '.idx', '.bytes', '.acb', '.awb'} or source_preview_type(value(record, 'path', '')) is not None

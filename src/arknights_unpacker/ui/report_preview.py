@@ -2,9 +2,9 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 import shutil
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QPushButton, QTextBrowser, QSplitter, QAbstractItemView, QScrollArea, QComboBox, QDoubleSpinBox, QFileDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QPushButton, QTextBrowser, QSplitter, QAbstractItemView, QScrollArea, QComboBox, QDoubleSpinBox, QFileDialog, QMessageBox, QWidget, QCheckBox
 from arknights_unpacker.contracts import ReportDocument, OperatorProfile, ModuleProfile
 from arknights_unpacker.paths import validate_output
 from arknights_unpacker.reports.model import semantic_blocks
@@ -293,90 +293,122 @@ def profile_html(profile):
 class ObjectsDialog(QDialog):
     extract_requested = Signal(str, list, bool)
 
-    def __init__(self, path, parent=None):
+    def __init__(self, path, parent=None, *, auto_preview=True):
         super().__init__(parent)
+        from .resource_preview import ResourcePreviewWidget
+
         self.path = path
         self.preview_closed = False
+        self.preview_generation = 0
         self._preview_leases = []
         self._current_preview_lease = None
         self._preview_cache_roots = ()
         self._input_roots = _input_roots(parent, path)
-        self._image_path = None
-        self._image_pixmap = QPixmap()
         self.finished.connect(self._release_previews)
         self.setWindowTitle('内部对象 · ' + Path(path).name)
-        self.resize(1060, 720)
+        self.resize(1180, 780)
         layout = QVBoxLayout(self)
         self.status = QLabel('正在读取内部对象…')
+        self.status.setWordWrap(True)
+        self.status.setToolTip(str(path))
         layout.addWidget(self.status)
-        split = QSplitter()
+        self.splitter = QSplitter()
+        self.splitter.setChildrenCollapsible(False)
         self.model = RecordsModel([('对象 ID', 'id'), ('类型', 'type'), ('名称', 'name'), ('逻辑路径', 'logical_path')], self)
         self.table = QTableView()
         self.table.setModel(self.model)
+        self.table.setMinimumWidth(300)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.horizontalHeader().setStretchLastSection(True)
-        split.addWidget(self.table)
-        self.preview = QTextBrowser()
-        self.preview.setPlainText('选择图片或文本对象后点击“预览所选对象”。\n预览只写入应用缓存，不改动游戏文件。')
-        split.addWidget(self.preview)
-        split.setSizes([600, 420])
-        layout.addWidget(split, 1)
-        self.picture = QLabel()
-        self.picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.picture.setProperty('imageCanvas', True)
-        self.image_scroll = QScrollArea()
-        self.image_scroll.setWidgetResizable(False)
-        self.image_scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_scroll.setMinimumHeight(150)
-        self.image_scroll.setMaximumHeight(320)
-        self.image_scroll.setWidget(self.picture)
-        self.image_scroll.hide()
-        layout.addWidget(self.image_scroll)
-        self.image_tools = QWidget()
-        image_tools = QHBoxLayout(self.image_tools)
-        image_tools.setContentsMargins(0, 0, 0, 0)
-        image_tools.addWidget(QLabel('查看缩放'))
-        self.image_zoom = QDoubleSpinBox()
-        self.image_zoom.setObjectName('objectImageZoom')
-        self.image_zoom.setRange(1, 400)
-        self.image_zoom.setDecimals(0)
-        self.image_zoom.setSuffix(' %')
-        self.image_zoom.setValue(100)
-        self.image_zoom.setToolTip('缩放只影响预览，保存原图保留原始像素。')
-        self.image_zoom.valueChanged.connect(self.update_image)
-        image_tools.addWidget(self.image_zoom)
-        fit = QPushButton('适应预览区')
-        fit.clicked.connect(self.fit_image)
-        image_tools.addWidget(fit)
-        image_tools.addStretch()
-        self.save_original_button = QPushButton('保存原图…')
-        self.save_original_button.setObjectName('saveOriginalImage')
-        self.save_original_button.setProperty('primary', True)
-        self.save_original_button.setToolTip('保存解包后的原始图片，不受查看缩放影响。')
-        self.save_original_button.setEnabled(False)
-        self.save_original_button.clicked.connect(self.save_original)
-        image_tools.addWidget(self.save_original_button)
-        self.image_tools.hide()
-        layout.addWidget(self.image_tools)
+        self.splitter.addWidget(self.table)
+        self.preview_panel = ResourcePreviewWidget()
+        self.preview_panel.setMinimumWidth(320)
+        self.splitter.addWidget(self.preview_panel)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([400, 740])
+        layout.addWidget(self.splitter, 1)
+        # Existing original-image actions and callers share the embedded panel.
+        for name in ('preview', 'picture', 'image_scroll', 'image_tools', 'image_zoom', 'save_original_button'):
+            setattr(self, name, getattr(self.preview_panel, name))
+        self.preview.setPlainText('选择可预览对象后会自动显示。预览只写入应用缓存，不改动游戏文件。')
+        self.preview_panel.save_original_requested.connect(self.save_original)
         row = QHBoxLayout()
-        preview = QPushButton('预览所选对象')
-        preview.clicked.connect(lambda: self.request(True))
-        extract = QPushButton('解包所选对象')
-        extract.clicked.connect(lambda: self.request(False))
-        row.addWidget(preview)
-        row.addWidget(extract)
+        self.auto_preview = QCheckBox('自动预览')
+        self.auto_preview.setObjectName('automaticObjectPreview')
+        self.auto_preview.setChecked(bool(auto_preview))
+        self.auto_preview.setToolTip('选择单个图片、音视频或文本对象后自动预览。音视频需点击播放。')
+        row.addWidget(self.auto_preview)
+        self.preview_button = QPushButton('预览所选对象')
+        self.preview_button.clicked.connect(lambda: self.request(True))
+        self.preview_button.setEnabled(False)
+        self.extract_button = QPushButton('解包所选对象')
+        self.extract_button.clicked.connect(lambda: self.request(False))
+        self.extract_button.setEnabled(False)
+        row.addWidget(self.preview_button)
+        row.addWidget(self.extract_button)
         row.addStretch()
         close = QPushButton('关闭')
         close.clicked.connect(self.close)
         row.addWidget(close)
         layout.addLayout(row)
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setSingleShot(True)
+        self._auto_timer.setInterval(250)
+        self._auto_timer.timeout.connect(self._auto_request)
+        self.table.selectionModel().selectionChanged.connect(self._selection_changed)
+        self.auto_preview.toggled.connect(self._auto_toggled)
+
+    @property
+    def _image_path(self):
+        return self.preview_panel.image_path
+
+    @property
+    def _image_pixmap(self):
+        return self.preview_panel.image_pixmap or QPixmap()
+
+    @staticmethod
+    def _previewable(row):
+        return value(row, 'previewable', True) is not False and str(value(row, 'type', '')).casefold() in {
+            'texture2d', 'sprite', 'audioclip', 'textasset', 'videoclip', 'image'}
 
     def set_objects(self, objects):
         if self.preview_closed:
             return
+        self.preview_generation += 1
+        self._auto_timer.stop()
+        self._clear_current_preview()
+        objects = list(objects)
         self.model.replace(objects)
-        self.status.setText(f'{len(objects):,} 个对象　·　{self.path}')
+        self.status.setText(f'{len(objects):,} 个对象　·　{Path(self.path).name}')
+        if self.auto_preview.isChecked():
+            first = next((index for index, row in enumerate(objects) if self._previewable(row)), None)
+            if first is not None:
+                self.table.selectRow(first)
+
+    def _selection_changed(self, *_):
+        self.preview_generation += 1
+        self._auto_timer.stop()
+        self._clear_current_preview()
+        selected = selected_records(self.table)
+        self.preview_button.setEnabled(len(selected) == 1 and value(selected[0], 'previewable', True) is not False)
+        self.extract_button.setEnabled(bool(selected))
+        self.status.setText(f'已选 {len(selected):,} 个对象　·　{Path(self.path).name}')
+        if self.auto_preview.isChecked() and len(selected) == 1 and self._previewable(selected[0]):
+            self._auto_timer.start()
+
+    def _auto_toggled(self, checked):
+        self.preview_generation += 1
+        self._auto_timer.stop()
+        selected = selected_records(self.table)
+        if checked and len(selected) == 1 and self._previewable(selected[0]) and not self.preview_closed:
+            self._auto_timer.start()
+
+    def _auto_request(self):
+        selected = selected_records(self.table)
+        if not self.preview_closed and self.auto_preview.isChecked() and len(selected) == 1 and self._previewable(selected[0]):
+            self.request(True)
 
     def track_preview(self, lease):
         if self.preview_closed:
@@ -386,17 +418,28 @@ class ObjectsDialog(QDialog):
             self._preview_leases.append(lease)
         self._preview_cache_roots = tuple(dict.fromkeys((*self._preview_cache_roots, *lease.cache.roots)))
 
+    def _release_lease(self, lease):
+        if lease is not None:
+            lease.release()
+            if lease in self._preview_leases:
+                self._preview_leases.remove(lease)
+
+    def _clear_current_preview(self, keep_lease=None):
+        # Media must release file handles before its cache can be removed.
+        self.preview_panel.clear()
+        previous, self._current_preview_lease = self._current_preview_lease, None
+        if previous is not keep_lease:
+            self._release_lease(previous)
+
     def _release_previews(self, *_):
         if self.preview_closed:
             return
         self.preview_closed = True
-        self._image_path = None
-        self._image_pixmap = QPixmap()
-        self.picture.clear()
-        self.save_original_button.setEnabled(False)
-        for lease in self._preview_leases:
-            lease.release()
-        self._preview_leases.clear()
+        self.preview_generation += 1
+        self._auto_timer.stop()
+        self.preview_panel.shutdown()
+        for lease in list(self._preview_leases):
+            self._release_lease(lease)
         self._current_preview_lease = None
 
     def closeEvent(self, event):
@@ -405,64 +448,62 @@ class ObjectsDialog(QDialog):
             self._release_previews()
 
     def request(self, preview):
-        ids = [str(r['id']) for r in selected_records(self.table)]
-        if preview and len(ids) != 1:
-            self.status.setText('请选择一个对象进行预览。')
+        if self.preview_closed:
             return
+        selected = selected_records(self.table)
+        ids = [str(row['id']) for row in selected]
+        if preview:
+            self._auto_timer.stop()
+            if len(ids) != 1:
+                self.status.setText('请选择一个对象进行预览。')
+                return
+            if value(selected[0], 'previewable', True) is False:
+                self.status.setText('此对象暂不支持预览，可选择解包查看诊断。')
+                return
+            self.preview_generation += 1
+            self._clear_current_preview()
+            self.status.setText('正在准备预览…')
         if ids:
             self.extract_requested.emit(self.path, ids, preview)
 
-    def show_file(self, path, preview_lease=None):
-        if self.preview_closed:
-            if preview_lease:
-                preview_lease.release()
-            return
-        if preview_lease:
+    def show_files(self, outputs, preview_lease=None, generation=None):
+        if self.preview_closed or (generation is not None and generation != self.preview_generation):
+            self._release_lease(preview_lease)
+            return False
+        self._clear_current_preview(keep_lease=preview_lease)
+        if preview_lease is not None:
             self.track_preview(preview_lease)
-        previous = self._current_preview_lease
-        self._current_preview_lease = preview_lease
-        path = Path(path)
-        self._image_path = None
-        self._image_pixmap = QPixmap()
-        self.picture.clear()
-        self.save_original_button.setEnabled(False)
-        self.image_scroll.hide()
-        self.image_tools.hide()
-        if path.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp', '.bmp'):
-            pixmap = QPixmap(str(path))
-            if pixmap.isNull():
-                self.preview.setPlainText('图片无法读取。可在输出目录查看诊断。')
-            else:
-                self._image_path = path.resolve()
-                self._image_pixmap = pixmap
-                self.save_original_button.setEnabled(True)
-                self.image_scroll.show()
-                self.image_tools.show()
-                self.preview.setPlainText(f'{path.name}\n原始尺寸：{pixmap.width()} × {pixmap.height()} 像素\n缩放只影响预览；“保存原图”保留原始文件。\n{path}')
-                self.update_image()
-        elif path.is_file():
-            with path.open('rb') as stream:
-                data = stream.read(256 * 1024 + 1)
-            self.preview.setPlainText(data[:256 * 1024].decode('utf-8', errors='replace') + ('\n\n预览已限长，完整内容见输出。' if len(data) > 256 * 1024 else ''))
-        if previous and previous is not preview_lease:
-            previous.release()
-            self._preview_leases.remove(previous)
+        outputs = list(outputs)
+        try:
+            shown = self.preview_panel.show_files(outputs)
+        except (OSError, ValueError) as error:
+            self._release_lease(preview_lease)
+            self.preview_failed(str(error), generation=generation)
+            return False
+        if shown:
+            self._current_preview_lease = preview_lease
+            self.status.setText(f'已显示预览　·　{len(outputs):,} 个产物　·　{Path(self.path).name}')
+        else:
+            self._release_lease(preview_lease)
+            self.status.setText('未生成可预览文件。请在任务页查看失败或跳过原因。')
+        return shown
+
+    def show_file(self, path, preview_lease=None, generation=None):
+        return self.show_files([path], preview_lease=preview_lease, generation=generation)
+
+    def preview_failed(self, message, generation=None):
+        if self.preview_closed or (generation is not None and generation != self.preview_generation):
+            return False
+        self._clear_current_preview()
+        self.status.setText(str(message))
+        self.preview.setPlainText(str(message))
+        return True
 
     def update_image(self, *_):
-        if self._image_pixmap.isNull():
-            return
-        scale = self.image_zoom.value() / 100
-        rendered = self._image_pixmap.scaled(max(1, round(self._image_pixmap.width() * scale)),
-            max(1, round(self._image_pixmap.height() * scale)), Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation)
-        self.picture.setPixmap(rendered)
-        self.picture.resize(rendered.size())
+        self.preview_panel.update_image()
 
     def fit_image(self):
-        if not self._image_pixmap.isNull():
-            width_scale = max(1, self.image_scroll.viewport().width() - 12) / self._image_pixmap.width()
-            height_scale = max(1, self.image_scroll.viewport().height() - 12) / self._image_pixmap.height()
-            self.image_zoom.setValue(min(width_scale, height_scale) * 100)
+        self.preview_panel.fit_image()
 
     def save_original(self):
         if self._image_path and not self._image_pixmap.isNull():

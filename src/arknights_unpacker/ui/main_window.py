@@ -43,6 +43,8 @@ class MainWindow(QMainWindow):
         self._dialogs = []
         self._dialog_jobs = {}
         self._preview_jobs = {}
+        self._object_preview_jobs = {}
+        self._object_preview_pending = {}
         self._displayed_preview_jobs = set()
         self._discard_when_settled = set()
         self._preview_warning_count = 0
@@ -442,8 +444,27 @@ class MainWindow(QMainWindow):
             return None
         return str(output)
 
+    @staticmethod
+    def _object_preview_kinds(dialog, object_ids):
+        identifiers = {str(identifier) for ids in (object_ids or {}).values() for identifier in ids}
+        rows = [row for row in dialog.model.rows if str(value(row, 'id')) in identifiers]
+        if len(rows) == 1:
+            row = rows[0]
+            kind = {'Texture2D': 'image', 'Sprite': 'image', 'Image': 'image',
+                    'AudioClip': 'audio', 'VideoClip': 'video', 'TextAsset': 'text'}.get(value(row, 'type'))
+            if kind:
+                if kind == 'text' and any(part in str(value(row, 'name', '')).lower()
+                                          for part in ('.atlas', '.skel', '.spine')):
+                    return ['text', 'spine']
+                return [kind]
+        return ['image', 'text', 'audio', 'spine', 'video']
+
     def extract(self, paths, object_ids=None, preview_dialog=None, *, kinds=None, mode=None):
         if preview_dialog and (self._closing or getattr(preview_dialog, '_workbench_closed', False)):
+            return
+        generation = getattr(preview_dialog, 'preview_generation', None)
+        if preview_dialog and preview_dialog in self._object_preview_jobs:
+            self._object_preview_pending[preview_dialog] = (list(paths), object_ids, generation)
             return
         output = self.output_root() if preview_dialog is None else None
         lease = None
@@ -452,13 +473,18 @@ class MainWindow(QMainWindow):
                 lease = self.preview_cache.allocate('objects')
             except (OSError, ValueError) as error:
                 self.show_status('无法创建对象预览：' + str(error))
+                preview_dialog.preview_failed(str(error), generation=generation)
                 return
             preview_dialog.track_preview(lease)
             output = str(lease.path)
         if output is None:
             return
-        kinds = list(kinds) if kinds is not None else [key for key, check in self.settings.kinds.items() if check.isChecked()]
-        mode = mode if mode is not None else self.settings.mode.currentData()
+        if preview_dialog:
+            kinds = self._object_preview_kinds(preview_dialog, object_ids)
+            mode = 'auto'
+        else:
+            kinds = list(kinds) if kinds is not None else [key for key, check in self.settings.kinds.items() if check.isChecked()]
+            mode = mode if mode is not None else self.settings.mode.currentData()
         if not kinds:
             if lease:
                 lease.release()
@@ -483,16 +509,15 @@ class MainWindow(QMainWindow):
                     lease.release()
                     return
                 outputs = value(result, 'outputs', [])
-                for item in outputs:
-                    path = item.get('path', item.get('output_path', item.get('output', ''))) if isinstance(item, dict) else str(item)
-                    if path and Path(path).is_file():
-                        preview_dialog.show_file(path, preview_lease=lease)
-                        if self.queue.active:
-                            self._displayed_preview_jobs.add(self.queue.active.job_id)
-                        break
+                if preview_dialog.show_files(outputs, preview_lease=lease, generation=generation):
+                    if self.queue.active:
+                        self._displayed_preview_jobs.add(self.queue.active.job_id)
                 else:
                     lease.release()
-                    preview_dialog.status.setText('未生成可预览文件。请在任务页查看失败或跳过原因。')
+                    details = [str(value(item, 'error', value(item, 'reason', ''))) for item in
+                               [*value(result, 'errors', []), *value(result, 'skipped', [])]]
+                    preview_dialog.preview_failed('未生成可预览文件。' + ('\n'.join(details) or '请在任务页查看失败或跳过原因。'),
+                                                  generation=generation)
         title = '预览对象' if preview_dialog else '导出包内原图' if kinds == ['image'] and mode == 'auto' else '解包所选'
         job = self.queue.submit(title + f' · {len(paths)} 个文件',
                           lambda **kw: self.services.extract(paths, output, kinds=kinds, object_ids=object_ids, mode=mode,
@@ -500,10 +525,11 @@ class MainWindow(QMainWindow):
                           request={'operation': 'extract', 'root': str(value(self.services.installation, 'root') or self.root_edit.text().strip()), 'paths': list(paths),
                                    'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode, 'preview': bool(preview_dialog)})
         if lease:
+            self._object_preview_jobs[preview_dialog] = (job.job_id, generation)
             self._bind_preview_job(job, lease, preview_dialog)
 
-    def objects(self, path):
-        dialog = ObjectsDialog(path, self)
+    def objects(self, path, *, auto_preview=True):
+        dialog = ObjectsDialog(path, self, auto_preview=auto_preview)
         self._track_dialog(dialog)
         dialog.extract_requested.connect(lambda source, ids, preview: self.extract([source], {source: ids}, dialog if preview else None))
         dialog.show()
@@ -632,6 +658,8 @@ class MainWindow(QMainWindow):
         self._dialogs.append(dialog)
         def closed(*_):
             dialog._workbench_closed = True
+            self._object_preview_pending.pop(dialog, None)
+            self._object_preview_jobs.pop(dialog, None)
             if dialog in self._dialogs:
                 self._dialogs.remove(dialog)
             ids = {job_id for job_id, owner in self._dialog_jobs.items() if owner is dialog}
@@ -658,6 +686,14 @@ class MainWindow(QMainWindow):
         lease.on_cleaned(cleaned)
 
     def _job_settled(self, job):
+        owner = self._dialog_jobs.get(job.job_id)
+        current = self._object_preview_jobs.get(owner)
+        pending = None
+        if current and current[0] == job.job_id:
+            self._object_preview_jobs.pop(owner, None)
+            pending = self._object_preview_pending.pop(owner, None)
+            if not self._closing and not getattr(owner, '_workbench_closed', False) and job.last_error:
+                owner.preview_failed(job.last_error, generation=current[1])
         lease = self._preview_jobs.pop(job.job_id, None)
         if lease:
             if job.job_id not in self._displayed_preview_jobs or self._closing:
@@ -670,6 +706,13 @@ class MainWindow(QMainWindow):
             self._dialog_jobs.pop(job.job_id, None)
             self._discard_when_settled.discard(job.job_id)
         self._report_preview_warnings()
+        if pending is not None:
+            paths, object_ids, generation = pending
+            def latest():
+                if (not self._closing and not getattr(owner, '_workbench_closed', False)
+                        and getattr(owner, 'preview_generation', None) == generation):
+                    self.extract(paths, object_ids, owner)
+            QTimer.singleShot(0, latest)
 
     def _report_preview_warnings(self):
         for warning in self.preview_cache.warnings[self._preview_warning_count:]:

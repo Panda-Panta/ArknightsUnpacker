@@ -15,7 +15,7 @@ from test_explorer import MockServices, make_window, wait_idle
 
 def object_dialog(qtbot, window, package):
     package.write_bytes(b'original package')
-    window.objects(str(package))
+    window.objects(str(package), auto_preview=False)
     wait_idle(qtbot, window)
     dialog = window._dialogs[-1]
     dialog.table.selectRow(0)

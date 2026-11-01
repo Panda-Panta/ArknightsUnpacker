@@ -22,6 +22,8 @@ ArknightsUnpacker/
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
+│     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
+│     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
 │     └─ preview_cache.py        临时预览归属、窗口／生产任务释放、旧缓存回收
 ├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
@@ -51,6 +53,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 `gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
 
 `ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别。资源浏览选择具体类型后在当前来源全库匹配，关键词与AB条件继续叠加；暂时禁用目录导航／递归且保留原值，切回全部类型恢复原目录范围。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
+
+`library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ObjectsDialog`负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
 
 主要调用链：
 

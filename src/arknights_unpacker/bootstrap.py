@@ -117,8 +117,12 @@ def main() -> int:
     parser.add_argument("--data-dir", default=None)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--smoke-test", metavar="JSON", help=argparse.SUPPRESS)
+    parser.add_argument("--preview-source", help=argparse.SUPPRESS)
+    parser.add_argument("--preview-kind", choices=('image', 'audio', 'video', 'text'), default='image', help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.preview_source and not args.smoke_test:
+        parser.error('--preview-source requires --smoke-test')
     from .application import AppServices
     try:
         services = AppServices(args.data_dir, output_root=args.output_dir)
@@ -158,7 +162,12 @@ def main() -> int:
     window = MainWindow(services, initial_root=args.game_root)
     app.aboutToQuit.connect(services.shutdown)
     window.show()
-    if args.smoke_test:
+    if args.smoke_test and args.preview_source:
+        from .ui.preview_smoke import PreviewSmoke
+        receipt = validate_output(validate_data_root(Path(args.smoke_test)),
+                                  args.game_root or services.config.get('game_root'))
+        window._preview_smoke = PreviewSmoke(app, window, args.preview_source, receipt, args.preview_kind)
+    elif args.smoke_test:
         from PySide6.QtGui import QPixmap
         from .paths import resource_root
         receipt = validate_output(validate_data_root(Path(args.smoke_test)),
