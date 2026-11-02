@@ -20,12 +20,15 @@ ArknightsUnpacker/
 │  ├─ reports/                    语义块、模组单张／分页PNG、独立HTML与批次清单
 │  │  ├─ style.py                共用亮色／暗色调色板、字体与资料分区顺序
 │  │  ├─ fonts.py                自选TTF／OTF只读加载、PNG字形与HTML离线内嵌
+│  │  ├─ font_catalog.py         系统／用户Fonts名称、样式及集合字形索引，进程内缓存
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
 │     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
+│     ├─ font_picker.py          设置和资料预览复用的系统字体／文件选择器
+│     ├─ report_font_smoke.py     显式原生同窗换字形、正式导出与回收验收
 │     └─ preview_cache.py        临时预览归属、窗口／生产任务释放、旧缓存回收
 ├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主图标PNG／ICO及主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
@@ -65,6 +68,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 0.1.21的天赋`term_definitions`由`render_description`按游戏术语标签收集；模组原天赋定义位于`comparison.original_term_definitions`，不混入模组业务变化。共用`Block.notes`将定义附在对应表格后，HTML／Qt以小字号段落显示，PNG以较小字体显示，不增加目录或章节；TXT保留完整文字，JSON保留结构。潜能描述证据位于各增量的metadata，官方注解可完整还原基础说明时去重，标准属性未说明的变化继续提示。`diff._without_text`将术语定义视为文字，保留文字勘误分类。
 
 字体选项`ReportOptions.font_path`由设置页的`report_font_path`传入，旧配置默认空路径。`reports/fonts.py`按已选文件bytes统一构造PNG字体与HTML的内嵌font-face，PNG分页和绘制共用同一布局／字形；批次目录也内嵌字体。JSON／TXT不加载字体，未选时保持既有自动字体。显式`--smoke-test --profile-export-test`在隔离状态恢复当前干员后点击真实导出按钮、等待既有队列，并记录产物；普通启动不执行。
+
+0.1.22通过fonttools4.68.0读取Fonts目录的名称表和TTC索引，`font_index`与路径一起保存在设置／ReportOptions／任务请求中，旧值默认0。`fonts.py`将TTC的所选face提取为独立字体bytes，PNG与HTML使用同一face。资料预览通过`ReportArtifactsDialog.font_preview_requested`、主窗独立报告generation/pending状态和既有queue／PreviewLease异步更新；旧代结果不覆盖新选择、关闭只取消本窗口任务，成功选项传给正式导出。默认按钮不会响应字体文本控件的Return／Enter。显式`--smoke-test --profile-font-preview-test`验证实际系统字体选择、同窗切换、正式四格式和关闭回收；普通启动不执行。
 
 主要调用链：
 

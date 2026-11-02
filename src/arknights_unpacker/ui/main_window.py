@@ -47,6 +47,8 @@ class MainWindow(QMainWindow):
         self._preview_jobs = {}
         self._object_preview_jobs = {}
         self._object_preview_pending = {}
+        self._report_preview_jobs = {}
+        self._report_preview_pending = {}
         self._displayed_preview_jobs = set()
         self._discard_when_settled = set()
         self._preview_warning_count = 0
@@ -579,11 +581,24 @@ class MainWindow(QMainWindow):
                           lambda objects: dialog.set_objects(objects) if not getattr(dialog, '_workbench_closed', False) else None)
         self._dialog_jobs[job.job_id] = dialog
 
-    def export(self, kind, ids, only_new=False, *, preview=False, report_spec=None, report_options=None):
+    def export(self, kind, ids, only_new=False, *, preview=False, report_spec=None, report_options=None,
+               preview_dialog=None, preview_generation=0, report_binding=None, report_formats=None):
         if self._closing:
             return
+        if preview_dialog is not None and (getattr(preview_dialog, '_workbench_closed', False)
+                or preview_dialog.preview_generation != preview_generation):
+            return
+        if report_binding is not None:
+            try:
+                self.check_report_binding(report_binding)
+            except ValueError as error:
+                if preview_dialog is not None:
+                    preview_dialog.font_preview_failed(str(error), generation=preview_generation)
+                self.show_status(str(error))
+                return
+        ids = list(ids)
         output = None if preview else self.output_root()
-        formats = self.settings.selected_formats()
+        formats = set(report_formats) if report_formats is not None else self.settings.selected_formats()
         if preview:
             formats = formats | {ExportFormat.PNG}
         if not preview and output is None:
@@ -596,8 +611,10 @@ class MainWindow(QMainWindow):
             return
         operators, modules = (ids, []) if kind == 'operators' else ([], ids)
         # A single chosen module may enter the static panel; never combine modules.
-        spec = report_spec or self.pages.report_spec(kind, ids)
-        options = report_options or self.settings.report_options()
+        spec = replace(report_spec or self.pages.report_spec(kind, ids))
+        options = replace(report_options or self.settings.report_options())
+        binding = report_binding or {'root': self.root_edit.text().strip(),
+                                     'snapshot_id': value(self.services.gamedata, 'snapshot_id')}
         if kind == 'modules' and only_new and not options.title:
             options = replace(options, title='本次新增模组')
         try:
@@ -608,26 +625,54 @@ class MainWindow(QMainWindow):
         if lease:
             output = str(lease.path)
         def done(artifacts):
-            if self._closing:
+            if self._closing or preview_dialog is not None and getattr(preview_dialog, '_workbench_closed', False):
                 if lease:
                     lease.release()
                 return
+            if preview_dialog is not None:
+                dialog = preview_dialog
+                if not dialog.replace_artifacts(artifacts, preview_lease=lease, report_options=options,
+                                                generation=preview_generation):
+                    return
+            else:
+                dialog = self.show_report_artifacts(artifacts, preview_only=preview, preview_lease=lease,
+                                                    report_options=options)
+                if preview:
+                    dialog.export_requested.connect(lambda: self.export(kind, ids, report_spec=spec,
+                        report_options=dialog.successful_options, report_binding=binding))
+                    dialog.font_preview_requested.connect(lambda chosen, generation: self._refresh_report_preview(
+                        dialog, kind, ids, spec, formats, binding, chosen, generation))
             self.show_status(f'资料{"预览" if preview else "导出"}完成：{len(artifacts)} 个产物。')
-            dialog = self.show_report_artifacts(artifacts, preview_only=preview, preview_lease=lease,
-                                       export_action=(lambda: self.export(kind, ids, report_spec=spec, report_options=options)) if preview else None)
             if lease and self.queue.active:
                 self._dialog_jobs[self.queue.active.job_id] = dialog
                 self._displayed_preview_jobs.add(self.queue.active.job_id)
+        def call(**kw):
+            if report_binding is not None:
+                self.check_report_binding(binding)
+            return self.services.export(operators, modules, output, formats, spec=spec, options=options,
+                                        remember_output=not preview, **kw)
         job = self.queue.submit(f'{"预览" if preview else "导出"}{"新增" if only_new else "选中"}资料 · {len(ids)} 项',
-                          lambda **kw: self.services.export(operators, modules, output, formats, spec=spec, options=options,
-                                                           remember_output=not preview, **kw),
-                          done, output, request={'operation': 'report', 'root': self.root_edit.text().strip(),
-                          'snapshot_id': value(self.services.gamedata, 'snapshot_id'), 'operators': operators, 'modules': modules,
+                          call, done, output, request={'operation': 'report', **binding, 'operators': operators, 'modules': modules,
                           'output': output, 'formats': [fmt.value for fmt in formats], 'spec': as_jsonable(spec),
                           'options': as_jsonable(options), 'preview': preview})
         if lease:
-            self._bind_preview_job(job, lease)
-        self.pages.select('jobs')
+            self._bind_preview_job(job, lease, preview_dialog)
+        if preview_dialog is not None:
+            self._report_preview_jobs[preview_dialog] = (job.job_id, preview_generation)
+        else:
+            self.pages.select('jobs')
+
+    def _refresh_report_preview(self, dialog, kind, ids, spec, formats, binding, options, generation):
+        if self._closing or getattr(dialog, '_workbench_closed', False) or dialog.preview_generation != generation:
+            return
+        def submit():
+            self.export(kind, ids, preview=True, report_spec=spec, report_options=options,
+                        preview_dialog=dialog, preview_generation=generation, report_binding=binding,
+                        report_formats=formats)
+        if dialog in self._report_preview_jobs:
+            self._report_preview_pending[dialog] = (generation, submit)
+        else:
+            submit()
 
     def preview_reports(self, kind, ids):
         self.export(kind, ids, preview=True)
@@ -701,12 +746,27 @@ class MainWindow(QMainWindow):
             dialog._workbench_closed = True
             self._object_preview_pending.pop(dialog, None)
             self._object_preview_jobs.pop(dialog, None)
+            self._report_preview_pending.pop(dialog, None)
+            self._report_preview_jobs.pop(dialog, None)
             if dialog in self._dialogs:
                 self._dialogs.remove(dialog)
             ids = {job_id for job_id, owner in self._dialog_jobs.items() if owner is dialog}
             pending = {job.job_id for job in self.queue.jobs if job.job_id in ids and
                        job.status in ('排队中', '运行中', '正在取消')}
             self._discard_when_settled.update(pending)
+            # Closing one report viewer only cancels its own producers. A
+            # queued producer has no worker to finish its lease later.
+            for job in list(self.queue.jobs):
+                if (job.job_id not in pending or (job.request or {}).get('operation') != 'report'
+                        or not (job.request or {}).get('preview')):
+                    continue
+                job.token.cancel()
+                queued = job.status == '排队中'
+                job.status = '已取消' if queued else '正在取消'
+                self.queue._persist(job)
+                if queued:
+                    self.queue.settled.emit(job)
+            self.queue.changed.emit()
             self.queue.forget_finished([job.job_id for job in self.queue.jobs if job.job_id in ids and job.status == '成功'])
             for job_id in ids - pending:
                 self._dialog_jobs.pop(job_id, None)
@@ -728,6 +788,14 @@ class MainWindow(QMainWindow):
 
     def _job_settled(self, job):
         owner = self._dialog_jobs.get(job.job_id)
+        report_current = self._report_preview_jobs.get(owner)
+        report_pending = None
+        if report_current and report_current[0] == job.job_id:
+            self._report_preview_jobs.pop(owner, None)
+            report_pending = self._report_preview_pending.pop(owner, None)
+            if (not self._closing and not getattr(owner, '_workbench_closed', False)
+                    and job.status != '成功'):
+                owner.font_preview_failed(job.last_error or job.status, generation=report_current[1])
         current = self._object_preview_jobs.get(owner)
         pending = None
         if current and current[0] == job.job_id:
@@ -747,6 +815,13 @@ class MainWindow(QMainWindow):
             self._dialog_jobs.pop(job.job_id, None)
             self._discard_when_settled.discard(job.job_id)
         self._report_preview_warnings()
+        if report_pending is not None:
+            generation, submit = report_pending
+            def latest_report():
+                if (not self._closing and not getattr(owner, '_workbench_closed', False)
+                        and owner.preview_generation == generation):
+                    submit()
+            QTimer.singleShot(0, latest_report)
         if pending is not None:
             paths, object_ids, generation = pending
             def latest():
@@ -760,7 +835,8 @@ class MainWindow(QMainWindow):
             self.queue.message.emit(warning)
         self._preview_warning_count = len(self.preview_cache.warnings)
 
-    def show_report_artifacts(self, artifacts, *, preview_only=False, export_action=None, preview_lease=None):
+    def show_report_artifacts(self, artifacts, *, preview_only=False, export_action=None, preview_lease=None,
+                              report_options=None):
         if self._closing:
             if preview_lease:
                 preview_lease.release()
@@ -775,7 +851,8 @@ class MainWindow(QMainWindow):
                 owner.raise_()
                 owner.activateWindow()
                 return owner
-        dialog = ReportArtifactsDialog(artifacts, self, preview_only=preview_only, preview_lease=preview_lease)
+        dialog = ReportArtifactsDialog(artifacts, self, preview_only=preview_only, preview_lease=preview_lease,
+                                       report_options=report_options)
         dialog.html_open_requested.connect(lambda path: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
         if export_action:
             dialog.export_requested.connect(export_action)

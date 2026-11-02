@@ -1078,3 +1078,20 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 最终交付：独立复核收紧验收入口，队列超时仍忙时明确拒绝收据；编译及源码原生真实导出再次通过。干净候选681d55b7de2b51f73e364b218e367de5548a36f5，构建20261102-184648-f0461b48，161程序输入与提交逐项一致，552程序项及ZIP逐项SHA／CRC通过。既有main/test已普通快进至该候选，无新标签／发行附件。冻结和D:\Tools\ArknightsUnpacker安装EXE均以隔离data-dir恢复塔露拉、保留自选simhei.ttf、点击真实导出按钮，PNG／HTML／JSON／TXT四格式成功、队列settled，HTML所选字体bytes一致。安装实际生成的HTML另经离线Edge验证字体loaded、打印字体保持及表下小注释，无额外术语章节。源／安装输出与浏览器收据见native/、custom-font-browser.json及installed-custom-font-browser.json。
 
 更新前完整备份并核验552项旧0.1.20程序文件；按清单替换8项、544保持、无新增／删除。安装实测后552程序项完整匹配，251目标用户文件与85旧数据共336项SHA均保持，没有启动原用户数据库的常规会话或修改原字体文件。备份backup-0.1.20/；收据sync-result.json、installed-verification.json、final-user-data-verification.json。ZIP84,577,035字节，SHA256 20c88c9ef91bee734c1a4bb0ef815550013f5bcba2b4667be9826160c3c6bb51；EXE SHA256 9c9c5981f64de3bb51408ab3fd7f32bb4f4193c14d4d11fa13d55f6c9331f5b0。当前构建中间内容按已核验工具清理，源／安装／回退程序与ZIP再次核对；旧版、用户数据及失败／验收证据保留。无新增领域技能或个人记忆写入。后补仅README／计划／验收，不改变161程序输入；最终远端／输入一致性见final-delivery-verification.json。
+
+
+### 14.25 系统字体选择与预览现场切换（2026-11-02，实施中）
+
+用户要求导出字体可选系统Fonts已有字体，并能在“预览所选资料”窗口选择、查看效果。沿用个人模式、干净test基线16d2ad4、现有main/test及D:/Tools/ArknightsUnpacker交付目标，版本0.1.22，不创建发行标签或附件。font_picker（talent_terms）独占字体目录／名称／字形索引枚举、共用ExportFontPicker及设置；preview_refresh（potential_display）独占资料预览窗口与主窗队列装配；两包并行，主agent负责共享ReportOptions.font_index（默认0）、字体集合选定face提取／内嵌、依赖／打包、集成与交付。
+
+复用ReportOptions.font_path、现有Pillow排版、HTML内嵌、异步services.export／queue、PreviewCache的producer/viewer lease和对象预览generation经验。Windows常见中文字体为TTC集合，新增fonttools4.68.0作为精确依赖读取字体名称和提取选定face，避免系统字体仅支持部分TTF或浏览器无法加载集合；既有文件选择与默认字体保留，系统／用户Fonts只读。字体索引随设置、报告选项及任务请求传递，旧设置默认0。预览每次生成独立临时产物，快速切换只显示最新结果；关闭、失败和外部HTML保留按现有生命周期处理，正式导出采用当前成功预览选项，不自动保存全局设置。不覆盖已有导出，不重扫描游戏。证据隔离.work/system-font-preview-20261102/，先红绿／相关回归，再统一检查、真实字体／原生／冻结／安装验收，旧程序清单备份和用户文件SHA保护。FontTools依据为官方TTFont(fontNumber)、save及name表接口文档，原始依赖缓存首次未使用项目环境导致权限失败，后续复用packaging/common.ps1的项目内UV_CACHE_DIR与TEMP。
+
+
+实施结果：系统字体组件实际枚举423文件／471字形，包含51用户字形；冷读0.610秒，缓存约0.9微秒。设置／字体组件与工作台30项通过，TTC提取与自选字体15项通过（含集合索引、真实字形、内嵌、坏文件提示）。同窗预览8项先红后绿，相关生命周期24项、扩展46项通过；独立联测17项及失败重试2项通过。交叉审查修复失败后同字体无法重选的问题：失败时恢复上次成功选择和图片，正式导出仍取成功选项，文件选择器真实点击可重试。排队关闭只取消本窗口任务，不影响其他工作；外部HTML延后回收保持。
+
+实际原生验收发现字体文本控件Return会触发QDialog默认文件选择按钮，新增10项红测全失败后在FontPicker内消费相关Enter／Return，已知完整条目才提交、未知文本不提交，路径文本不再误开对话框；最终32项相关回归通过。最初鼠标弹层原生验收未成功选择，后改键盘确认暴露上述真实问题，未将弹层焦点问题当产品根因。修复后源码原生Windows在隔离.work/sfp-native/s4恢复塔露拉，系统组合框通过Return先选msyh.ttc face0再选face1，同一窗口两次实际图像SHA改变，缩放60%保持，点击正式导出成功生成四格式；JSON索引1、HTML独立字体名称Microsoft YaHei UI、原字体SHA及全局选项保持，关闭释放当前预览，8.23秒。源HTML在离线Edge真实加载字体、保留表下注释／打印字体，截图已查看。
+
+全量首轮655 passed／8 failed／1 skipped／1 deselected（226.03秒），新预览测试初始导出路径超过既有160字符保护，实际queue.last_error确认，非机制或字体回归。改用短basetemp后，受限环境Qt媒体以0xc0000008退出，保留两份日志；最终复用已有非受限offscreen环境和scripts/verify.ps1 -TestPath @('tests','--basetemp','.work/sfp-final')完成必需检查，结果待补。不修改产品路径保护或媒体处理以掩盖测试环境问题。字体依赖已按锁文件安装，打包清单新增fonttools许可证和动态字体表模块；系统字体不随程序打包。实际目标0.1.21程序552项匹配，当前164目标用户文件与85旧数据已预检记录，旧LOCALAPPDATA在受限环境重定向，交付工具明确沿用真实用户旧目录。冻结／安装验证和最终提交待补。
+
+
+最终源码检查：非受限offscreen的短目录全套为674 passed、1 local deselected（195.57秒），junction在该环境可创建故没有skip，仅既有pytest缓存权限警告。全部生产代码已固定，两个工作包独立交叉审查无剩余阻塞；原生s4和离线Edge证据覆盖真实系统选择／同窗重排／正式导出，后续只补冻结、安装、文件清单和远端交付。uv sync --locked将工程元数据同步为0.1.22，不改变已测代码。

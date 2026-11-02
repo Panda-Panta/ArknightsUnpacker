@@ -252,6 +252,7 @@ class ReportOptions:
     title: str = ""
     module_image_layout: str = "single"
     font_path: str = ""
+    font_index: int = 0
 
 
 @dataclass

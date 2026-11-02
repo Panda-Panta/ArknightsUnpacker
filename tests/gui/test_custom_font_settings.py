@@ -31,7 +31,7 @@ def test_font_file_picker_updates_export_options_without_changing_workbench_font
     assert view.report_options().font_path == path
     assert view.config.get('report_font_path', '') == ''
     assert '已更改' in view.save_status.text()
-    assert len(calls) == 1 and calls[0][0] is view
+    assert len(calls) == 1 and calls[0][0] is view.font_picker
     assert '*.ttf' in calls[0][3] and '*.otf' in calls[0][3]
     assert QApplication.instance().font().toString() == workbench_font
 

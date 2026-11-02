@@ -74,7 +74,7 @@ class _Layout:
     """Measure once with the fonts that will actually paint every line."""
     def __init__(self, options):
         type_style = typography()
-        selected = load_custom_font(options.font_path)
+        selected = load_custom_font(options.font_path, options.font_index)
 
         def font(size, bold=False):
             return selected.at_size(size) if selected else _font(size, bold)

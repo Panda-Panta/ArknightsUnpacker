@@ -1,6 +1,6 @@
 [project]
 name = "arknights-unpacker-gui"
-version = "0.1.21"
+version = "0.1.22"
 description = "Arknights PC resource explorer, unpacker and offline operator reports"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
   "spine-asset==1.1.1",
   "WannaCRI==0.3.3",
   "ffmpeg-python==0.2.0",
+  "fonttools==4.68.0",
 ]
 
 [dependency-groups]

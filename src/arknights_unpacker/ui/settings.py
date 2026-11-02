@@ -4,6 +4,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLineEdit, QPushButton, QFileDialog, QLabel, QSpinBox, QComboBox, QCheckBox, QGroupBox, QScrollArea
 from arknights_unpacker.contracts import ExportFormat, ReportOptions
 from arknights_unpacker.paths import default_output_root
+from .font_picker import ExportFontPicker
 
 
 class SettingsView(QWidget):
@@ -81,22 +82,11 @@ class SettingsView(QWidget):
         self.font_size.setValue(int(config.get('report_font_size', 28)))
         self.font_size.setMaximumWidth(200)
         report_form.addRow('资料 PNG 字号', self.font_size)
-        font_row = QHBoxLayout()
-        self.font_path = QLineEdit(str(config.get('report_font_path') or ''))
-        self.font_path.setObjectName('reportFontPath')
-        self.font_path.setPlaceholderText('默认字体（自动选择）')
-        self.font_path.setToolTip('选择本地 TTF 或 OTF 字体，也可粘贴字体文件路径；仅用于资料导出。')
-        font_row.addWidget(self.font_path, 1)
-        choose_font = QPushButton('选择字体…')
-        choose_font.setObjectName('chooseReportFont')
-        choose_font.clicked.connect(self.choose_font)
-        font_row.addWidget(choose_font)
-        reset_font = QPushButton('恢复默认')
-        reset_font.setObjectName('resetReportFont')
-        reset_font.clicked.connect(self.font_path.clear)
-        font_row.addWidget(reset_font)
-        report_form.addRow('资料导出字体（PNG / HTML）', font_row)
-        font_note = QLabel('请选择包含中文的 TTF／OTF 字体。HTML 会内嵌所选字体，便于离线查看；工作台界面字体保持原样。')
+        self.font_picker = ExportFontPicker(self)
+        self.font_picker.set_font(str(config.get('report_font_path') or ''), config.get('report_font_index', 0))
+        self.font_path = self.font_picker.path_edit
+        report_form.addRow('资料导出字体（PNG / HTML）', self.font_picker)
+        font_note = QLabel('可搜索系统字体，或选择包含中文的 TTF／OTF／TTC 字体文件。HTML 会内嵌所选字形，便于离线查看；工作台界面字体保持原样。')
         font_note.setProperty('muted', True)
         font_note.setWordWrap(True)
         report_form.addRow(font_note)
@@ -161,13 +151,16 @@ class SettingsView(QWidget):
         footer.addWidget(self.save_button)
         outer.addLayout(footer)
         for control in self.findChildren(QLineEdit):
-            control.textChanged.connect(self.mark_pending)
+            if not self.font_picker.isAncestorOf(control):
+                control.textChanged.connect(self.mark_pending)
         for control in self.findChildren(QComboBox):
-            control.currentIndexChanged.connect(self.mark_pending)
+            if not self.font_picker.isAncestorOf(control):
+                control.currentIndexChanged.connect(self.mark_pending)
         for control in self.findChildren(QCheckBox):
             control.toggled.connect(self.mark_pending)
         for control in (self.width, self.font_size):
             control.valueChanged.connect(self.mark_pending)
+        self.font_picker.font_changed.connect(self.mark_pending)
 
     def mark_pending(self, *_):
         self.save_status.setText('设置已更改，点击“保存设置”写入本地记录。')
@@ -178,10 +171,7 @@ class SettingsView(QWidget):
             self.output.setText(path)
 
     def choose_font(self):
-        path, _ = QFileDialog.getOpenFileName(self, '选择资料导出字体', self.font_path.text(),
-                                             '字体文件 (*.ttf *.otf)')
-        if path:
-            self.font_path.setText(path)
+        self.font_picker.choose_file()
 
     def commit(self):
         self.config.update(output_root=self.output.text().strip(), extraction_mode=self.mode.currentData(),
@@ -189,7 +179,7 @@ class SettingsView(QWidget):
                            extraction_video=self.kinds['video'].isChecked(),
                            formats=[fmt.value for fmt, check in self.formats.items() if check.isChecked()],
                            report_width=self.width.value(), report_font_size=self.font_size.value(),
-                           report_font_path=self.font_path.text().strip(),
+                           report_font_path=self.font_picker.font_path, report_font_index=self.font_picker.font_index,
                            report_module_image_layout=self.module_image_layout.currentData(),
                            report_theme=self.theme.currentData(), monitor=self.monitor.isChecked(),
                            data_locale=self.data_locale.currentData())
@@ -201,4 +191,4 @@ class SettingsView(QWidget):
     def report_options(self):
         return ReportOptions(width=self.width.value(), font_size=self.font_size.value(), theme=self.theme.currentData(),
                              module_image_layout=self.module_image_layout.currentData(),
-                             font_path=self.font_path.text().strip())
+                             font_path=self.font_picker.font_path, font_index=self.font_picker.font_index)

@@ -20,6 +20,7 @@
 | Python | 3.12 x64；[Python](https://www.python.org/) | PSF 等组合许可，构建时收集实际解释器 `LICENSE.txt`。 |
 | PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only；wheel 附 `LicenseRef-Qt-Commercial.txt`，并不证明本项目持有商业许可。只收集实际用到的 Qt Core／Gui／Widgets／Multimedia／MultimediaWidgets 与必要插件，动态 DLL 留在目录式包中，可替换；不包含 QtWebEngine。保留 Qt 许可补充原文与来源记录，不据此宣称已完成所有对外分发条件核查。 |
 | UnityPy | 1.25.3；[上游](https://github.com/K0lb3/UnityPy) | MIT；包含其运行数据及动态类，完整 wheel LICENSE 随包。 |
+| fonttools | 4.68.0；[官方文档](https://fonttools.readthedocs.io/en/stable/ttLib/ttFont.html) | 用于系统字体名称读取和TTC选定字形提取，保留实际wheel的LICENSE／METADATA；不附带系统字体文件。 |
 | flatbuffers / numpy / lz4 | 25.12.19 / 2.2.6 / 4.4.5 | 分别保留 wheel 的 Apache／BSD 等完整声明；numpy LICENSE 包含其本地库的多项声明。 |
 | Pillow / pycryptodome / bson | 11.3.0 / 3.23.0 / 0.5.10 | 保留各 wheel 的 LICENSE 原文，Pillow 含底层图像库声明，pycryptodome 含多来源声明。 |
 | texture2ddecoder / etcpak / astc-encoder-py | 1.0.6 / 0.9.15 / 0.1.12 | 保留实际 wheel LICENSE；原生图像解码／编码库的条款以原文为准。 |

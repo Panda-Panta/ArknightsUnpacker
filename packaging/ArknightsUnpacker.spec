@@ -35,7 +35,7 @@ binaries += collect_dynamic_libs("astc_encoder")
 # license for native DLLs or generated Ark-FBS schemas.
 runtime_distributions = (
     "PySide6", "PySide6_Essentials", "PySide6_Addons", "shiboken6", "UnityPy", "flatbuffers",
-    "Pillow", "numpy", "pycryptodome", "bson", "lz4", "spine-asset",
+    "Pillow", "fonttools", "numpy", "pycryptodome", "bson", "lz4", "spine-asset",
     "WannaCRI", "ffmpeg-python", "fmod-toolkit", "pyfmodex", "texture2ddecoder",
     "etcpak", "astc-encoder-py", "archspec", "brotli", "fsspec", "tpk-ar",
     "attrs", "python-dateutil", "six", "future", "typing-extensions", "tqdm",
@@ -60,6 +60,7 @@ os.environ.setdefault("PYFMODEX_DLL_PATH", str(fmod_root / "libfmod/Windows/x64/
 hiddenimports = collect_submodules("UnityPy") + collect_submodules("pyfmodex")
 # Page factories import optional views by name so the shell can omit them.
 hiddenimports += collect_submodules("arknights_unpacker.ui")
+hiddenimports += collect_submodules("fontTools.ttLib.tables")
 hiddenimports += ["PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.BmpImagePlugin", "PIL.TgaImagePlugin", "Crypto.Cipher.AES", "bson", "flatbuffers", "numpy", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets"]
 preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
 entrypoint = root / "packaging" / ("preflight.py" if preflight else "entrypoint.py")

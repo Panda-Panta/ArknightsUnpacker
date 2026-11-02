@@ -122,6 +122,7 @@ def main() -> int:
     parser.add_argument("--preview-updates", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--profile-navigation-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--profile-export-test", action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument("--profile-font-preview-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.preview_source and not args.smoke_test:
@@ -132,6 +133,8 @@ def main() -> int:
         parser.error('--profile-navigation-test requires --smoke-test without --preview-source')
     if args.profile_export_test and (not args.smoke_test or args.preview_source):
         parser.error('--profile-export-test requires --smoke-test without --preview-source')
+    if args.profile_font_preview_test and (not args.smoke_test or args.preview_source or args.profile_export_test or args.profile_navigation_test):
+        parser.error('--profile-font-preview-test requires only --smoke-test')
     from .application import AppServices
     try:
         services = AppServices(args.data_dir, output_root=args.output_dir)
@@ -182,6 +185,11 @@ def main() -> int:
                                   args.game_root or services.config.get('game_root'))
         window._preview_smoke = PreviewSmoke(app, window, args.preview_source, receipt, args.preview_kind,
                                             updates=args.preview_updates)
+    elif args.smoke_test and args.profile_font_preview_test:
+        from .ui.report_font_smoke import ReportFontSmoke
+        receipt = validate_output(validate_data_root(Path(args.smoke_test)),
+                                  args.game_root or services.config.get('game_root'))
+        window._report_font_smoke = ReportFontSmoke(app, window, receipt)
     elif args.smoke_test:
         from hashlib import sha256
         from PySide6.QtGui import QPixmap

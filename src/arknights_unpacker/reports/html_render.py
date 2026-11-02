@@ -22,10 +22,10 @@ def _e(value) -> str:
     return escape(str(value), quote=True)
 
 
-def _styles(theme: str, font_path: str = '') -> str:
+def _styles(theme: str, font_path: str = '', font_index: int = 0) -> str:
     # Exported files stay self-contained. Paper printing always uses the shared
     # light palette while the screen preserves the selected export theme.
-    selected = load_custom_font(font_path)
+    selected = load_custom_font(font_path, font_index)
     return (theme_css(theme) + '\n' + CSS + '\n@media print {\n' + theme_css('light') + '\n}' +
             (selected.css() if selected else ''))
 
@@ -176,18 +176,18 @@ def render_html(document: ReportDocument) -> str:
             content.extend(_block(index, block) for index, block in items)
         content.append('</section>')
     return _PAGE.substitute(title=_e(display_title(document)), theme=_e(document.options.theme),
-                            css=_styles(document.options.theme, document.options.font_path), script=JS,
+                            css=_styles(document.options.theme, document.options.font_path, document.options.font_index), script=JS,
                             directory=''.join(directory), header=_header(document), content=''.join(content))
 
 
-def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light', *, font_path: str = '') -> str:
+def render_index(entries: list[dict[str, str]], title: str, theme: str = 'light', *, font_path: str = '', font_index: int = 0) -> str:
     rows = ''.join('<tr>' + f'<td><a href="{quote(entry["path"])}">{_e(entry["title"])}</a></td>' + ''.join(
         f'<td>{_e(present("kind" if key == "status" else key, entry[key])) if entry.get(key) else ""}</td>'
         for key in ('profession', 'status')) + '</tr>' for entry in entries)
     return ('<!doctype html>'
             f'<html lang="zh-CN" data-report-theme="{_e(theme)}"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{_e(title)}</title><style>{_styles(theme, font_path)}</style></head>'
+            f'<title>{_e(title)}</title><style>{_styles(theme, font_path, font_index)}</style></head>'
             f'<body><main class="index-main"><p class="eyebrow">LOCAL ARCHIVE <span>离线资料目录</span></p><h1>{_e(title)}</h1>'
             f'<p class="index-description">共 {len(entries)} 份资料 · 点击名称打开，移动整个任务文件夹后仍可使用</p>'
             '<div class="table-wrap" tabindex="0" role="region" aria-label="离线资料目录表格，可横向滚动"><table class="index-table"><thead><tr>'
