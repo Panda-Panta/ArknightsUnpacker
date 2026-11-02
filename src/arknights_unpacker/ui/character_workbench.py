@@ -1,10 +1,10 @@
-"""Manual AVG expression placement with export bound to a successful preview."""
+"""AVG expression placement previews automatically and binds export to its result."""
 from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (QComboBox, QDialog, QFormLayout, QHBoxLayout,
                               QLabel, QPushButton, QSpinBox, QSplitter,
                               QVBoxLayout, QWidget)
@@ -24,6 +24,7 @@ class CharacterWorkbench(QDialog):
         self.preview_closed = False
         self.successful_options = None
         self._requested_options = None
+        self._last_options = None
         self._groups = []
         self._updating = False
         self._preview_leases = []
@@ -44,7 +45,7 @@ class CharacterWorkbench(QDialog):
         form_widget.setMinimumWidth(300)
         form_widget.setMaximumWidth(430)
         form_outer = QVBoxLayout(form_widget)
-        hint = QLabel('选择同组底图和表情，调整位置与尺寸。\n预览确认后导出当前合成。\n批量导出按各组原配置生成全部表情。')
+        hint = QLabel('选择同组底图和表情，调整后自动预览。\n确认效果后导出当前合成。\n批量导出按各组原配置生成全部表情。')
         hint.setWordWrap(True)
         form_outer.addWidget(hint)
         form = QFormLayout()
@@ -96,19 +97,17 @@ class CharacterWorkbench(QDialog):
         splitter.setSizes([330, 800])
         outer.addWidget(splitter, 1)
         buttons = QHBoxLayout()
-        self.preview_button = QPushButton('预览合成')
-        self.preview_button.setObjectName('previewCharacterComposition')
-        self.preview_button.setProperty('primary', True)
         self.export_button = QPushButton('导出当前合成')
         self.export_button.setObjectName('exportCharacterComposition')
+        self.export_button.setProperty('primary', True)
         self.batch_button = QPushButton('批量导出全部表情')
         self.batch_button.setObjectName('exportAllCharacterExpressions')
         self.batch_button.setToolTip('按资源中的各组配置导出，不使用当前手动偏移和尺寸。')
         close = QPushButton('关闭')
-        for button in (self.preview_button, self.export_button, self.batch_button, self.reset_button, close):
+        for button in (self.export_button, self.batch_button, self.reset_button, close):
             button.setAutoDefault(False)
             button.setDefault(False)
-        for button in (self.preview_button, self.export_button, self.batch_button):
+        for button in (self.export_button, self.batch_button):
             buttons.addWidget(button)
         buttons.addStretch()
         buttons.addWidget(close)
@@ -119,11 +118,14 @@ class CharacterWorkbench(QDialog):
         for spin in (self.x_spin, self.y_spin, self.width_spin, self.height_spin):
             spin.valueChanged.connect(self._form_changed)
         self.reset_button.clicked.connect(self._select_group)
-        self.preview_button.clicked.connect(self.request_preview)
         self.export_button.clicked.connect(self.request_export)
         self.batch_button.clicked.connect(self._request_batch)
         close.clicked.connect(self.close)
         self.finished.connect(self._release_previews)
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setSingleShot(True)
+        self._auto_timer.setInterval(250)
+        self._auto_timer.timeout.connect(self.request_preview)
         self._set_available(False)
 
     @staticmethod
@@ -132,12 +134,11 @@ class CharacterWorkbench(QDialog):
         spin.setRange(minimum, maximum)
         spin.setSuffix(' px')
         spin.setAccessibleName(name)
-        spin.setKeyboardTracking(False)
+        spin.setKeyboardTracking(True)
         return spin
 
     def _set_available(self, available):
-        for control in (self.group_choice, self.base_choice, self.face_choice, self.reset_button,
-                        self.preview_button, self.batch_button):
+        for control in (self.group_choice, self.base_choice, self.face_choice, self.reset_button, self.batch_button):
             control.setEnabled(available)
         self.export_button.setEnabled(False)
         self._update_placement()
@@ -193,6 +194,7 @@ class CharacterWorkbench(QDialog):
             self.width_spin.setValue(max(1, round(size[0])))
             self.height_spin.setValue(max(1, round(size[1])))
         self._updating = False
+        self._last_options = None
         self._form_changed()
 
     def _update_placement(self):
@@ -218,20 +220,25 @@ class CharacterWorkbench(QDialog):
     def _form_changed(self, *_):
         if self._updating or self.preview_closed:
             return
+        options = self.current_options()
+        if options == self._last_options:
+            return
+        self._last_options = dict(options)
+        self._auto_timer.stop()
         self.preview_generation += 1
         self.successful_options = None
         self._requested_options = None
         self._clear_current_preview()
         self._update_placement()
         available = bool(self._group() and self.base_choice.currentData())
-        self.preview_button.setEnabled(available)
         self.batch_button.setEnabled(bool(self._groups))
         self.export_button.setEnabled(False)
         if available:
-            self.status.setText('已选择合成参数。点击“预览合成”，确认效果后导出。')
+            self.status.setText('合成参数已更新，正在准备自动预览…')
+            self._auto_timer.start()
 
     def request_preview(self):
-        if self.preview_closed or not self.preview_button.isEnabled():
+        if self.preview_closed or not self._group() or not self.base_choice.currentData():
             return
         self.preview_generation += 1
         self.successful_options = None
@@ -239,7 +246,7 @@ class CharacterWorkbench(QDialog):
         self.export_button.setEnabled(False)
         options = self.current_options()
         self._requested_options = (self.preview_generation, dict(options))
-        self.status.setText('正在合成预览…')
+        self.status.setText('正在自动合成预览…')
         self.preview_requested.emit(dict(options))
 
     def request_export(self):
@@ -295,7 +302,7 @@ class CharacterWorkbench(QDialog):
         self._current_preview_lease = preview_lease
         self.successful_options = dict(requested[1])
         self.export_button.setEnabled(True)
-        self.status.setText('合成预览已就绪，可导出当前效果。修改参数后需重新预览。')
+        self.status.setText('自动预览已就绪，可导出当前效果。修改参数后将自动更新。')
         return True
 
     def preview_failed(self, message, generation=None):
@@ -303,6 +310,7 @@ class CharacterWorkbench(QDialog):
             return
         self.successful_options = None
         self._requested_options = None
+        self._auto_timer.stop()
         self.export_button.setEnabled(False)
         self.status.setText('预览失败：' + str(message))
 
@@ -316,6 +324,7 @@ class CharacterWorkbench(QDialog):
         if self.preview_closed:
             return
         self.preview_closed = True
+        self._auto_timer.stop()
         self.preview_generation += 1
         self.successful_options = None
         self._requested_options = None

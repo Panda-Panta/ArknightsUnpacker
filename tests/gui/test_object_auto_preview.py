@@ -1,6 +1,7 @@
 """Automatic object selection and embedded preview ownership use real Qt events."""
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
+from PySide6.QtWidgets import QPushButton
 
 from arknights_unpacker.ui.preview_cache import PreviewCache
 from arknights_unpacker.ui.report_preview import ObjectsDialog
@@ -25,6 +26,8 @@ def owned_text(cache, name, text):
 def test_object_discovery_automatically_previews_first_supported_object(qtbot, tmp_path):
     dialog = ObjectsDialog(str(tmp_path / 'fixture.ab'))
     qtbot.addWidget(dialog)
+    assert not hasattr(dialog, 'preview_button')
+    assert all(button.text() != '预览所选对象' for button in dialog.findChildren(QPushButton))
     requests = []
     dialog.extract_requested.connect(lambda source, ids, preview: requests.append((source, ids, preview)))
     dialog.set_objects(rows())
@@ -54,7 +57,7 @@ def test_selection_changes_debounce_and_multi_selection_never_auto_previews(qtbo
     assert requests == [['image'], ['audio']]
 
 
-def test_auto_preview_can_be_disabled_while_manual_preview_and_extraction_remain(qtbot, tmp_path):
+def test_auto_preview_can_be_disabled_for_browsing_and_extraction_then_reenabled(qtbot, tmp_path):
     dialog = ObjectsDialog(str(tmp_path / 'fixture.ab'), auto_preview=False)
     qtbot.addWidget(dialog)
     requests = []
@@ -63,15 +66,40 @@ def test_auto_preview_can_be_disabled_while_manual_preview_and_extraction_remain
     dialog.table.selectRow(3)
     qtbot.wait(350)
     assert requests == []
-    dialog.request(True)
+    assert not hasattr(dialog, 'preview_button')
+    dialog.extract_button.click()
+    assert requests == [(['text'], False)]
+    dialog.auto_preview.setChecked(True)
+    qtbot.waitUntil(lambda: len(requests) == 2, timeout=1500)
+    assert requests[-1] == (['text'], True)
+    # Turning off the checkbox also cancels an already scheduled preview.
+    dialog.table.selectRow(4)
+    dialog.auto_preview.setChecked(False)
+    qtbot.wait(350)
+    assert len(requests) == 2
     dialog.table.selectAll()
-    dialog.request(False)
-    assert requests[0] == (['text'], True)
-    assert set(requests[1][0]) == {row['id'] for row in rows()} and requests[1][1] is False
+    dialog.extract_button.click()
+    assert set(requests[-1][0]) == {row['id'] for row in rows()} and requests[-1][1] is False
     dialog.table.selectRow(4)
     dialog.auto_preview.setChecked(True)
-    qtbot.waitUntil(lambda: len(requests) == 3, timeout=1500)
+    qtbot.waitUntil(lambda: len(requests) == 4, timeout=1500)
     assert requests[-1] == (['audio'], True)
+
+
+def test_unsupported_types_do_not_auto_preview_but_remain_extractable(qtbot, tmp_path):
+    dialog = ObjectsDialog(str(tmp_path / 'fixture.ab'))
+    qtbot.addWidget(dialog)
+    requests = []
+    dialog.extract_requested.connect(lambda source, ids, preview: requests.append((ids, preview)))
+    dialog.set_objects(rows()[:2])
+    qtbot.wait(350)
+    assert requests == []
+    for index in (0, 1):
+        dialog.table.selectRow(index)
+        qtbot.wait(350)
+        assert requests == []
+    dialog.extract_button.click()
+    assert requests == [(['unsupported-video'], False)]
 
 
 def test_stale_results_and_failures_cannot_replace_the_current_embedded_preview(qtbot, tmp_path):

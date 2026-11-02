@@ -1,4 +1,4 @@
-"""Explicit native acceptance of manual and configured AVG expression export."""
+"""Explicit native acceptance of automatic AVG previews and configured export."""
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +10,7 @@ import traceback
 from PIL import Image
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QPushButton
 
 from .. import __version__
 from ..paths import atomic_json
@@ -57,6 +58,18 @@ class CharacterSmoke:
         job, = [job for job in self.window.queue.jobs if job.job_id not in before]
         return job
 
+    def automatic_preview_job(self, options):
+        jobs = [job for job in self.window.queue.jobs if (job.request or {}).get('preview') is True
+                and (job.request or {}).get('kinds') == ['expression']
+                and (job.request or {}).get('paths') == [str(self.source)]
+                and (job.request or {}).get('character_options') == options]
+        if not jobs:
+            return None
+        job, = jobs
+        if job.status in ('排队中', '运行中', '正在取消'):
+            return None
+        return job
+
     @staticmethod
     def successful(job):
         assert job.status == '成功', job.last_error or f'{job.title}: {job.status}'
@@ -99,7 +112,10 @@ class CharacterSmoke:
                 return
             if self.stage == 'catalog':
                 self.successful(self.catalog_job)
-                assert self.dialog._groups and self.dialog.preview_button.isEnabled(), self.dialog.status.text()
+                assert self.dialog._groups, self.dialog.status.text()
+                assert not hasattr(self.dialog, 'preview_button'), 'Manual preview button attribute remains'
+                assert all(button.text() != '预览合成' and button.objectName() != 'previewCharacterComposition'
+                           for button in self.dialog.findChildren(QPushButton)), 'Manual preview button remains in the window'
                 assert self.catalog_job not in self.window.queue.visible_jobs
                 self.expected_batch_count = sum(len(group['entries']) for group in self.dialog._groups)
                 group = next(group for group in self.dialog._groups if group['id'] == self.dialog.group_choice.currentData())
@@ -109,12 +125,15 @@ class CharacterSmoke:
                 self.canvas = [base['width'], base['height']]
                 self.initial_options = dict(self.dialog.current_options())
                 self.result.update(group_count=len(self.dialog._groups), expected_batch_count=self.expected_batch_count,
-                                   catalog_read_hidden=True, logical_canvas=self.canvas)
-                self.first_job = self.click_job(self.dialog.preview_button)
-                self.preview_paths.append(Path(self.first_job.output))
+                                   catalog_read_hidden=True, logical_canvas=self.canvas,
+                                   manual_preview_button_absent=True)
                 self.stage = 'first_preview'
                 return
             if self.stage == 'first_preview':
+                self.first_job = self.automatic_preview_job(self.initial_options)
+                if self.first_job is None:
+                    return
+                self.preview_paths.append(Path(self.first_job.output))
                 _, self.first_pixels = self.preview_ready(self.first_job)
                 self.result['initial_preview'] = {**self.first_pixels, 'options': self.initial_options}
                 spin = self.dialog.x_spin
@@ -125,11 +144,14 @@ class CharacterSmoke:
                 assert spin.value() == self.initial_options['x'] + 3
                 assert not self.dialog.export_button.isEnabled(), 'Changed parameters retained old export confirmation'
                 assert not self.preview_paths[0].exists(), 'Changed parameters retained the old preview cache'
-                self.second_job = self.click_job(self.dialog.preview_button)
-                self.preview_paths.append(Path(self.second_job.output))
+                self.modified_options = dict(self.dialog.current_options())
                 self.stage = 'modified_preview'
                 return
             if self.stage == 'modified_preview':
+                self.second_job = self.automatic_preview_job(self.modified_options)
+                if self.second_job is None:
+                    return
+                self.preview_paths.append(Path(self.second_job.output))
                 _, self.second_pixels = self.preview_ready(self.second_job)
                 assert self.second_pixels['pixels_sha256'] != self.first_pixels['pixels_sha256']
                 self.successful_options = dict(self.dialog.successful_options)
@@ -145,7 +167,7 @@ class CharacterSmoke:
                 assert len(outputs) == 1 and outputs[0]['kind'] == 'character_expression', outputs
                 path = Path(outputs[0]['path']).resolve()
                 assert path.is_relative_to(self.output_root)
-                assert self.pixels(path) == self.second_pixels, 'Formal PNG differs from the confirmed manual preview'
+                assert self.pixels(path) == self.second_pixels, 'Formal PNG differs from the confirmed automatic preview'
                 self.output_unchanged()
                 self.result.update(formal_preview_pixels_equal=True, formal_options_preserved=True,
                                    formal_png=str(path), formal_output_root=str(self.output_root))
@@ -179,6 +201,7 @@ class CharacterSmoke:
                 self.result.update(success=True, source_unchanged=True, current_page_preserved=True,
                                    preview_settings_unchanged=True, parameter_edit_invalidates_export=True,
                                    preview_pixels_changed=True, preview_cache_released=True,
+                                   automatic_preview=True, manual_preview_button_absent=True,
                                    media_source_released=True,
                                    elapsed_seconds=round(time.monotonic() - self.started, 2))
                 self.finish(0)

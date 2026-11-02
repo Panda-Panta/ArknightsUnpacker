@@ -94,6 +94,11 @@ class PreviewSmoke:
                 assert Path(self.dialog.path).resolve() == self.source
                 self.stage = 'attach'
             if self.stage == 'attach':
+                from PySide6.QtWidgets import QPushButton
+                assert not hasattr(self.dialog, 'preview_button')
+                assert all(button.text() != '预览所选对象' for button in self.dialog.findChildren(QPushButton))
+                assert self.dialog.auto_preview.isChecked()
+                self.result['manual_preview_button_absent'] = True
                 self.panel = self.dialog.preview_panel
                 self.panel.audio_output.setMuted(True)
                 self.panel.video_widget.videoSink().videoFrameChanged.connect(self.frame)

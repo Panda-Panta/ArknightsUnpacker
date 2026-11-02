@@ -71,18 +71,19 @@ def test_header_click_uses_numeric_order_and_keeps_selected_object(dialog, qtbot
     assert selected_records(dialog.table)[0]['id'] == identity
 
 
-def test_sorted_selection_requests_exact_preview_and_extraction_ids(dialog):
+def test_sorted_selection_requests_exact_preview_and_extraction_ids(dialog, qtbot):
     dialog.set_objects(objects())
     dialog.table.sortByColumn(size_column(dialog), ASC)
     dialog.table.selectRow(3)
     requests = []
     dialog.extract_requested.connect(lambda source, ids, preview: requests.append((source, ids, preview)))
-    dialog.request(True)
+    dialog.auto_preview.setChecked(True)
+    qtbot.waitUntil(lambda: bool(requests), timeout=1500)
     assert requests == [(dialog.path, ['5'], True)]
     dialog.table.selectionModel().select(dialog.model.index(5, 0),
                                          QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
     dialog.table.sortByColumn(size_column(dialog), DESC)
-    dialog.request(False)
+    dialog.extract_button.click()
     assert requests[-1][0] == dialog.path and requests[-1][2] is False
     assert set(requests[-1][1]) == {'2', '5'}
 

@@ -42,9 +42,9 @@ def test_character_preview_and_export_keep_options_page_and_hidden_metadata_read
     page = window.tabs.currentWidget()
     original_output = services.config['output_root']
     dialog = open_workbench(qtbot, window, tmp_path / 'hero.ab')
-    assert all(not job.show_in_tasks for job in window.queue.jobs)
-    dialog.request_preview()
-    wait_idle(qtbot, window)
+    reads = [job for job in window.queue.jobs if job.title.startswith('读取角色表情配置 · ')]
+    assert reads and all(not job.show_in_tasks for job in reads)
+    qtbot.waitUntil(lambda: dialog.export_button.isEnabled(), timeout=5000)
     assert dialog.export_button.isEnabled()
     assert calls[-1][2] == dialog.current_options() and calls[-1][3] == ['expression']
     assert calls[-1][4] is False
@@ -64,14 +64,16 @@ def test_character_preview_and_export_keep_options_page_and_hidden_metadata_read
 
 
 def test_latest_character_preview_preserves_explicit_kind_and_manual_options(qtbot, tmp_path):
-    window, _, calls = prepare(qtbot, tmp_path, delay=.12)
+    window, _, calls = prepare(qtbot, tmp_path, delay=.5)
     dialog = open_workbench(qtbot, window, tmp_path / 'hero.ab')
-    dialog.request_preview()
-    qtbot.waitUntil(lambda: len(calls) == 1)
-    dialog.x_spin.setValue(dialog.x_spin.value() + 8)
+    qtbot.waitUntil(lambda: len(calls) == 1, timeout=5000)
+    original_x = dialog.x_spin.value()
+    for change in (1, 3, 8):
+        dialog.x_spin.setValue(original_x + change)
     wanted = dialog.current_options()
-    dialog.request_preview()
-    qtbot.waitUntil(lambda: len(calls) == 2 and not window.queue.busy, timeout=5000)
+    qtbot.waitUntil(lambda: dialog in window._object_preview_pending, timeout=5000)
+    assert len(calls) == 1
+    qtbot.waitUntil(lambda: len(calls) == 2 and dialog.export_button.isEnabled(), timeout=5000)
     assert calls[-1][2] == wanted and calls[-1][3] == ['expression']
     assert dialog.successful_options == wanted
     lease = dialog._current_preview_lease
@@ -104,11 +106,19 @@ def test_closing_character_workbench_cancels_only_its_pending_work(qtbot, tmp_pa
         window.character_workbench([str(tmp_path / 'hero.ab')])
         dialog = next(dialog for dialog in window._dialogs if isinstance(dialog, CharacterWorkbench))
     else:
-        dialog = open_workbench(qtbot, window, tmp_path / 'hero.ab')
         services.extract = slow
-        dialog.request_preview()
+        window.character_workbench([str(tmp_path / 'hero.ab')])
+        dialog = next(dialog for dialog in window._dialogs if isinstance(dialog, CharacterWorkbench))
     qtbot.waitUntil(lambda: bool(entered))
     job = window.queue.active
     dialog.close()
     qtbot.waitUntil(lambda: not window.queue.busy, timeout=5000)
     assert job.token.cancelled and job.status == '已取消'
+
+
+def test_close_before_automatic_preview_fires_creates_no_late_task(qtbot, tmp_path):
+    window, _, calls = prepare(qtbot, tmp_path)
+    dialog = open_workbench(qtbot, window, tmp_path / 'hero.ab')
+    dialog.close()
+    qtbot.wait(350)
+    assert calls == []
