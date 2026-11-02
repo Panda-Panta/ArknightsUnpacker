@@ -33,15 +33,20 @@ STATUS.update({'current': '当前候选（未核实内容）', 'form_added': '�
 
 
 class RecordsModel(QAbstractTableModel):
-    """A row stores its domain record; no per-cell widget allocation."""
+    """Columns contain a label, display getter and optional raw sort getter."""
     def __init__(self, columns, parent=None):
         super().__init__(parent)
         self.columns = columns
         self.rows = []
+        self._sort_column = None
+        self._sort_order = Qt.SortOrder.AscendingOrder
 
     def replace(self, rows):
+        rows = list(rows)
+        if self._sort_column is not None:
+            rows = [row for _, row in self._ordered(enumerate(rows), self._sort_column, self._sort_order)]
         self.beginResetModel()
-        self.rows = list(rows)
+        self.rows = rows
         self.endResetModel()
 
     def rowCount(self, parent=None):
@@ -70,17 +75,33 @@ class RecordsModel(QAbstractTableModel):
     def sort(self, column, order=Qt.SortOrder.AscendingOrder):
         if not 0 <= column < len(self.columns):
             return
-        getter = self.columns[column][1]
+        self._sort_column, self._sort_order = column, order
         self.layoutAboutToBeChanged.emit()
         persistent = self.persistentIndexList()
         # Retain each old row's identity, even when two records compare equal.
-        indexed = list(enumerate(self.rows))
-        indexed.sort(key=lambda pair: str(getter(pair[1]) if callable(getter) else value(pair[1], getter, '')).casefold(),
-                     reverse=order == Qt.SortOrder.DescendingOrder)
+        indexed = self._ordered(enumerate(self.rows), column, order)
         positions = {old_row: new_row for new_row, (old_row, _) in enumerate(indexed)}
         self.rows = [row for _, row in indexed]
         self.changePersistentIndexList(persistent, [self.index(positions[index.row()], index.column()) for index in persistent])
         self.layoutChanged.emit()
+
+    def _ordered(self, indexed, column, order):
+        specification = self.columns[column]
+        getter = specification[2] if len(specification) > 2 else specification[1]
+        known, unknown = [], []
+        for position, row in indexed:
+            result = getter(row) if callable(getter) else value(row, getter)
+            if result is None:
+                unknown.append((position, row))
+            else:
+                # Numeric domains retain their precision, including integer ns
+                # and byte counts whose formatted labels may compare equally.
+                key = (0, result) if isinstance(result, (int, float)) else (1, str(result).casefold())
+                known.append((key, position, row))
+        known.sort(key=lambda item: item[0], reverse=order == Qt.SortOrder.DescendingOrder)
+        # Unknown observations remain last in either direction, and Python's
+        # stable sort preserves the identity/order of records with equal keys.
+        return [(position, row) for _, position, row in known] + unknown
 
 
 def selected_records(table):

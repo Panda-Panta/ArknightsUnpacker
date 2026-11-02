@@ -136,6 +136,7 @@ class EntityView(QWidget):
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setSortingEnabled(True)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().hide()

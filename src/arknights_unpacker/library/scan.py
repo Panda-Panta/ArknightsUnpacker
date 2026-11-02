@@ -85,7 +85,9 @@ def scan_installation(source:GameInstallation|ScanSnapshot,options:ScanOptions|N
                                     layer,logical=candidate,relative[len(prefix)+1:] if prefix else relative
                                     break
                             before=old.get(relative.casefold())
-                            record=FileRecord(relative,info.st_size,info.st_mtime_ns,path.suffix.lower(),layer,classify(logical,layer),first_seen_at=(before.first_seen_at if before and before.first_seen_at is not None else started))
+                            # Birth time describes the local file; ctime is not
+                            # portable creation time and scan history is separate.
+                            record=FileRecord(relative,info.st_size,info.st_mtime_ns,path.suffix.lower(),layer,classify(logical,layer),first_seen_at=(before.first_seen_at if before and before.first_seen_at is not None else started),created_ns=getattr(info,'st_birthtime_ns',None))
                             metadata_changed=before is not None and (before.size,before.mtime_ns)!=(info.st_size,info.st_mtime_ns)
                             core=layer in ('base','hot') and (path.suffix.lower() in ('.idx','.json') or logical.startswith(('anon/','config/')))
                             # No digest on an unchanged ordinary file is an intentional
@@ -100,7 +102,7 @@ def scan_installation(source:GameInstallation|ScanSnapshot,options:ScanOptions|N
                             if needs_hash:
                                 try:
                                     record.sha256,after=_digest(path,token,emit)
-                                    record.size=after.st_size;record.mtime_ns=after.st_mtime_ns;record.hash_status='verified'
+                                    record.size=after.st_size;record.mtime_ns=after.st_mtime_ns;record.created_ns=getattr(after,'st_birthtime_ns',None);record.hash_status='verified'
                                 except OSError as exc:record.error=str(exc);record.hash_status='unstable' if 'unstable:' in str(exc) else 'error';snapshot.errors.append(str(exc))
                             elif before:
                                 record.sha256=before.sha256;record.hash_status='metadata_unchanged'

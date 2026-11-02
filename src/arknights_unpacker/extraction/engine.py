@@ -57,13 +57,15 @@ def list_bundle_objects(path):
     candidate=source_preview_type(path)
     if candidate and not head.startswith((b'UnityFS',b'UnityRaw',b'UnityWeb')):
         return [{'id':'source','type':candidate[0],'name':path.name,
-                 'logical_path':path.name,'previewable':True}]
+                 'logical_path':path.name,'previewable':True,'size':path.stat().st_size}]
     env=load_bundle(path);paths=_object_paths(env);items=[]
     for obj in env.objects:
         name=''
         if obj.type.name in {'TextAsset','Texture2D','Sprite','AudioClip','VideoClip','Material','MonoBehaviour'}:
             name=_object_name(obj)
-        item={'id':str(obj.path_id),'type':obj.type.name,'name':name,'logical_path':paths.get(str(obj.path_id),'')}
+        # Serialized object bytes exclude any separate streaming payloads.
+        # ObjectReader already has this metadata; do not read/decode for size.
+        item={'id':str(obj.path_id),'type':obj.type.name,'name':name,'logical_path':paths.get(str(obj.path_id),''),'size':getattr(obj,'byte_size',None)}
         if obj.type.name=='VideoClip':item['previewable']=False
         items.append(item)
     return items

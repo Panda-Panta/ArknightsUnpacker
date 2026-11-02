@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableV
 from arknights_unpacker.contracts import ReportDocument, OperatorProfile, ModuleProfile, ReportOptions
 from arknights_unpacker.paths import validate_output
 from arknights_unpacker.reports.model import semantic_blocks
-from .models import RecordsModel, selected_records, value
+from .models import RecordsModel, selected_records, size_text, value
 
 
 def _input_roots(parent, source_package=None):
@@ -398,20 +398,27 @@ class ObjectsDialog(QDialog):
         layout.addWidget(self.status)
         self.splitter = QSplitter()
         self.splitter.setChildrenCollapsible(False)
-        self.model = RecordsModel([('对象 ID', 'id'), ('类型', 'type'), ('名称', 'name'), ('逻辑路径', 'logical_path')], self)
+        self.model = RecordsModel([('对象 ID', 'id'), ('类型', 'type'), ('名称', 'name'),
+                                   ('对象大小', lambda row: size_text(value(row, 'size')) if value(row, 'size') is not None else '未知', 'size'),
+                                   ('逻辑路径', 'logical_path')], self)
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setMinimumWidth(300)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        self.table.setSortingEnabled(True)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setToolTip('对象大小：Unity 对象的序列化数据字节数，不含独立流式载荷，也不是导出后文件大小；独立文件显示原文件大小。未知表示未提供大小。')
+        for column, width in enumerate((90, 110, 120, 95)):
+            self.table.setColumnWidth(column, width)
         self.splitter.addWidget(self.table)
         self.preview_panel = ResourcePreviewWidget()
         self.preview_panel.setMinimumWidth(320)
         self.splitter.addWidget(self.preview_panel)
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([400, 740])
+        self.splitter.setSizes([500, 640])
         layout.addWidget(self.splitter, 1)
         # Existing original-image actions and callers share the embedded panel.
         for name in ('preview', 'picture', 'image_scroll', 'image_tools', 'image_zoom', 'save_original_button'):
@@ -467,7 +474,7 @@ class ObjectsDialog(QDialog):
         self.model.replace(objects)
         self.status.setText(f'{len(objects):,} 个对象　·　{Path(self.path).name}')
         if self.auto_preview.isChecked():
-            first = next((index for index, row in enumerate(objects) if self._previewable(row)), None)
+            first = next((index for index, row in enumerate(self.model.rows) if self._previewable(row)), None)
             if first is not None:
                 self.table.selectRow(first)
 

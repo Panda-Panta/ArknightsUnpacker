@@ -13,12 +13,12 @@ def test_object_inventory_uses_name_only_reader_and_preserves_logical_paths(tmp_
     def full_read():
         pytest.fail('Listing names deserialized a texture payload')
 
-    obj = SimpleNamespace(path_id=12, type=SimpleNamespace(name='Texture2D'),
-                          peek_name=lambda: 'native picture', read=full_read)
+    obj = SimpleNamespace(path_id=12, type=SimpleNamespace(name='Texture2D'), byte_size=2048,
+                          peek_name=lambda: 'native picture', read=full_read, get_raw_data=full_read)
     env = SimpleNamespace(objects=[obj], container={'images/picture.png': SimpleNamespace(path_id=12)})
     monkeypatch.setattr(engine, 'load_bundle', lambda path: env)
     assert engine.list_bundle_objects(source) == [
-        {'id': '12', 'type': 'Texture2D', 'name': 'native picture', 'logical_path': 'images/picture.png'}]
+        {'id': '12', 'type': 'Texture2D', 'name': 'native picture', 'logical_path': 'images/picture.png', 'size': 2048}]
 
 
 @pytest.mark.parametrize('peek_result', [None, RuntimeError('unsupported type tree')])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QDir, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeView,
@@ -7,6 +8,10 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTr
     QPushButton, QMenu, QHeaderView, QAbstractItemView, QFrame, QStackedWidget)
 from .models import RecordsModel, value, size_text, time_text, STATUS, selected_records, is_resource_record
 from ..library.classifications import category_labels
+
+
+def observation_key(path):
+    return os.path.normcase(os.path.abspath(path)).casefold()
 
 
 def category_description(path, category):
@@ -54,6 +59,7 @@ class ExplorerView(QWidget):
         self.folder = ''
         self._root_selected = False
         self._directory_rows = {}
+        self._observed_files = {}
         self._resource_rows = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -154,8 +160,10 @@ class ExplorerView(QWidget):
         self.model = RecordsModel([
             ('名称', lambda r: Path(r['path']).name), ('目录用途', 'category'),
             ('类型', lambda r: Path(r['path']).suffix.upper() or '无扩展名'),
-            ('大小', lambda r: size_text(r['size'])),
-            ('修改时间', lambda r: time_text(r.get('mtime_ns', 0) / 1e9)),
+            ('大小', lambda r: size_text(r['size']), 'size'),
+            ('修改时间', lambda r: time_text((r.get('mtime_ns') or 0) / 1e9), lambda r: r.get('mtime_ns') or None),
+            ('创建时间', lambda r: time_text(r['created_ns'] / 1e9) if r.get('created_ns') is not None else '未知', 'created_ns'),
+            ('首次观测', lambda r: time_text(r['first_seen_at']) if r.get('first_seen_at') is not None else '未知', 'first_seen_at'),
             ('状态／来源', lambda r: STATUS.get(r.get('status'), r.get('status', '')) + ' · ' + r.get('layer', ''))], self)
         self.table = QTableView()
         self.table.setObjectName('resourceTable')
@@ -163,6 +171,7 @@ class ExplorerView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSortingEnabled(True)
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.setAlternatingRowColors(True)
         self.table.setWordWrap(False)
         self.table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
@@ -170,7 +179,8 @@ class ExplorerView(QWidget):
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
-        for column, width in enumerate((185, 145, 55, 75, 165, 155)):
+        self.table.horizontalHeader().setToolTip('单击表头排序。创建时间来自本机文件系统，首次观测来自本工具扫描；旧扫描未记录的创建时间需重新扫描后补齐。')
+        for column, width in enumerate((185, 145, 55, 75, 180, 180, 180, 155)):
             self.table.setColumnWidth(column, width)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.context_menu)
@@ -257,10 +267,12 @@ class ExplorerView(QWidget):
         selected = self.file_type.currentData()
         categories = set(category_labels())
         self._directory_rows = {}
+        self._observed_files = {}
         for record in value(snapshot, 'files', []):
-            row = {k: value(record, k) for k in ('path', 'size', 'mtime_ns', 'category', 'layer', 'sha256', 'hash_status', 'first_seen_at', 'error')}
+            row = {k: value(record, k) for k in ('path', 'size', 'mtime_ns', 'created_ns', 'category', 'layer', 'sha256', 'hash_status', 'first_seen_at', 'error')}
             row['status'] = self.changes.get(row['path'], 'unchanged' if value(changes, 'baseline_id') else 'first_seen')
             self._directory_rows.setdefault(Path(row['path']).parent.as_posix(), []).append(row)
+            self._observed_files[observation_key(Path(value(snapshot, 'root', str(self.root))) / row['path'])] = row
             categories.add(row['category'])
         categories.update(value(resource, 'category', '未知用途') for resource in value(catalog, 'resources', {}).values())
         if selected:
@@ -340,9 +352,12 @@ class ExplorerView(QWidget):
                     relative = Path(path).relative_to(self.root).as_posix() if path else value(resource, 'logical_key', '')
                 except ValueError:
                     relative = str(path)
+                observed = self._observed_files.get(observation_key(path), {}) if path else {}
                 rows.append({'path': relative, 'size': value(resource, 'size', 0), 'category': value(resource, 'category', '未知用途'),
                              'layer': value(resource, 'layer', ''), 'status': value(resource, 'status', 'unknown'),
-                             'logical_key': value(resource, 'logical_key'), 'source_path': path, 'mtime_ns': 0})
+                             'logical_key': value(resource, 'logical_key'), 'source_path': path,
+                             'mtime_ns': observed.get('mtime_ns'), 'created_ns': observed.get('created_ns'),
+                             'first_seen_at': observed.get('first_seen_at')})
             self._resource_rows = rows
         return self._resource_rows
 
@@ -416,8 +431,11 @@ class ExplorerView(QWidget):
                     if key == 'layer':
                         display = {'base': '初始资源', 'hot': '热更资源', 'other': '其他游戏文件'}.get(display, display)
                     text += f'<p><b>{label}</b><br>{escape(str(display))}</p>'
-            if row.get('first_seen_at'):
-                text += '<p><b>首次观测</b><br>' + time_text(row['first_seen_at']) + '</p>'
+            for label, key, scale in (('修改时间', 'mtime_ns', 1e9), ('创建时间', 'created_ns', 1e9), ('首次观测', 'first_seen_at', 1)):
+                timestamp = row.get(key)
+                display = time_text(timestamp / scale) if timestamp else '未知'
+                text += f'<p><b>{label}</b><br>{display}</p>'
+            text += '<p><small>创建时间来自本机文件系统；首次观测为本工具首次扫描到该路径的时间。旧扫描未记录的创建时间需重新扫描后补齐。</small></p>'
             self.details.setHtml(text)
         else:
             self.details.setHtml('<h3>选择一个文件</h3><p>查看用途、来源与校验状态。</p>'

@@ -101,6 +101,31 @@ class PreviewSmoke:
             if self.stage == 'objects':
                 if not self.dialog.model.rowCount():
                     return
+                from PySide6.QtCore import QPoint, Qt
+                from PySide6.QtTest import QTest
+                from PySide6.QtWidgets import QAbstractItemView
+                from .models import selected_records
+
+                column = next(index for index, item in enumerate(self.dialog.model.columns) if item[0] == '对象大小')
+                rows = self.dialog.model.rows
+                assert all(isinstance(row.get('size'), int) and row['size'] >= 0 for row in rows)
+                chosen = [row['id'] for row in selected_records(self.dialog.table)]
+                for order in (Qt.SortOrder.AscendingOrder, Qt.SortOrder.DescendingOrder):
+                    other = Qt.SortOrder.DescendingOrder if order == Qt.SortOrder.AscendingOrder else Qt.SortOrder.AscendingOrder
+                    self.dialog.table.sortByColumn(column, other)
+                    self.dialog.table.scrollTo(self.dialog.model.index(0, column), QAbstractItemView.ScrollHint.PositionAtCenter)
+                    self.app.processEvents()
+                    header = self.dialog.table.horizontalHeader()
+                    point = QPoint(header.sectionViewportPosition(column) + header.sectionSize(column) // 2, header.height() // 2)
+                    assert header.viewport().rect().contains(point)
+                    QTest.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=point)
+                    assert header.sortIndicatorOrder() == order
+                    sizes = [row['size'] for row in self.dialog.model.rows]
+                    assert sizes == sorted(sizes, reverse=order == Qt.SortOrder.DescendingOrder)
+                    assert [row['id'] for row in selected_records(self.dialog.table)] == chosen
+                self.result.update(object_size_sort_verified=True,
+                                   serialized_object_sizes={row['id']: row['size'] for row in self.dialog.model.rows},
+                                   selected_object_preserved_after_sort=True)
                 wanted = {'image': {'Texture2D', 'Sprite', 'Image'}, 'audio': {'AudioClip'},
                           'video': {'VideoClip'}, 'text': {'TextAsset'}}[self.kind]
                 index = next((index for index, row in enumerate(self.dialog.model.rows)

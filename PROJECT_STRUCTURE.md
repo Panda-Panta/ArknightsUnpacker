@@ -73,6 +73,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 0.1.23的报告提交不再选中jobs页面。`Job.show_in_tasks`为可选持久字段，内部资料／启动恢复／对象列表读取标False；`JobQueue.visible_jobs`供任务表及JobsPage角标使用，后台串行调度不变。旧记录按稳定内部标题兼容，其他默认可见；可见与内部成功记录分别沿既有20条上限管理。过滤后的表格动作依稳定job_id查回原任务，进度／日志不显示内部读取；原状态栏与错误信号保留。
 
+0.1.24的`RecordsModel`列定义可追加原始排序getter，大小／时间保留字节／纳秒精度，未知值双向置后，`replace`沿用当前有效排序；持久索引在排序后按原行身份映射。`FileRecord.created_ns`为可空文件系统birth time，扫描及摘要后的最终stat记录该值，旧JSON默认未知、不迁移数据库。`ExplorerView`按快照绝对物理路径关联生效资源的修改／创建／首次观测值，离线不补读源文件；更新表同样按原值排序。`extraction.engine.list_bundle_objects`从Unity对象`byte_size`元数据返回可空`size`，独立媒体为源文件字节；`ObjectsDialog`的大小列可排序，自动预览选中以排序后的记录为准。显式`--smoke-test --resource-sort-test --game-root <隔离夹具>`通过真实扫描和表头点击验收文件排序／时间；既有资源预览smoke同时核对worker返回的对象大小、排序与预览身份，普通启动不执行。
+
 主要调用链：
 
 ```text

@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.23源码与本机已更新，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：正在修复资源排序及补齐创建时间／首次观测对照（第14.27节）。Windows 0.1.23源码与本机已更新，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1121,3 +1121,22 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 完整备份并核验557旧程序项，更新D:/Tools/ArknightsUnpacker至0.1.23：替换7、550保持、无新增／删除。冻结和安装EXE均以隔离数据恢复塔露拉，内部读取不入任务表，预览／换字体／正式四格式保持干员页，最后手动打开任务页有正式产物，关闭回收正常；收据.work/rtf-native/{frozen,installed}/smoke.json。安装实测后557程序项完整匹配，正常退出后的184目标用户文件与85旧数据共269项SHA保持，没有启动原用户数据库的烟测。备份backup-0.1.22/，收据sync-result.json、installed-verification.json、final-user-data-verification.json。
 
 ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28bbabb80ea2f389；EXE SHA256 74aef7be1b39d15cd3a03adf178bdf1c6594fec9f9cfc8d885250a426400e6fc。只清理本构建已确认中间内容并复核源／安装／回退及ZIP，旧版和用户文件、原始失败／验收证据保留。无新领域skill或个人记忆写入；最后后补README／计划／验收，不改变164程序输入。最终远端与输入复核见final-delivery-verification.json。
+
+
+### 14.27 资源排序与创建时间／首次观测对照（2026-11-02，实施中）
+
+用户反馈排序错误（尤其大小），资源浏览需比较创建时间和首次观测。个人模式沿用test／main及既定本机交付目标，基线e6f8c1b，开工无用户未提交修改。实际Qt复现：90B／1KiB／20MiB升序得到1KiB／20MiB／90B，筛选刷新后不沿用表头顺序。
+
+复用RecordsModel、ExplorerView、UpdatesView、scan／FileRecord、JSON快照与scripts/verify.ps1、build.ps1及既有清单同步工具；不改变资源选择、哈希或差异判定规则。共享契约由主agent追加可空created_ns，取操作系统birth time（无可信值即未知，不将Unix ctime或首次观测当创建时间），旧快照无需迁移。
+
+并行批次：sorting_model负责models.py及新的排序回归，保留旧双元素列定义，支持第三项原值排序getter，数值按数值、缺失置后，刷新沿用排序并保持排序中的选中身份；file_creation负责scan.py及library创建时间／快照回归。主agent负责契约、Explorer／Updates列和扫描记录关联、Qt真实控件验收、版本／文档、集成／交付；互不争写。
+
+验收：跨B／KiB／MiB／GiB及相同显示值精确排序、升降序及刷新、缺失时间、选中身份、原始／生效资源时间对照、新扫描创建时间和首次观测沿用、旧快照加载／保存。创建时间为本机文件系统时间，首次观测为本工具扫描时间，均不推定服务器发布；历史创建时间为空显示未知，重新扫描后补。原始证据放.work/resource-sorting-20261102/；按影响运行GUI／library及完整既有检查，冻结／安装分别验证，不操作用户原始游戏数据或常规会话。
+
+用户追加包内对象大小与排序（同轮）：对象清单增加可空size（UnityPy ObjectReader.byte_size，序列化数据字节数；不含独立流式载荷，不为列表额外反序列化／解包），独立媒体source为原文件字节数。sorting_model接管report_preview.py与对象GUI回归，file_creation接管extraction/engine.py与清单回归；主agent仍负责集成、原生窗口／worker验收与交付。默认列表保持输入顺序，用户点表头后按字节排序并保持实际所选对象、自动预览和提取的ID。旧清单缺size显示未知，0字节正常显示。新增后只补受影响engine/app/gui检查，不重复无关领域计算检查。
+
+实施与审查：RecordsModel14项先12红／1绿后全绿，创建时间6项先2红／4绿后全绿；主agent的Explorer／Updates4项先全红后全绿，旧缓存回归2项通过。包内size后端29项先27红／2绿，UI7项先红后绿，各自相关60／43项通过。两agent互审共享模型／扫描／UI及对象后端／界面，无剩余阻塞。源代码新增原生隔离入口，首次验收标记文件名意外命中sort-关键词，修正夹具标记后通过（不是产品过滤缺陷）。源码Windows实际两次扫描、文件／时间表头升降序点击、筛选保持、所选身份、SQLite往返与生效资源时间关联通过；71_i01.ab真实worker返回对象大小460／228／204字节，表头排序后仍预览1600×900图且源SHA与关闭回收保持。图片外部流式载荷未计入对象大小，不声称其为图片完整字节量。
+
+第一阶段scripts/verify.ps1全套720 passed、1 local deselected（226.47秒），一个既有pytest缓存权限警告；追加对象功能后补engine/app/受影响GUI，首轮264 passed／1 failed（58.04秒），原始extraction-result.json明确为旧图片导出原子replace的WinError5，与新增清单size路径分开记录，不为求绿更改导出逻辑。最终复核进行中。证据source-verification.log、object-verification*.log以及.work/rs-native/source-final和.work/rs-objects/source；未使用用户原始数据库，也不重扫真实游戏。
+
+追加范围最终同一命令、独立短路径复核265 passed（60.17秒），仅既有pytest缓存权限警告；未改图片导出逻辑，首轮WinError5及输出现场保留。源／对象原生截图已查看。版本0.1.24，依赖未变，uv以工程缓存完成editable元数据更新（首轮未设置UV_CACHE_DIR遭沙箱缓存拒绝，修正环境后成功）。候选准备构建；不创建新发行标签或附件，沿用本机清单／备份更新。

@@ -83,8 +83,8 @@ class UpdatesView(QWidget):
         records_header.addWidget(self.result_count)
         layout.addLayout(records_header)
         self.model = RecordsModel([('文件路径', 'path'), ('目录用途', 'category'), ('检测状态', 'status'),
-                                   ('大小', lambda r: size_text(r.get('size'))), ('修改时间', 'mtime'),
-                                   ('首次观测', 'first_seen'), ('检测依据', 'evidence')], self)
+                                   ('大小', lambda r: size_text(r.get('size')), 'size'), ('修改时间', 'mtime', lambda r: r.get('mtime_ns') or None),
+                                   ('首次观测', 'first_seen', 'first_seen_at'), ('检测依据', 'evidence')], self)
         self.table = QTableView()
         self.table.setObjectName('updatesTable')
         self.table.setModel(self.model)
@@ -99,6 +99,7 @@ class UpdatesView(QWidget):
             self.table.setColumnWidth(column, width)
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.selectionModel().selectionChanged.connect(self.update_selection)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.context_menu)
@@ -217,6 +218,7 @@ class UpdatesView(QWidget):
                          'size': value(record, 'size', 0),
                          'mtime': time_text(value(record, 'mtime_ns', 0) / 1e9),
                          'first_seen': time_text(value(record, 'first_seen_at')),
+                         'mtime_ns': value(record, 'mtime_ns'), 'first_seen_at': value(record, 'first_seen_at'),
                          'evidence': ('本机修改时间' if path in recent else '') + ('；两次完整观测比较' if path in changed_keys else ''),
                          'exists': path in files, 'layer': value(record, 'layer', 'other')})
         self.model.replace(rows)

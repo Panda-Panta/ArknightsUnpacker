@@ -74,6 +74,7 @@ class FileRecord:
     hash_status: str = "metadata_only"
     error: str | None = None
     first_seen_at: float | None = None
+    created_ns: int | None = None
 
 
 @dataclass
