@@ -19,7 +19,7 @@ ArknightsUnpacker/
 │  │  └─ module_comparison.py    同培养条件的模组各级属性、原效果与前一级对照
 │  ├─ reports/                    语义块、模组单张／分页PNG、独立HTML与批次清单
 │  │  ├─ style.py                共用亮色／暗色调色板、字体与资料分区顺序
-│  │  ├─ fonts.py                自选TTF／OTF只读加载、PNG字形与HTML离线内嵌
+│  │  ├─ fonts.py                字体只读加载、TTC字形提取、PNG与HTML离线内嵌
 │  │  ├─ font_catalog.py         系统／用户Fonts名称、样式及集合字形索引，进程内缓存
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存

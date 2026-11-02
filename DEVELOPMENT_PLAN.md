@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.21源码与本机已更新，天赋潜能、表下注释及自选导出字体见第14.24节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.22源码与本机已更新，系统字体及同窗切换见第14.25节，天赋潜能与表下注释见第14.24节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1080,7 +1080,7 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 更新前完整备份并核验552项旧0.1.20程序文件；按清单替换8项、544保持、无新增／删除。安装实测后552程序项完整匹配，251目标用户文件与85旧数据共336项SHA均保持，没有启动原用户数据库的常规会话或修改原字体文件。备份backup-0.1.20/；收据sync-result.json、installed-verification.json、final-user-data-verification.json。ZIP84,577,035字节，SHA256 20c88c9ef91bee734c1a4bb0ef815550013f5bcba2b4667be9826160c3c6bb51；EXE SHA256 9c9c5981f64de3bb51408ab3fd7f32bb4f4193c14d4d11fa13d55f6c9331f5b0。当前构建中间内容按已核验工具清理，源／安装／回退程序与ZIP再次核对；旧版、用户数据及失败／验收证据保留。无新增领域技能或个人记忆写入。后补仅README／计划／验收，不改变161程序输入；最终远端／输入一致性见final-delivery-verification.json。
 
 
-### 14.25 系统字体选择与预览现场切换（2026-11-02，实施中）
+### 14.25 系统字体选择与预览现场切换（2026-11-02，源码与本机已交付）
 
 用户要求导出字体可选系统Fonts已有字体，并能在“预览所选资料”窗口选择、查看效果。沿用个人模式、干净test基线16d2ad4、现有main/test及D:/Tools/ArknightsUnpacker交付目标，版本0.1.22，不创建发行标签或附件。font_picker（talent_terms）独占字体目录／名称／字形索引枚举、共用ExportFontPicker及设置；preview_refresh（potential_display）独占资料预览窗口与主窗队列装配；两包并行，主agent负责共享ReportOptions.font_index（默认0）、字体集合选定face提取／内嵌、依赖／打包、集成与交付。
 
@@ -1095,3 +1095,8 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 
 
 最终源码检查：非受限offscreen的短目录全套为674 passed、1 local deselected（195.57秒），junction在该环境可创建故没有skip，仅既有pytest缓存权限警告。全部生产代码已固定，两个工作包独立交叉审查无剩余阻塞；原生s4和离线Edge证据覆盖真实系统选择／同窗重排／正式导出，后续只补冻结、安装、文件清单和远端交付。uv sync --locked将工程元数据同步为0.1.22，不改变已测代码。
+
+
+最终交付：干净候选206fa00f36508abc031c001d6b0b1f6a64e6da2f，构建20261102-193809-8a0c1fe7，164输入与提交、557程序项和ZIP逐项SHA／CRC通过。既有main/test已普通快进到候选，无新标签或发行附件。冻结与D:/Tools/ArknightsUnpacker安装EXE均按实际系统组合框Return选择微软雅黑集合face0和face1，同窗两次实际图像SHA改变、60%缩放保持、成功选项传给四格式正式导出，JSON索引1、HTML提取字形名称Microsoft YaHei UI正确，关闭回收预览且原字体／全局设置保持；原生完整收据在.work/sfp-native/{frozen,installed}/smoke.json。安装实际HTML另经离线Edge检查字体loaded、打印字体及表下注释，无额外术语章节；浏览器收据installed-collection-browser.json。
+
+安装先完整备份并核验552项旧0.1.21程序，再新增5项FontTools运行库／声明、替换9、543保持、无删除；安装实测后557程序项匹配，164当前目标用户文件和85旧数据共249项SHA保持。备份backup-0.1.21/，sync-result.json、installed-verification.json及final-user-data-verification.json记录结果。ZIP86,214,568字节，SHA256 295c53a6b8ef7b1a262bba989125f9d7939009b0729328d5cf9f27707ca5000d；EXE SHA256 a188b83722b1b0b741d3afe1c5b92b5d561a1a4165df3b81c79cb0324a775402。只清理本构建中间内容并复核源／安装／回退和ZIP；旧版、用户数据及失败／验收证据保留。无个人记忆写入或新领域skill，现有工程工具与主计划已覆盖本次流程。最终后补仅README／计划／索引／验收，不改变164程序输入，最终远端和输入复核见final-delivery-verification.json。
