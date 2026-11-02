@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.20源码与本机已更新；用户确认的阿米娅纸箱主图标见第14.22节；GitHub v0.1.20已公开发布，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.21源码与本机已更新，天赋潜能、表下注释及自选导出字体见第14.24节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1061,7 +1061,7 @@ ZIP84,564,534字节，SHA256 9f292c24732fb149992dd0f45aedba202e6bcaf01309b888eac
 
 README已更新公开0.1.20下载入口。后补仅README／主计划／验收，不改变160程序输入，无需重建或再次覆盖Tools；main/test按既定方式普通快进，最终Release／标签／可见性／旧附件及源一致性核对见本任务release-result.json。无新增领域流程或个人记忆写入；工具与原始证据留本任务目录，现有源码／安装回退材料保持。
 
-### 14.24 天赋潜能、术语注释与自定义导出字体（2026-11-02，实施中）
+### 14.24 天赋潜能、术语注释与自定义导出字体（2026-11-02，源码与本机已交付）
 
 用户要求修复潜能增量中的“部分潜能效果未确认”，并将天赋特殊名词解释移到表格外。沿用个人模式、test基线c5e3e6b、现有main/test及本机交付路径；不创建发行标签或附件。potential_display独占candidates.py与model.py潜能函数，依官方候选前后描述和潜能注解提供证据或去重；talent_terms独占descriptions.py、operators.py、modules.py及必要原天赋比较，收集term_definitions；两包实际并行，主agent负责共用报告语义块、HTML／Qt表外显示、集成、版本／文档与交付。
 
@@ -1074,3 +1074,7 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 用户追加自定义导出字体：本次0.1.21增加本地TTF／OTF选择与恢复默认，统一传递ReportOptions.font_path（默认空）、设置键report_font_path；PNG使用该字体实际测量和绘制，HTML及批次目录内嵌字体保持离线一致。既有主题与字号逻辑保留，无需安装字体，不改原字体文件；丢失／损坏的自选文件应明确报错，不静默换字形。font_render独占渲染字体与必要共用加载器／格式适配，font_settings独占设置交互与GUI验证，两包并行；主agent负责契约、服务默认值、集成和真实导出。之前626项为字体追加前证据，追加后另跑相关与必需检查，未开始冻结构建或安装。
 
 字体追加结果：PNG测绘共用同一布局与字体bytes，HTML和批次目录内嵌原文件；新增9项报告、5项GUI先红后绿，报告全套127项、相关设置21项、互相独立复核26项通过。最终统一检查640 passed、1 skipped、1 local deselected，153.52秒，仅既有pytest缓存权限警告；新显式原生导出验收另用实际源码窗口与按钮执行成功。自选中文simhei.ttf服务导出两干员7项产物，三份HTML内嵌bytes一致；实际离线Edge的document.fonts为loaded，正文／标题／打印均用自选字体，表下注释11.9px小于正文13px且不在table内，无新增术语章节，截图已查看。浏览器受限启动失败保留原日志，改在非受限环境成功。新增--profile-export-test只与--smoke-test配合，恢复已选干员后点击真实导出按钮、等待队列并记录产物；源程序使用独立状态生成四格式，未触及原用户数据。后续冻结／安装将复用该路径，不用测试数据伪装实际安装导出。
+
+最终交付：独立复核收紧验收入口，队列超时仍忙时明确拒绝收据；编译及源码原生真实导出再次通过。干净候选681d55b7de2b51f73e364b218e367de5548a36f5，构建20261102-184648-f0461b48，161程序输入与提交逐项一致，552程序项及ZIP逐项SHA／CRC通过。既有main/test已普通快进至该候选，无新标签／发行附件。冻结和D:\Tools\ArknightsUnpacker安装EXE均以隔离data-dir恢复塔露拉、保留自选simhei.ttf、点击真实导出按钮，PNG／HTML／JSON／TXT四格式成功、队列settled，HTML所选字体bytes一致。安装实际生成的HTML另经离线Edge验证字体loaded、打印字体保持及表下小注释，无额外术语章节。源／安装输出与浏览器收据见native/、custom-font-browser.json及installed-custom-font-browser.json。
+
+更新前完整备份并核验552项旧0.1.20程序文件；按清单替换8项、544保持、无新增／删除。安装实测后552程序项完整匹配，251目标用户文件与85旧数据共336项SHA均保持，没有启动原用户数据库的常规会话或修改原字体文件。备份backup-0.1.20/；收据sync-result.json、installed-verification.json、final-user-data-verification.json。ZIP84,577,035字节，SHA256 20c88c9ef91bee734c1a4bb0ef815550013f5bcba2b4667be9826160c3c6bb51；EXE SHA256 9c9c5981f64de3bb51408ab3fd7f32bb4f4193c14d4d11fa13d55f6c9331f5b0。当前构建中间内容按已核验工具清理，源／安装／回退程序与ZIP再次核对；旧版、用户数据及失败／验收证据保留。无新增领域技能或个人记忆写入。后补仅README／计划／验收，不改变161程序输入；最终远端／输入一致性见final-delivery-verification.json。
