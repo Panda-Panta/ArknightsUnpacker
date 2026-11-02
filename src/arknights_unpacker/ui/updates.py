@@ -11,6 +11,7 @@ from ..library.classifications import category_labels
 class UpdatesView(QWidget):
     extract_requested = Signal(list)
     images_requested = Signal(list)
+    objects_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -101,6 +102,7 @@ class UpdatesView(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.update_selection)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.context_menu)
+        self.table.doubleClicked.connect(self.show_objects)
         self.results = QStackedWidget()
         self.results.addWidget(self.table)
         self.empty_panel = QFrame()
@@ -282,6 +284,15 @@ class UpdatesView(QWidget):
         paths = self.selected_paths(images_only=True)
         if paths:
             self.images_requested.emit(paths)
+
+    def show_objects(self, index):
+        row = self.model.data(index, Qt.ItemDataRole.UserRole)
+        if self.snapshot is None or not row or not row.get('exists') or not is_resource_record(row):
+            return
+        root = Path(value(self.snapshot, 'root', '')).resolve()
+        path = (root / row['path']).resolve()
+        if path.is_relative_to(root):
+            self.objects_requested.emit(str(path))
 
     def context_menu(self, point):
         menu = QMenu(self)

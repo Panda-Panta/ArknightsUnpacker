@@ -11,16 +11,18 @@ from ..paths import atomic_json
 
 
 class PreviewSmoke:
-    def __init__(self, app, window, source, receipt, kind):
+    def __init__(self, app, window, source, receipt, kind, *, updates=False):
         self.app, self.window = app, window
         self.source, self.receipt = Path(source).resolve(), Path(receipt).resolve()
         self.kind = kind
+        self.updates = updates
         self.started = time.monotonic()
         self.stage = 'open'
         self.dialog = None
         self.frames = 0
         self.frame_size = None
-        self.result = {'version': __version__, 'source': str(self.source), 'kind': kind}
+        self.result = {'version': __version__, 'source': str(self.source), 'kind': kind,
+                       'entrypoint': 'updates_double_click' if updates else 'objects'}
         self.original_hash = self.digest()
         self.timer = QTimer(window)
         self.timer.setInterval(50)
@@ -36,6 +38,30 @@ class PreviewSmoke:
             self.frames += 1
             self.frame_size = [frame.width(), frame.height()]
 
+    def prepare_updates(self):
+        from ..contracts import FileRecord, ScanSnapshot
+        from ..library.classifications import classify
+
+        installation = self.window.services.installation
+        assert installation is not None, 'The preview acceptance needs a selected installation'
+        root = Path(installation.root).resolve()
+        relative = self.source.relative_to(root).as_posix()
+        metadata = self.source.stat()
+        now = max(time.time(), metadata.st_mtime)
+        layer = next((name for name, source_root in installation.source_roots.items()
+                      if self.source.is_relative_to(Path(source_root).resolve())), 'other')
+        record = FileRecord(relative, metadata.st_size, metadata.st_mtime_ns,
+                            self.source.suffix, layer, classify(relative, layer))
+        view = self.window.pages.widget('updates')
+        assert view is not None, 'The updates page is unavailable'
+        view.clear_filters()
+        view.mode.setCurrentIndex(0)
+        view.set_data(ScanSnapshot('preview-smoke', installation.profile_id, str(root), now, now, [record]),
+                      None, hours=max(24, (now - metadata.st_mtime) / 3600 + 1))
+        self.window.pages.select('updates')
+        assert view.model.rowCount() == 1, 'The real preview source is absent from the updates page'
+        self.result['update_record'] = relative
+
     def tick(self):
         try:
             if time.monotonic() - self.started > 85:
@@ -43,8 +69,31 @@ class PreviewSmoke:
             if self.stage == 'open':
                 if self.window.queue.busy or self.window._restore_pending:
                     return
+                if self.updates:
+                    self.prepare_updates()
+                    self.stage = 'updates_click'
+                    return
                 self.window.objects(str(self.source))
                 self.dialog = self.window._dialogs[-1]
+                self.stage = 'attach'
+            if self.stage == 'updates_click':
+                from PySide6.QtCore import Qt
+                from PySide6.QtTest import QTest
+
+                view = self.window.pages.widget('updates')
+                index = view.model.index(0, 0)
+                view.table.scrollTo(index)
+                rectangle = view.table.visualRect(index)
+                assert rectangle.isValid(), 'The updates row must be visible before double-clicking'
+                previous = tuple(self.window._dialogs)
+                QTest.mouseClick(view.table.viewport(), Qt.MouseButton.LeftButton, pos=rectangle.center())
+                QTest.mouseDClick(view.table.viewport(), Qt.MouseButton.LeftButton, pos=rectangle.center())
+                opened = [dialog for dialog in self.window._dialogs if dialog not in previous]
+                assert len(opened) == 1, 'Double-clicking the updates row did not open one object-preview dialog'
+                self.dialog = opened[0]
+                assert Path(self.dialog.path).resolve() == self.source
+                self.stage = 'attach'
+            if self.stage == 'attach':
                 self.panel = self.dialog.preview_panel
                 self.panel.audio_output.setMuted(True)
                 self.panel.video_widget.videoSink().videoFrameChanged.connect(self.frame)

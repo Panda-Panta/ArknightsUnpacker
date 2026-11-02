@@ -129,6 +129,7 @@ class UpdatesPage(PageController):
     def connect(self):
         self.view.extract_requested.connect(self.window.extract)
         self.view.images_requested.connect(lambda paths: self.window.extract(paths, kinds=['image'], mode='auto'))
+        self.view.objects_requested.connect(self.window.objects)
 
     def scanned(self, snapshot, changes, catalog):
         self.view.set_data(snapshot, changes, self.window.hours.value())

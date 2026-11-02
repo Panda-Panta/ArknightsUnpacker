@@ -119,11 +119,14 @@ def main() -> int:
     parser.add_argument("--smoke-test", metavar="JSON", help=argparse.SUPPRESS)
     parser.add_argument("--preview-source", help=argparse.SUPPRESS)
     parser.add_argument("--preview-kind", choices=('image', 'audio', 'video', 'text'), default='image', help=argparse.SUPPRESS)
+    parser.add_argument("--preview-updates", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--profile-navigation-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.preview_source and not args.smoke_test:
         parser.error('--preview-source requires --smoke-test')
+    if args.preview_updates and (not args.smoke_test or not args.preview_source):
+        parser.error('--preview-updates requires --smoke-test and --preview-source')
     if args.profile_navigation_test and (not args.smoke_test or args.preview_source):
         parser.error('--profile-navigation-test requires --smoke-test without --preview-source')
     from .application import AppServices
@@ -169,7 +172,8 @@ def main() -> int:
         from .ui.preview_smoke import PreviewSmoke
         receipt = validate_output(validate_data_root(Path(args.smoke_test)),
                                   args.game_root or services.config.get('game_root'))
-        window._preview_smoke = PreviewSmoke(app, window, args.preview_source, receipt, args.preview_kind)
+        window._preview_smoke = PreviewSmoke(app, window, args.preview_source, receipt, args.preview_kind,
+                                            updates=args.preview_updates)
     elif args.smoke_test:
         from PySide6.QtGui import QPixmap
         from .paths import resource_root
