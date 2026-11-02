@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：0.1.26自动预览交付验证中（第14.29节）；Windows 0.1.25源码与本机已更新，角色透明提取／表情制作见第14.28节；0.1.24，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.26源码与本机已更新，自动预览见第14.29节；0.1.25，角色透明提取／表情制作见第14.28节；0.1.24，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1173,7 +1173,7 @@ ZIP 86,229,986字节，SHA256 9a415d68db99ff7bbf26ac81e6bab2aa1e982a886f7a431051
 ZIP 86,266,162字节，SHA256 1c031f115dff99d32daad1905ad48f14671c744ccc8197db50c152a4ae665e91；EXE SHA256 5cca594e3fd41debb86d070c6a257e2a4e2ef41dc9e95c7b6300cf8e19a36ab9。仅清理本构建17文件／4目录共31,489,647字节，保留源／安装／回退1671管理项、ZIP及sidecar再次核验；旧版／用户数据／原始失败与真实图片证据保留，见cleanup-result.json。现有worker／lease／清单工具与领域规程足够，schema和维护入口记录在character_config.py、characters.py、结构索引和使用指南，无个人记忆写入。后补仅README／主计划／验收，不改变169程序输入，无需重建；最终远端核验另记。
 
 
-### 14.29 自动表情预览与移除手动预览按钮（2026-11-02，实施中）
+### 14.29 自动表情预览与移除手动预览按钮（2026-11-02，源码与本机已交付）
 
 用户明确要求表情差分改为自动预览，删除“预览合成”，并删除内部对象窗口“预览所选对象”。个人模式沿用test基线eb972ed，开工无用户未提交修改；原main/test／Tools交付目标不变。复用现有QTimer防抖、代次和MainWindow最新pending、preview lease、CharacterSmoke／PreviewSmoke与scripts/verify.ps1、build.ps1／清单同步工具，不改合成或解码算法。
 
@@ -1186,3 +1186,9 @@ character_workbench_ui负责character_workbench.py、character_smoke.py及窗口
 独立只读审查最终表情／原生／主窗接线无阻塞，真实Qt探针核对不离焦键入、旧代失败不覆盖新timer、旧结果释放、导出确认和关闭阻止未触发任务。结构索引已核对：布局/依赖入口未变无需调整，操作文案更新用户指南。版本0.1.26、依赖未变；本轮纯UI和预览时序更改，统一检查取tests/gui+tests/app及源码／冻结／安装两个原生窗口，不重复引擎/领域/报告算法全套。最终数据和交付结果待补。
 
 最终源码统一检查scripts/verify.ps1 -TestPath tests/gui,tests/app（短basetemp .work/ap-all）为389 passed／183.57秒，仅既有pytest缓存权限警告。两个原生源码窗口均有无手动按钮断言和真实worker预览／回收证据；不以旧808全套替代本轮检查，也不声称本轮重复了未改算法全套。准备固定候选构建。
+
+最终交付：干净候选913e9c966bc3fcffea8492db04b63707f3e09528，构建20261102-224209-4f589cc8，169运行输入与提交一致，557程序项及ZIP逐项SHA／CRC通过。main/test普通快进，无新增发行标签／附件。源码／冻结／安装两个窗口均实际断言无手动预览按钮；真实自动初始图及改X更新、成功预览等像素导出、配置批量5张、对象选择／排序自动预览、当前页／输出／关闭回收及源SHA保持均通过。表情冻结／安装8.75／10.61秒；收据.work/ap-{character,objects}-native/{source,frozen,installed}/smoke.json及本任务{label}-verification.json／{label}-objects-verification.json。另只读Qt探针确认对象表Return没有误触解包，未因此更改额外行为。
+
+旧程序无在用实例，不关闭用户窗口；完整备份并核验557旧0.1.25程序项，再更新D:/Tools/ArknightsUnpacker至0.1.26：替换7、550保持，无新增／删除。安装后557程序项一致，2207目标用户文件和85旧数据共2292项SHA保持，用户原数据库未用于烟测。备份.work/auto-character-preview-20261102/backup-0.1.25；收据sync-result.json、final-user-data-verification.json。
+
+ZIP 86,270,964字节，SHA256 771b58e924223b33eab8ffd0c5c6a7f73cb20e846fefd020992990a85ac96f50；EXE SHA256 697e45e411c193e1bb281edb5d25276a90f7a1e958ba88f02a9de7f64067bb61。仅清理本构建17文件／4目录共31,493,533字节，保留源／安装／回退1671管理项和ZIP／sidecar再核；旧版、用户数据和原始红绿／原生证据保留。原有工作流／工具入口足够，无领域skill或个人记忆写入。后补仅README／主计划／验收，不改变169输入，不重建程序；最终远端核验另记。
