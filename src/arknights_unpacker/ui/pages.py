@@ -216,7 +216,7 @@ class EntityPage(PageController):
                     if index >= 0:
                         self.view.module_choice.setCurrentIndex(index)
 
-        job = self.window.queue.submit('查看资料 · ' + entity_id, call, done)
+        job = self.window.queue.submit('查看资料 · ' + entity_id, call, done, show_in_tasks=False)
 
         def cleanup():
             if job.status not in ('运行中', '排队中', '正在取消'):
@@ -274,8 +274,9 @@ class JobsPage(PageController):
 
     def queue_changed(self):
         queue = self.window.queue
-        waiting = sum(job.status == '排队中' for job in queue.jobs)
-        count = waiting + int(queue.busy)
+        waiting = sum(job.status == '排队中' for job in queue.visible_jobs)
+        active_visible = queue.busy and queue.active is not None and queue.active.show_in_tasks
+        count = waiting + int(active_visible)
         index = self.window.tabs.indexOf(self.widget)
         if index >= 0:
             self.window.tabs.setTabText(index, f'导出任务 ({count})' if count else '导出任务')

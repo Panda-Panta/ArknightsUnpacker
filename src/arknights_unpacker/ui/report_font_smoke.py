@@ -62,11 +62,17 @@ class ReportFontSmoke:
                 raise TimeoutError('Font preview acceptance timed out: ' + self.stage)
             if self.window.queue.busy or self.window._restore_pending:
                 return
+            if self.stage != 'open':
+                assert self.window.tabs.currentWidget() is self.origin_page, 'A report task changed the current page'
             if self.stage == 'open':
                 assert self.window.operators.current_profile is not None
                 self.result['operator_id'] = self.window.operators.current_profile.char_id
                 self.original_options = self.window.settings.report_options()
                 self.window.pages.select('operators')
+                self.origin_page = self.window.tabs.currentWidget()
+                routines = [job for job in self.window.queue.jobs if job.title.startswith(('查看资料 · ', '读取上次扫描与解析结果'))]
+                assert routines and all(not job.show_in_tasks for job in routines)
+                assert self.window.jobs.table.rowCount() == 0, 'Routine reads appeared in the task list'
                 QTest.mouseClick(self.window.operators.preview_selected, Qt.MouseButton.LeftButton)
                 self.stage = 'initial'
                 return
@@ -133,8 +139,15 @@ class ReportFontSmoke:
             if self.stage == 'closed':
                 assert not self.previous_cache.exists(), 'Closing preview did not release its cache'
                 assert self.digest(self.font) == self.original_hash
+                assert self.job in self.window.queue.visible_jobs
+                assert all(job.show_in_tasks for job in self.window.queue.visible_jobs)
+                self.window.pages.select('jobs')
+                assert self.window.tabs.currentWidget() is self.window.pages.widget('jobs')
+                assert self.window.jobs.table.rowCount() == len(self.window.queue.visible_jobs)
                 self.result.update(success=True, same_window=True, original_font_unchanged=True,
                     original_settings_unchanged=True, preview_cache_released=True,
+                    current_page_preserved=True, routine_jobs_hidden=True, formal_task_visible=True,
+                    manual_task_page_available=True,
                     elapsed_seconds=round(time.monotonic() - self.started, 2))
                 self.finish(0)
         except Exception:

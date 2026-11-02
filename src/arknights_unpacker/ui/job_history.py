@@ -15,6 +15,16 @@ OPERATIONS = {'scan', 'load_data', 'extract', 'report'}
 INTERRUPTED = {'排队中', '运行中', '正在取消'}
 
 
+def show_in_tasks(record):
+    value = record.get('show_in_tasks')
+    if isinstance(value, bool):
+        return value
+    title = record.get('title', '')
+    # Only these old application-owned read titles predate the explicit flag.
+    return not (isinstance(title, str) and (title.startswith('查看资料 · ')
+                or title.startswith('读取内部对象 · ') or title == '读取上次扫描与解析结果'))
+
+
 def retained_file(item):
     try:
         path = Path(item.get('path', ''))
@@ -65,7 +75,7 @@ class JobHistory:
 
     def save(self, job):
         payload = {key: getattr(job, key) for key in ('job_id', 'title', 'status', 'output', 'created_at',
-                   'started_at', 'request', 'last_error', 'result', 'ancestors', 'receipt_root')}
+                   'started_at', 'request', 'last_error', 'result', 'ancestors', 'receipt_root', 'show_in_tasks')}
         payload.update(schema=1, artifacts=as_jsonable(job.artifacts))
         target = self.root / (job.job_id + '.json')
         temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
@@ -86,6 +96,7 @@ class JobHistory:
                     raise ValueError('任务历史必须是JSON对象')
                 if payload.get('schema') != 1 or payload.get('job_id') != path.stem:
                     raise ValueError('不支持的任务历史格式')
+                payload['show_in_tasks'] = show_in_tasks(payload)
                 payload['request'] = valid_request(payload.get('request'))
                 if payload.get('status') in INTERRUPTED:
                     payload['status'] = '已中断（等待手动重试）'

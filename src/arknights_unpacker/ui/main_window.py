@@ -279,7 +279,8 @@ class MainWindow(QMainWindow):
             return
         self._restore_pending = True
         job = self.queue.submit('读取上次扫描与解析结果',
-                                lambda **kw: self.services.restore(root, **kw), self.restored)
+                                lambda **kw: self.services.restore(root, **kw), self.restored,
+                                show_in_tasks=False)
         def cleanup():
             if job.status not in ('排队中', '运行中', '正在取消'):
                 self._restore_pending = False
@@ -578,7 +579,8 @@ class MainWindow(QMainWindow):
         dialog.show()
         job = self.queue.submit('读取内部对象 · ' + Path(path).name,
                           lambda **kw: self.services.objects(path, **kw),
-                          lambda objects: dialog.set_objects(objects) if not getattr(dialog, '_workbench_closed', False) else None)
+                          lambda objects: dialog.set_objects(objects) if not getattr(dialog, '_workbench_closed', False) else None,
+                          show_in_tasks=False)
         self._dialog_jobs[job.job_id] = dialog
 
     def export(self, kind, ids, only_new=False, *, preview=False, report_spec=None, report_options=None,
@@ -659,8 +661,6 @@ class MainWindow(QMainWindow):
             self._bind_preview_job(job, lease, preview_dialog)
         if preview_dialog is not None:
             self._report_preview_jobs[preview_dialog] = (job.job_id, preview_generation)
-        else:
-            self.pages.select('jobs')
 
     def _refresh_report_preview(self, dialog, kind, ids, spec, formats, binding, options, generation):
         if self._closing or getattr(dialog, '_workbench_closed', False) or dialog.preview_generation != generation:

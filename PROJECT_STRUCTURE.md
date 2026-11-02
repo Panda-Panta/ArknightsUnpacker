@@ -71,6 +71,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 0.1.22通过fonttools4.68.0读取Fonts目录的名称表和TTC索引，`font_index`与路径一起保存在设置／ReportOptions／任务请求中，旧值默认0。`fonts.py`将TTC的所选face提取为独立字体bytes，PNG与HTML使用同一face。资料预览通过`ReportArtifactsDialog.font_preview_requested`、主窗独立报告generation/pending状态和既有queue／PreviewLease异步更新；旧代结果不覆盖新选择、关闭只取消本窗口任务，成功选项传给正式导出。默认按钮不会响应字体文本控件的Return／Enter。显式`--smoke-test --profile-font-preview-test`验证实际系统字体选择、同窗切换、正式四格式和关闭回收；普通启动不执行。
 
+0.1.23的报告提交不再选中jobs页面。`Job.show_in_tasks`为可选持久字段，内部资料／启动恢复／对象列表读取标False；`JobQueue.visible_jobs`供任务表及JobsPage角标使用，后台串行调度不变。旧记录按稳定内部标题兼容，其他默认可见；可见与内部成功记录分别沿既有20条上限管理。过滤后的表格动作依稳定job_id查回原任务，进度／日志不显示内部读取；原状态栏与错误信号保留。
+
 主要调用链：
 
 ```text

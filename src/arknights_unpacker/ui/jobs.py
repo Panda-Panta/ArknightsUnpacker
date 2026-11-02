@@ -34,6 +34,7 @@ class Job:
     result: dict = field(default_factory=dict)
     ancestors: list = field(default_factory=list)
     receipt_root: str = ''
+    show_in_tasks: bool = True
 
 
 class Worker(QThread):
@@ -93,7 +94,8 @@ class JobQueue(QObject):
                           artifacts=record.get('artifacts', []), job_id=record['job_id'],
                           created_at=record.get('created_at', 0), started_at=record.get('started_at', 0),
                           request=record.get('request'), last_error=record.get('last_error', ''),
-                          result=record.get('result', {}), ancestors=record.get('ancestors', []), receipt_root=record.get('receipt_root', ''))
+                          result=record.get('result', {}), ancestors=record.get('ancestors', []),
+                          receipt_root=record.get('receipt_root', ''), show_in_tasks=record['show_in_tasks'])
                 self.jobs.append(job)
                 self._persist(job)
         self._prune_successful()
@@ -130,13 +132,19 @@ class JobQueue(QObject):
         return removed
 
     def _prune_successful(self):
-        successful = sorted((job for job in self.jobs if job.status == '成功'), key=lambda job: job.created_at)
-        removed = self.forget_finished(job.job_id for job in successful[:-SUCCESS_HISTORY_LIMIT])
-        if removed:
-            self.message.emit(f'已自动清理 {len(removed)} 条旧成功任务记录；正式导出文件保留。')
+        visible_ids = {job.job_id for job in self.visible_jobs}
+        expired = []
+        for show in (True, False):
+            successful = sorted((job for job in self.jobs if job.status == '成功' and job.show_in_tasks == show),
+                                key=lambda job: job.created_at)
+            expired.extend(job.job_id for job in successful[:-SUCCESS_HISTORY_LIMIT])
+        removed = self.forget_finished(expired)
+        count = len(visible_ids.intersection(removed))
+        if count:
+            self.message.emit(f'已自动清理 {count} 条旧成功任务记录；正式导出文件保留。')
 
     def clear_successful(self):
-        removed = self.forget_finished(job.job_id for job in self.jobs if job.status == '成功')
+        removed = self.forget_finished(job.job_id for job in self.visible_jobs if job.status == '成功')
         self.message.emit(f'已清理 {len(removed)} 条成功任务记录；正式导出文件保留。')
         return len(removed)
 
@@ -151,8 +159,13 @@ class JobQueue(QObject):
     def busy(self):
         return self.worker is not None
 
-    def submit(self, title, call, done=None, output='', *, request=None, ancestors=None):
-        job = Job(title, call, done, output=output, request=valid_request(request), ancestors=ancestors or [])
+    @property
+    def visible_jobs(self):
+        return [job for job in self.jobs if job.show_in_tasks]
+
+    def submit(self, title, call, done=None, output='', *, request=None, ancestors=None, show_in_tasks=True):
+        job = Job(title, call, done, output=output, request=valid_request(request), ancestors=ancestors or [],
+                  show_in_tasks=bool(show_in_tasks))
         self.jobs.append(job)
         self._persist(job)
         self.changed.emit()
@@ -294,7 +307,7 @@ class JobQueue(QObject):
                 self.message.emit('此历史任务没有可恢复请求。请从对应页面重新操作；已保存产物仍可打开。')
                 return
             self.submit(old.title + '（重试）', call, done, old.output, request=old.request,
-                        ancestors=[*old.ancestors, old.job_id])
+                        ancestors=[*old.ancestors, old.job_id], show_in_tasks=old.show_in_tasks)
 
     def toggle_pause(self):
         self.paused = not self.paused
@@ -345,7 +358,10 @@ class JobsView(QWidget):
         self.pause = QPushButton('暂停队列')
         self.pause.clicked.connect(queue.toggle_pause)
         buttons.addWidget(self.pause)
-        for text, action in [('取消当前任务', queue.cancel), ('重试选中任务', self.retry), ('预览任务产物', self.preview_artifacts),
+        self.cancel_button = QPushButton('取消当前任务')
+        self.cancel_button.clicked.connect(self.cancel_current)
+        buttons.addWidget(self.cancel_button)
+        for text, action in [('重试选中任务', self.retry), ('预览任务产物', self.preview_artifacts),
                              ('打开输出目录', self.open_output), ('清理成功任务', queue.clear_successful)]:
             button = QPushButton(text)
             button.clicked.connect(action)
@@ -358,7 +374,7 @@ class JobsView(QWidget):
         self.log.setMaximumBlockCount(3000)
         layout.addWidget(self.log, 2)
         queue.changed.connect(self.refresh)
-        queue.message.connect(self.log.appendPlainText)
+        queue.message.connect(self.append_message)
         queue.progress.connect(self.update_progress)
         if queue.history:
             for warning in queue.history.warnings:
@@ -366,23 +382,44 @@ class JobsView(QWidget):
         self.refresh()
 
     def refresh(self):
+        selected = self._selected_job()
+        selected_id = selected.job_id if selected else None
+        jobs = self.queue.visible_jobs
         self.pause.setText('继续队列' if self.queue.paused else '暂停队列')
-        self.table.setRowCount(len(self.queue.jobs))
-        self.empty_hint.setVisible(not self.queue.jobs)
-        for i, job in enumerate(self.queue.jobs):
+        self.table.setRowCount(len(jobs))
+        self.empty_hint.setVisible(not jobs)
+        selected_row = -1
+        for i, job in enumerate(jobs):
             for c, text in enumerate((job.title, job.status, job.receipt_root or job.output)):
-                self.table.setItem(i, c, QTableWidgetItem(text))
+                item = QTableWidgetItem(text)
+                item.setData(Qt.ItemDataRole.UserRole, job.job_id)
+                self.table.setItem(i, c, item)
             if job.last_error:
                 self.table.item(i, 1).setToolTip(job.last_error)
-        if self.queue.busy:
+            if job.job_id == selected_id:
+                selected_row = i
+        if selected_row >= 0:
+            self.table.selectRow(selected_row)
+        else:
+            self.table.clearSelection()
+            self.table.setCurrentCell(-1, -1)
+        active_visible = self.queue.busy and self.queue.active is not None and self.queue.active.show_in_tasks
+        self.cancel_button.setEnabled(bool(active_visible))
+        if active_visible:
             self.progress.setRange(0, 0)
             self.progress.setFormat('正在处理…')
         else:
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
-            self.progress.setFormat('等待任务' if not self.queue.jobs else '当前没有运行中的任务')
+            self.progress.setFormat('等待任务' if not jobs else '当前没有运行中的任务')
+
+    def append_message(self, message):
+        if self.queue.active is None or self.queue.active.show_in_tasks:
+            self.log.appendPlainText(message)
 
     def update_progress(self, event):
+        if self.queue.active is not None and not self.queue.active.show_in_tasks:
+            return
         if isinstance(event, dict):
             total = event.get('total', event.get('total_files', 0))
             done = event.get('current', event.get('completed', event.get('done', 0)))
@@ -392,18 +429,27 @@ class JobsView(QWidget):
                 self.progress.setFormat('%p% · %v / %m')
 
     def retry(self):
-        self.queue.retry(self.table.currentRow())
+        job = self._selected_job()
+        if job is not None:
+            self.queue.retry(next(index for index, candidate in enumerate(self.queue.jobs) if candidate.job_id == job.job_id))
+
+    def cancel_current(self):
+        if self.queue.active is not None and self.queue.active.show_in_tasks:
+            self.queue.cancel()
+
+    def _selected_job(self):
+        item = self.table.item(self.table.currentRow(), 0)
+        job_id = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        return next((job for job in self.queue.visible_jobs if job.job_id == job_id), None)
 
     def open_output(self):
-        index = self.table.currentRow()
-        if 0 <= index < len(self.queue.jobs) and self.queue.jobs[index].output:
-            job = self.queue.jobs[index]
+        job = self._selected_job()
+        if job is not None and (job.receipt_root or job.output):
             QDesktopServices.openUrl(QUrl.fromLocalFile(job.receipt_root or job.output))
 
     def preview_artifacts(self):
-        index = self.table.currentRow()
-        if 0 <= index < len(self.queue.jobs):
-            job = self.queue.jobs[index]
+        job = self._selected_job()
+        if job is not None:
             if not job.artifacts and self.queue.history and (job.request or {}).get('operation') == 'extract':
                 job.artifacts = self.queue.history.extraction_artifacts(job)
                 self.queue._persist(job)
