@@ -77,6 +77,8 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 主要调用链：
 
+0.1.25新增`extraction/character_config.py`归一两种AVG角色配置，`images.py`将配置Alpha显式引用接入普通Sprite／Texture并保持裁片；`extraction/characters.py`提供JSON目录、逻辑画布恢复及自动／手动共用合成。`ExtractionRequest.character_options`为可空兼容字段，`kinds=['expression']`经现有extract worker导出；内部`character_catalog`读取复用隔离worker，不进入可见任务。`ui/character_workbench.py`只管理组／底图／表情、位置尺寸、成功预览与lease，不解释Unity表。Explorer按钮／菜单→MainWindow→AppServices→worker接通；预览最新请求保留显式类型及合成参数，关闭仅取消本窗口所属读取／预览，正式批量不受影响。`--smoke-test --character-source`显式验证真实配置→手选预览→正式导出／批量与回收，普通启动不执行。
+
 ```text
 MainWindow → AppServices.restore → CatalogStore → 上次文件／资料及变化结果
 MainWindow → AppServices.scan → library → CatalogStore

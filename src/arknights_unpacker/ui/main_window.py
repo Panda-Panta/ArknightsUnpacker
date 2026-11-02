@@ -503,12 +503,14 @@ class MainWindow(QMainWindow):
                 return [kind]
         return ['image', 'text', 'audio', 'spine', 'video']
 
-    def extract(self, paths, object_ids=None, preview_dialog=None, *, kinds=None, mode=None):
+    def extract(self, paths, object_ids=None, preview_dialog=None, *, kinds=None, mode=None, character_options=None):
         if preview_dialog and (self._closing or getattr(preview_dialog, '_workbench_closed', False)):
             return
         generation = getattr(preview_dialog, 'preview_generation', None)
+        character_options = dict(character_options) if character_options is not None else None
         if preview_dialog and preview_dialog in self._object_preview_jobs:
-            self._object_preview_pending[preview_dialog] = (list(paths), object_ids, generation)
+            self._object_preview_pending[preview_dialog] = (generation, lambda: self.extract(
+                list(paths), object_ids, preview_dialog, kinds=kinds, mode=mode, character_options=character_options))
             return
         output = self.output_root() if preview_dialog is None else None
         lease = None
@@ -524,7 +526,7 @@ class MainWindow(QMainWindow):
         if output is None:
             return
         if preview_dialog:
-            kinds = self._object_preview_kinds(preview_dialog, object_ids)
+            kinds = list(kinds) if kinds is not None else self._object_preview_kinds(preview_dialog, object_ids)
             mode = 'auto'
         else:
             kinds = list(kinds) if kinds is not None else [key for key, check in self.settings.kinds.items() if check.isChecked()]
@@ -535,6 +537,7 @@ class MainWindow(QMainWindow):
                 lease.finish()
             self.show_status('请在设置中至少选择一种资源类型。')
             return
+        character_arguments = {'character_options': character_options} if character_options is not None else {}
         self.show_status(f'加入解包队列：{len(paths)} 个文件 · {mode} · {output}')
         def done(result):
             errors = value(result, 'errors', [])
@@ -547,7 +550,7 @@ class MainWindow(QMainWindow):
                         failed_ids[path] = [str(e['object_id']) for e in failures]
                 if failed_paths:
                     self.queue.active.retry_call = lambda **kw: self.services.extract(failed_paths, output, kinds=kinds,
-                                                                                     object_ids=failed_ids, mode=mode, **kw)
+                                                                                     object_ids=failed_ids, mode=mode, **character_arguments, **kw)
             if preview_dialog:
                 if self._closing or getattr(preview_dialog, '_workbench_closed', False):
                     lease.release()
@@ -562,12 +565,14 @@ class MainWindow(QMainWindow):
                                [*value(result, 'errors', []), *value(result, 'skipped', [])]]
                     preview_dialog.preview_failed('未生成可预览文件。' + ('\n'.join(details) or '请在任务页查看失败或跳过原因。'),
                                                   generation=generation)
-        title = '预览对象' if preview_dialog else '导出包内原图' if kinds == ['image'] and mode == 'auto' else '解包所选'
+        title = ('预览表情合成' if preview_dialog else '导出表情差分') if kinds == ['expression'] else (
+            '预览对象' if preview_dialog else '导出包内原图' if kinds == ['image'] and mode == 'auto' else '解包所选')
         job = self.queue.submit(title + f' · {len(paths)} 个文件',
                           lambda **kw: self.services.extract(paths, output, kinds=kinds, object_ids=object_ids, mode=mode,
-                                                            remember_output=not bool(preview_dialog), **kw), done, output,
+                                                            remember_output=not bool(preview_dialog), **character_arguments, **kw), done, output,
                           request={'operation': 'extract', 'root': str(value(self.services.installation, 'root') or self.root_edit.text().strip()), 'paths': list(paths),
-                                   'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode, 'preview': bool(preview_dialog)})
+                                   'output': output, 'kinds': kinds, 'object_ids': object_ids or {}, 'mode': mode, 'preview': bool(preview_dialog),
+                                   'character_options': character_options})
         if lease:
             self._object_preview_jobs[preview_dialog] = (job.job_id, generation)
             self._bind_preview_job(job, lease, preview_dialog)
@@ -582,6 +587,36 @@ class MainWindow(QMainWindow):
                           lambda objects: dialog.set_objects(objects) if not getattr(dialog, '_workbench_closed', False) else None,
                           show_in_tasks=False)
         self._dialog_jobs[job.job_id] = dialog
+
+    def character_workbench(self, paths):
+        if not paths or self._closing:
+            return
+        if len(paths) > 1:
+            self.extract(paths, kinds=['expression'], mode='auto')
+            return
+        from .character_workbench import CharacterWorkbench
+        path = str(paths[0])
+        dialog = CharacterWorkbench(path, self)
+        dialog._cancel_owned_jobs_on_close = True
+        self._track_dialog(dialog)
+        dialog.preview_requested.connect(lambda options: self.extract(
+            [path], preview_dialog=dialog, kinds=['expression'], mode='auto', character_options=options))
+        dialog.export_requested.connect(lambda options: self.extract(
+            [path], kinds=['expression'], mode='auto', character_options=options))
+        dialog.batch_requested.connect(lambda: self.extract([path], kinds=['expression'], mode='auto'))
+        dialog.show()
+        job = self.queue.submit('读取角色表情配置 · ' + Path(path).name,
+                                lambda **kw: self.services.character_catalog(path, **kw),
+                                lambda catalog: dialog.set_catalog(catalog) if not dialog._workbench_closed else None,
+                                show_in_tasks=False)
+        self._dialog_jobs[job.job_id] = dialog
+        def loaded(finished):
+            if finished is not job:
+                return
+            self.queue.settled.disconnect(loaded)
+            if finished.status != '成功' and not dialog._workbench_closed:
+                dialog.load_failed(finished.last_error or finished.status)
+        self.queue.settled.connect(loaded)
 
     def export(self, kind, ids, only_new=False, *, preview=False, report_spec=None, report_options=None,
                preview_dialog=None, preview_generation=0, report_binding=None, report_formats=None):
@@ -704,7 +739,8 @@ class MainWindow(QMainWindow):
                     return ExtractionResult(status='succeeded', skipped=[{'reason': '原请求已全部完成，保留已有产物。'}])
                 kw['emit']({'message': f'恢复 {len(paths)} 个未完成来源；已完成对象不再导出。未知完整性的组按未完成组处理，已有产物保留。'})
                 return self.services.extract(paths, request['output'], kinds=request.get('kinds'), object_ids=ids,
-                                             mode=request.get('mode', 'auto'), **kw)
+                                             mode=request.get('mode', 'auto'),
+                                             **({'character_options': request['character_options']} if request.get('character_options') is not None else {}), **kw)
             def done(result):
                 if scan_result:
                     self.scanned(scan_result[-1])
@@ -754,11 +790,12 @@ class MainWindow(QMainWindow):
             pending = {job.job_id for job in self.queue.jobs if job.job_id in ids and
                        job.status in ('排队中', '运行中', '正在取消')}
             self._discard_when_settled.update(pending)
-            # Closing one report viewer only cancels its own producers. A
+            # Closing a report or character viewer cancels only its own producers. A
             # queued producer has no worker to finish its lease later.
             for job in list(self.queue.jobs):
-                if (job.job_id not in pending or (job.request or {}).get('operation') != 'report'
-                        or not (job.request or {}).get('preview')):
+                report_preview = ((job.request or {}).get('operation') == 'report'
+                                  and (job.request or {}).get('preview'))
+                if job.job_id not in pending or not (report_preview or getattr(dialog, '_cancel_owned_jobs_on_close', False)):
                     continue
                 job.token.cancel()
                 queued = job.status == '排队中'
@@ -823,11 +860,11 @@ class MainWindow(QMainWindow):
                     submit()
             QTimer.singleShot(0, latest_report)
         if pending is not None:
-            paths, object_ids, generation = pending
+            generation, submit = pending
             def latest():
                 if (not self._closing and not getattr(owner, '_workbench_closed', False)
                         and getattr(owner, 'preview_generation', None) == generation):
-                    self.extract(paths, object_ids, owner)
+                    submit()
             QTimer.singleShot(0, latest)
 
     def _report_preview_warnings(self):

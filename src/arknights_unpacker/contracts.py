@@ -145,6 +145,7 @@ class ExtractionRequest:
     source_root: str = ""
     object_ids: dict[str, list[str]] = field(default_factory=dict)
     request_id: str = ""
+    character_options: dict[str, Any] | None = None
 
 
 @dataclass

@@ -124,6 +124,7 @@ def main() -> int:
     parser.add_argument("--profile-export-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--profile-font-preview-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--resource-sort-test", action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument("--character-source", help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.preview_source and not args.smoke_test:
@@ -138,6 +139,8 @@ def main() -> int:
         parser.error('--profile-font-preview-test requires only --smoke-test')
     if args.resource_sort_test and (not args.smoke_test or not args.game_root or args.preview_source or args.profile_font_preview_test or args.profile_export_test or args.profile_navigation_test):
         parser.error('--resource-sort-test requires --smoke-test and an explicit fixture --game-root')
+    if args.character_source and (not args.smoke_test or args.preview_source or args.resource_sort_test or args.profile_font_preview_test or args.profile_export_test or args.profile_navigation_test):
+        parser.error('--character-source requires only --smoke-test')
     from .application import AppServices
     try:
         services = AppServices(args.data_dir, output_root=args.output_dir)
@@ -182,7 +185,11 @@ def main() -> int:
     window = MainWindow(services, initial_root=args.game_root)
     app.aboutToQuit.connect(services.shutdown)
     window.show()
-    if args.smoke_test and args.resource_sort_test:
+    if args.smoke_test and args.character_source:
+        from .ui.character_smoke import CharacterSmoke
+        receipt = validate_output(validate_data_root(Path(args.smoke_test)), args.game_root or services.config.get('game_root'))
+        window._character_smoke = CharacterSmoke(app, window, args.character_source, receipt)
+    elif args.smoke_test and args.resource_sort_test:
         from .ui.resource_sorting_smoke import ResourceSortingSmoke
         receipt = validate_output(validate_data_root(Path(args.smoke_test)), args.game_root)
         window._resource_sorting_smoke = ResourceSortingSmoke(app, window, receipt)

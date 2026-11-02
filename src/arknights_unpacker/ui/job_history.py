@@ -260,6 +260,11 @@ def remaining_extraction(request, records, enumerate_objects, emit, cancel):
         if path_key(source) in complete_sources:
             emit({'message': '保留已完成来源：' + source})
             continue
+        if 'expression' in request.get('kinds', []):
+            # Composition outputs represent a complete configuration group, not
+            # individual Unity objects. Retry incomplete sources conservatively.
+            paths.append(source)
+            continue
         done = complete_objects.get(path_key(source), set())
         if source in original_ids:
             pending = [str(item) for item in original_ids[source] if str(item) not in done]

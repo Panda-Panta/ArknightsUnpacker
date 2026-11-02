@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.24源码与本机已更新，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：0.1.25角色透明提取／表情制作交付验证中（第14.28节）；Windows 0.1.24源码与本机已更新，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1146,3 +1146,22 @@ ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28b
 安装时精确目标程序未运行，无需关闭用户会话；先完整备份并核验557旧0.1.23程序项，再替换7项、550保持，无新增／删除，更新D:/Tools/ArknightsUnpacker至0.1.24。安装实测后557程序项一致，433目标用户文件与85旧数据共518项SHA保持；用户原数据库未用于运行烟测。备份.work/resource-sorting-20261102/backup-0.1.23，收据sync-result.json、installed-verification.json、installed-objects-verification.json、final-user-data-verification.json。
 
 ZIP 86,229,986字节，SHA256 9a415d68db99ff7bbf26ac81e6bab2aa1e982a886f7a431051eb4fd24b80760a；EXE SHA256 3b33258259ab9d2984ad56cd1b13e0217a1b8789757bfbe95b313f4475deeefe。只清理本构建已确认中间文件，复核源／安装／回退及ZIP，旧版／用户文件和原始失败／验收证据保留；详见cleanup-result.json。现有工具与领域规程足够，无新个人记忆写入。后补仅README／主计划／验收（并保留旧验收正文的原始换行字节），165程序输入不变，无需重建；最终远端核验另记。
+
+
+### 14.28 AVG角色透明提取与表情差分制作（2026-11-02，调查及实施中）
+
+用户指定avg/characters，要求修复部分图片的Alpha提取并实现表情差分；随后明确自动按配置批量导出、手动选择／预览／导出两种都要。个人模式沿用test基线5218d1d、main及Tools交付，开工无未提交工作。原游戏目录只读，证据／工具／样本放.work/character-expression-20261102/各子任务目录。
+
+复用UnityPy1.25.3、extraction.images／engine、worker IPC、AppServices.extract、Qt预览lease／串行队列、scripts/verify.ps1与build.ps1及既有清单同步。已只读抽查8个代表包，旧sprites／FacePos／FaceSize和新spriteGroups[].sprites／facePos／faceSize存在显式sprite+alphaTex，既有Material配对遗漏这一层；3个正式所选Sprite红探针均错，源SHA保持。多姿态／共用与独立alpha／嵌入alpha／全身替换／裁剪画布均需处理，不按名称猜通道或位置；外部引用／冲突须保留诊断。配置坐标按左上角像素、faceSize缩放合成的3角色示例已查看，未据此声称游戏实时渲染等像素证明。
+
+共享入口由主agent维护character_config.iter_character_groups(env,check,on_error)：归一两种schema，返回reader、id、config_id、entries、face_pos／face_size及game_object。character_alpha实现images.py透明引用、Sprite helper和原图片回归；character_expressions实现characters.py目录／自动与手动合成核心及测试；主agent负责共享模型、engine／worker／服务及任务恢复，UI单独按冻结契约接入。普通图片仍保留原Sprite裁片，差分合成按逻辑画布恢复，不混同两种导出。
+
+验收：真实配置Alpha与正式导出一致，旧Material／冲突／raw／裁剪／同图去重回归；旧新配置、多组、全身替换、默认底图、裁剪offset、精确贴图位置、未知与外部引用、取消／失败不伪成功；UI自动批量、手选底图／表情／坐标尺寸、预览后导出、选择与页面保持、关窗回收及预览不改正式输出。源码／冻结／安装各取真实样本证据，保护用户数据，不重扫游戏全库。支持和未知边界写入用户指南；版本与最终交付结果待补。
+
+实际并行：character_alpha实现images.py及19项新回归，原Material路径保持，配置显式mask取R；55项相关通过，正式3 Sprite／3 Texture均与配置参考逐像素一致。character_expressions实现characters.py及16项，真实8包16组225张（16底图／193表情／16整幅）无目录诊断或生成错误，源SHA保持；3真实示例已查看，独立参考中凯尔希可见RGB最大差1为两种合成路径的alpha舍入，未称游戏实时帧等像素。character_workbench_ui实现窗口及11项，相关34通过；主agent接目录worker、可空character_options、engine输出／完成事件、页面入口及任务恢复。三个工作包各自隔离证据，互审无剩余核心阻塞。
+
+主agent管道4项先3红／1绿后全绿；主窗3项初次2红／1绿及两条Qt异常确认为旧预览类型推断覆盖显式expression，修复后新增目录／预览关窗取消2项，与旧对象／页面组合28项全绿（25.03秒）。表情窗口只取消所属目录／预览，不改正式任务；最新预览闭包保存kind／mode／options。原资源窗已有行为保持。metadata成功预览后导出参数与像素一致由主窗集成验证，原生实际worker验收进行中。
+
+普通image导出仍按原生Sprite裁片；角色合成才恢复逻辑画布和裁剪offset。新ExtractionRequest.character_options默认None，旧请求及工作历史可读；character_catalog为隐藏内部读取；expression未完成来源整体重试，保留既有产物并避开Raw Unity对象ID枚举。新依赖为零，版本0.1.25，仅editable元数据更新。完整检查使用既有scripts/verify.ps1及短路径.work/ce-all，源码／冻结／安装原生分别取证，不使用用户原始数据库、不全量扫描游戏。
+
+完整统一检查最终808 passed、1 local deselected（224.82秒），仅既有pytest缓存权限警告；不再重复无关全套。原生源码8.75秒通过真实可露希尔配置→两次手动预览（X505改508）→正式同像素导出→配置批量5张，透明1024²、源SHA、hidden目录读取、当前页、全局输出和lease回收均通过，截图已查看；.work/ce-native/source/smoke.json及source-verification.json。自动批量的默认表情与初始预览同像素，证明未混入手动位移。候选准备构建并晋升main/test后按清单同步既定Tools目标，未创建发行标签或附件；当前目标程序只读检查无在用实例。

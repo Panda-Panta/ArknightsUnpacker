@@ -9,7 +9,7 @@ from pathlib import Path
 from arknights_unpacker.contracts import ExtractionResult, CancelledError, null_progress
 from .unity import load_bundle, raw_text
 from .decoder import decode_text_bytes
-from .images import full_texture_sprite_aliases, material_alpha_pairs, texture_image
+from .images import full_texture_sprite_aliases, material_alpha_pairs, sprite_image, texture_image
 from arknights_unpacker.library.preview_types import source_preview_type
 
 def safe_component(name):
@@ -155,6 +155,24 @@ def run_extraction(request,emit=null_progress,cancel=None):
                 if not head.startswith((b'UnityFS',b'UnityRaw',b'UnityWeb')):
                     result.skipped.append({'source':str(source),'reason':'不支持的文件签名'});continue
                 env=load_bundle(source)
+                if 'expression' in kinds:
+                    if request.mode=='raw':raise ValueError('表情差分制作需要自动处理模式')
+                    from .characters import iter_character_images
+                    before_errors=len(result.errors);before_outputs=len(result.outputs)
+                    for composition in iter_character_images(env,request.character_options,check):
+                        check()
+                        metadata=composition.get('metadata',{})
+                        obj_id='character:'+str(metadata.get('entry_id',composition.get('name','unknown')))
+                        if composition.get('error'):
+                            result.errors.append({'source':str(source),'object_id':obj_id,'error':composition['error']})
+                            continue
+                        image=composition['image']
+                        save(source,obj_id,composition['name'],'.png',lambda p,img=image:img.save(p,format='PNG'),
+                             'character_expression',metadata={'image_size':list(image.size),'character':metadata})
+                        complete_object(source,obj_id)
+                    if kinds=={'expression'}:
+                        if len(result.errors)==before_errors and len(result.outputs)>before_outputs:complete_source(source)
+                        continue
                 pairs=material_alpha_pairs(env,lambda message:result.skipped.append({'source':str(source),'reason':message})) if 'image' in kinds and request.mode=='auto' else {}
                 selected=set(request.object_ids.get(raw_path,request.object_ids.get(str(source),[])))
                 # Decide paths before the first output event. Count only selected
@@ -199,7 +217,7 @@ def run_extraction(request,emit=null_progress,cancel=None):
                         if typ in {'Texture2D','Sprite'} and ('image' in kinds or ('spine' in kinds and request.mode=='raw')):
                             if request.mode=='raw':
                                 save(source,obj_id,name,'.'+typ+'.bin',obj.get_raw_data(),'image_serialized');complete_object(source,obj_id);continue
-                            image,pairing=texture_image(obj,data,env,pairs) if typ=='Texture2D' else (data.image,None)
+                            image,pairing=texture_image(obj,data,env,pairs) if typ=='Texture2D' else sprite_image(obj,data,env,pairs)
                             # Resource pixels come directly from Unity's decoded
                             # texture / cropped Sprite; report and preview sizes
                             # are display settings and never enter this path.

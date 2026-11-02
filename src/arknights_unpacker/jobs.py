@@ -59,6 +59,10 @@ def worker_entry(request_file: str) -> int:
             elif operation == "objects":
                 from .extraction.engine import list_bundle_objects
                 value = list_bundle_objects(args["path"])
+            elif operation == "character_catalog":
+                from .extraction.unity import load_bundle
+                from .extraction.characters import character_catalog
+                value = character_catalog(load_bundle(args['path']), check=cancel.check)
             else:
                 raise ValueError(f"未知工作进程操作: {operation}")
         cancel.check()
@@ -117,7 +121,7 @@ class WorkerRunner:
         cancel = cancel or CancelToken()
         cancel.check()
         if reusable:
-            if operation not in {"objects", "extract"}:
+            if operation not in {"objects", "extract", "character_catalog"}:
                 raise ValueError("仅交互资源浏览可复用工作进程")
             return self._run_reusable(operation, args, emit, cancel)
         if self._closed:

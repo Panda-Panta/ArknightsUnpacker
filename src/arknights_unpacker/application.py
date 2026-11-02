@@ -255,7 +255,10 @@ class AppServices:
     def objects(self, path, emit=null_progress, cancel=None):
         return self.runner.run("objects", {"path": str(path)}, emit, cancel, reusable=True)
 
-    def extract(self, paths, output, kinds=None, object_ids=None, mode="auto", emit=null_progress, cancel=None, *, remember_output=True):
+    def character_catalog(self, path, emit=null_progress, cancel=None):
+        return self.runner.run("character_catalog", {"path": str(path)}, emit, cancel, reusable=True)
+
+    def extract(self, paths, output, kinds=None, object_ids=None, mode="auto", emit=null_progress, cancel=None, *, remember_output=True, character_options=None):
         root = str(self.installation.root) if self.installation else self.config.get("game_root", "")
         if root:
             source = Path(root).resolve()
@@ -272,7 +275,7 @@ class AppServices:
               "request_id": request_id, "message": "解包输出：" + str(task_target)})
         request = ExtractionRequest([str(p) for p in paths], str(task_target), mode,
                                     kinds or ["image", "text", "audio", "spine"], root,
-                                    object_ids or {}, request_id)
+                                    object_ids or {}, request_id, character_options)
         if remember_output:
             value = self.runner.run("extract", as_jsonable(request), emit, cancel)
         else:

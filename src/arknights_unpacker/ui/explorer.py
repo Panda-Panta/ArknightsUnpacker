@@ -49,6 +49,7 @@ class DirectoryModel(QFileSystemModel):
 class ExplorerView(QWidget):
     extract_requested = Signal(list)
     objects_requested = Signal(str)
+    expressions_requested = Signal(list)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -233,6 +234,11 @@ class ExplorerView(QWidget):
         self.extract_button.setProperty('primary', True)
         self.extract_button.clicked.connect(self.extract_selected)
         right_layout.addWidget(self.extract_button)
+        self.expressions_button = QPushButton('表情差分制作…')
+        self.expressions_button.setObjectName('characterExpressions')
+        self.expressions_button.setToolTip('单个角色包：选择底图、表情并预览或导出；多个包：按各自配置批量导出全部表情。')
+        self.expressions_button.clicked.connect(self.make_expressions)
+        right_layout.addWidget(self.expressions_button)
         self.select_all_button = QPushButton('全选当前筛选结果')
         self.select_all_button.clicked.connect(self.table.selectAll)
         right_layout.addWidget(self.select_all_button)
@@ -413,6 +419,7 @@ class ExplorerView(QWidget):
         paths = self.selected_paths()
         self.count.setText(f'当前结果 {self.model.rowCount():,} 项 · 已选 {len(selected):,} 项 · 可解包 {len(paths):,} 项')
         self.extract_button.setEnabled(bool(paths))
+        self.expressions_button.setEnabled(bool(paths) and all(Path(path).suffix.casefold() == '.ab' for path in paths))
         self.objects_button.setEnabled(len(selected) == 1 and bool(paths))
         self.select_all_button.setEnabled(self.model.rowCount() > 0)
         if selected:
@@ -446,6 +453,11 @@ class ExplorerView(QWidget):
         if paths:
             self.extract_requested.emit(paths)
 
+    def make_expressions(self):
+        paths = self.selected_paths()
+        if paths and all(Path(path).suffix.casefold() == '.ab' for path in paths):
+            self.expressions_requested.emit(paths)
+
     def show_objects(self):
         paths = self.selected_paths()
         if len(paths) == 1:
@@ -455,6 +467,8 @@ class ExplorerView(QWidget):
         menu = QMenu(self)
         extract = menu.addAction('加入解包队列', self.extract_selected)
         extract.setEnabled(self.extract_button.isEnabled())
+        expressions = menu.addAction('表情差分制作…', self.make_expressions)
+        expressions.setEnabled(self.expressions_button.isEnabled())
         objects = menu.addAction('查看内部对象／预览', self.show_objects)
         objects.setEnabled(self.objects_button.isEnabled())
         select_all = menu.addAction('全选当前筛选结果', self.table.selectAll)

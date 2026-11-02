@@ -72,6 +72,7 @@ class ExplorerPage(PageController):
     def connect(self):
         self.view.extract_requested.connect(self.window.extract)
         self.view.objects_requested.connect(self.window.objects)
+        self.view.expressions_requested.connect(self.window.character_workbench)
 
     def set_root(self, root):
         if self.view.root != Path(root):
