@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.22源码与本机已更新，系统字体及同窗切换见第14.25节，天赋潜能与表下注释见第14.24节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.23源码与本机已更新，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1102,7 +1102,7 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 安装先完整备份并核验552项旧0.1.21程序，再新增5项FontTools运行库／声明、替换9、543保持、无删除；安装实测后557程序项匹配，164当前目标用户文件和85旧数据共249项SHA保持。备份backup-0.1.21/，sync-result.json、installed-verification.json及final-user-data-verification.json记录结果。ZIP86,214,568字节，SHA256 295c53a6b8ef7b1a262bba989125f9d7939009b0729328d5cf9f27707ca5000d；EXE SHA256 a188b83722b1b0b741d3afe1c5b92b5d561a1a4165df3b81c79cb0324a775402。只清理本构建中间内容并复核源／安装／回退和ZIP；旧版、用户数据及失败／验收证据保留。无个人记忆写入或新领域skill，现有工程工具与主计划已覆盖本次流程。最终后补仅README／计划／索引／验收，不改变164程序输入，最终远端和输入复核见final-delivery-verification.json。
 
 
-### 14.26 资料任务保持当前页面与隐藏常规读取（2026-11-02，实施中）
+### 14.26 资料任务保持当前页面与隐藏常规读取（2026-11-02，源码与本机已交付）
 
 用户要求预览／导出不要自动跳转导出任务，并让查看资料等常规任务不显示在导出任务页。沿用个人模式、干净test基线03a8734、main/test及D:/Tools/ArknightsUnpacker交付，版本0.1.23，不创建发行附件。page_stability（potential_display）独占main_window.py和页面保持回归；task_visibility（talent_terms）独占jobs.py/job_history.py/pages.py及可见性／映射回归，两包并行；主agent负责版本、原生显式验收、文档及交付。
 
@@ -1114,3 +1114,10 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 实施与源码验证：页面14项先13失败后通过，覆盖operators/modules/settings三个起点、预览／正式导出成功失败、同窗切字体及预览内导出，页面与选择保持；可见性8项先红后绿（首轮唯一QUrl斜杠测试用Path比较修正），相关旧导出／预览44项和历史／cleanup／页面装配47项通过，双方互审无阻塞。主agent核对实际diff，队列仅增加显示标记，行操作全部按job_id对应原记录，后台顺序／取消与现有恢复未重构。最终非受限offscreen短目录统一检查696 passed、1 local deselected（197.26秒），仅既有pytest缓存权限警告。
 
 实际源码原生验收12.16秒：在隔离data-dir恢复塔露拉，读取／查看不占任务表；预览、TTC两字形切换及正式四格式导出始终留在干员页，最后手动打开任务页可见正式产物。全局字体、原字体SHA、缩放保持，关闭回收预览；收据.work/rtf-native/source/smoke.json及native-source.log。当前目标0.1.22的557程序项无差异，184当前用户文件和85旧数据共269项已预检，目标未运行；构建、冻结、安装及远端结果待补。没有新增领域流程或个人记忆写入，沿用现有工程命令和交付工具。
+
+
+最终交付：干净候选33304d3b2d5e7d1ce3115fceab63a9e81af7da76，构建20261102-200934-35067cb8，164程序输入与提交、557程序项和ZIP逐项SHA／CRC一致。main/test已普通快进，无发行标签或附件。首次安装检测到旧0.1.22进程28064，在创建备份／替换前停止；用户明确回复“允许关闭并更新”后，按精确程序路径发正常关闭请求，Exited=True，无强制终止。关闭后重新盘点保护文件和预览，沿既有授权继续，不重复修改或重验已固定代码；install-authorization.json、install-blocked.json及sync-apply-after-approval.log保留经过。
+
+完整备份并核验557旧程序项，更新D:/Tools/ArknightsUnpacker至0.1.23：替换7、550保持、无新增／删除。冻结和安装EXE均以隔离数据恢复塔露拉，内部读取不入任务表，预览／换字体／正式四格式保持干员页，最后手动打开任务页有正式产物，关闭回收正常；收据.work/rtf-native/{frozen,installed}/smoke.json。安装实测后557程序项完整匹配，正常退出后的184目标用户文件与85旧数据共269项SHA保持，没有启动原用户数据库的烟测。备份backup-0.1.22/，收据sync-result.json、installed-verification.json、final-user-data-verification.json。
+
+ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28bbabb80ea2f389；EXE SHA256 74aef7be1b39d15cd3a03adf178bdf1c6594fec9f9cfc8d885250a426400e6fc。只清理本构建已确认中间内容并复核源／安装／回退及ZIP，旧版和用户文件、原始失败／验收证据保留。无新领域skill或个人记忆写入；最后后补README／计划／验收，不改变164程序输入。最终远端与输入复核见final-delivery-verification.json。
