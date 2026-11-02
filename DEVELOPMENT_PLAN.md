@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.19源码与本机已更新；当前0.1.20接入用户确认的阿米娅纸箱主图标，见第14.22节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.20源码与本机已更新；用户确认的阿米娅纸箱主图标见第14.22节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1023,7 +1023,7 @@ ZIP83,024,512字节，SHA256 7f6bd6b8b2ae2261a764b58ec3443e5833160634ac8d5bada60
 ZIP83,278,553字节，SHA256 99b42c11c89429fbbe60f40457a15935286be3abc376430a7097b14a64725cbd；EXE SHA256 d21c498768437058f86e9bb364fdfeddf179b8672c3b82e54253f17a9f2c9c51。本次仅清理当前构建的pyinstaller/tmp共17文件26,667,618字节，1648项程序／回退文件及ZIP再次核对保持；旧版、用户数据、必要备份、失败和验收证据保留。现有工作流与工具足够，无新增领域流程／个人记忆写入。后补仅本计划／README／验收，158程序输入不变；最终远端只读核对见release-result.json。
 
 
-### 14.22 阿米娅纸箱主图标（2026-11-02，实施中）
+### 14.22 阿米娅纸箱主图标（2026-11-02，源码与本机已交付）
 
 用户确认最后一版amiya-box-v6.png作为主图标，沿用图稿不再重绘或改变人设／比例。个人模式，test基线ef32e9b，既有私有main/test与D:\Tools\ArknightsUnpacker正式目录授权保持。icon_assets独占resources/ui/app-icon.png与.ico和必要机械转换工具，精确保留权威PNG并生成16／24／32／48／64／128／256透明ICO；icon_runtime独占bootstrap.py的Qt默认应用图标与显式原生烟测证据；主agent负责spec、清单、版本0.1.20、文档和交付，两包实际并行。临时和验证材料隔离.work/main-icon-20261102/，最终资源不引用忽略目录。
 
@@ -1039,3 +1039,10 @@ ZIP83,278,553字节，SHA256 99b42c11c89429fbbe60f40457a15935286be3abc376430a709
 
 
 最终源码检查：短路径统一scripts/verify.ps1为600 passed、1 local deselected（116.56秒），无警告；原命令／源码均保持，之前失败和修正经过如上保留。两工作包产出已集成，主agent核对bootstrap／spec／manifest实际diff，小尺寸联系表已查看，PE工具独立复核无阻塞。正式候选0.1.20准备构建并按同一PNG／ICO逐项核对冻结与安装；软件用户目录和游戏未为图标验收执行扫描／解码。
+
+
+最终交付：干净候选74d355e629b266d90439856f44a868bd370d8601，构建20261102-124926-b69847c0，160程序输入与候选逐项一致，552程序项与ZIP逐项SHA／CRC通过。冻结与安装EXE的RT_GROUP_ICON／RT_ICON七尺寸目录／payload均与ICO完整bytes一致；各自原生Windows、隔离data-dir/output-dir实测app/window的32／48／256图标像素一致且源SHA保持，实际窗口256图已查看。无需重新生成图稿或游戏扫描。普通快进同步既有私有main/test，不建标签或上传发行附件。
+
+按预览完整备份并核验550旧0.1.19程序项，更新D:\Tools\ArknightsUnpacker为0.1.20：新增PNG／ICO两资产、替换7、543保持、无删除；250目标用户文件与85旧数据文件共335项在同步及安装实测后SHA保持。没有启动原始用户数据的常规会话，用户已有查看状态保持；备份backup-0.1.19，收据sync-result.json、pe-icon-{frozen,installed}.json、{frozen,installed}-verification.json与final-user-data-verification.json。
+
+ZIP84,564,534字节，SHA256 9f292c24732fb149992dd0f45aedba202e6bcaf01309b888eac93dfb1b44201e；EXE SHA256 d24ca459f73e799868c9e5ad7667910ffc87ce81ffe0cb9897ac8a0ac481983e。本构建中间目录按既有清单工具清理，清单与保留程序／回退／ZIP复核在cleanup-result.json；失败测试日志、原稿与必要备份保留。维护入口复用现有工具与主计划，没有新增领域skill或个人记忆写入。后补仅README／计划／验收，不改变160程序输入，最终只读远端核验见release-result.json。
