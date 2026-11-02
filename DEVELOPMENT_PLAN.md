@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.20源码与本机已更新；用户确认的阿米娅纸箱主图标见第14.22节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.20源码与本机已更新；用户确认的阿米娅纸箱主图标见第14.22节；GitHub v0.1.20已公开发布，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1046,3 +1046,17 @@ ZIP83,278,553字节，SHA256 99b42c11c89429fbbe60f40457a15935286be3abc376430a709
 按预览完整备份并核验550旧0.1.19程序项，更新D:\Tools\ArknightsUnpacker为0.1.20：新增PNG／ICO两资产、替换7、543保持、无删除；250目标用户文件与85旧数据文件共335项在同步及安装实测后SHA保持。没有启动原始用户数据的常规会话，用户已有查看状态保持；备份backup-0.1.19，收据sync-result.json、pe-icon-{frozen,installed}.json、{frozen,installed}-verification.json与final-user-data-verification.json。
 
 ZIP84,564,534字节，SHA256 9f292c24732fb149992dd0f45aedba202e6bcaf01309b888eac93dfb1b44201e；EXE SHA256 d24ca459f73e799868c9e5ad7667910ffc87ce81ffe0cb9897ac8a0ac481983e。本构建中间目录按既有清单工具清理，清单与保留程序／回退／ZIP复核在cleanup-result.json；失败测试日志、原稿与必要备份保留。维护入口复用现有工具与主计划，没有新增领域skill或个人记忆写入。后补仅README／计划／验收，不改变160程序输入，最终只读远端核验见release-result.json。
+
+
+### 14.23 0.1.20 Tools同步核对、Release与公开（2026-11-02，已完成）
+
+用户明确要求同步Tools并创建Release，沿用现有私有仓库／D:\Tools\ArknightsUnpacker和已验收0.1.20制品，不改代码、不重复构建或业务全套。release_tools_check独立核对源与Tools全部程序清单及用户文件保持；release_archive_check独立核对ZIP／SHA／CRC／552程序项及160源输入；主agent负责发布说明、唯一Git／上传／发布协调和文档。原始证据隔离.work/release-0.1.20-20261102/。GitHub连接器缺创建Release／附件上传能力，使用已登录gh；标签将固定实际构建提交74d355e，先草稿上传并核验服务端digest后发布，不改变仓库可见性或旧发行附件。结果待补。
+
+
+本轮结果：release_tools_check核对dist与D:\Tools\ArknightsUnpacker同为0.1.20，552程序项大小／SHA完全一致，差异0，故按幂等同步保留原文件、不重复覆盖或启停程序；250项非托管文件前后摘要一致。release_archive_check独立重核ZIP84,564,534字节、552程序项、160源输入、SHA清单与CRC通过。沿用已验收制品，没有重建或重跑业务测试；既有源码／冻结／安装运行证据仍见14.22。本次没有新的安装运行声明。
+
+创建annotated v0.1.20标签固定构建提交74d355e629b266d90439856f44a868bd370d8601，先上传草稿并核验两附件服务端digest，再发布正式最新Release，ID431086815，发布时间2026-11-02 13:02（UTC+8）。ZIP SHA256 9f292c24732fb149992dd0f45aedba202e6bcaf01309b888eac93dfb1b44201e，sidecar SHA256 f597ac936982056e24d45214c4419634d4bdcf2321e110588b99182d7eae641e，均uploaded且大小一致；旧v0.1.15附件保留。入口：https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.20 。
+
+用户随后明确要求“变为公开”，覆盖原先仅私有分发范围。主agent定向检查当前tracked及敏感路径历史，未发现提交的data／exports／个人运行目录或常见密钥特征；这不是穷尽秘密审计。核对owner管理权限后，使用gh repo edit --visibility public --accept-visibility-change-consequences执行，实际private=false／visibility=public。匿名、无GitHub凭据访问仓库API和Release成功，两附件HEAD均HTTP200、Content-Length分别84,564,534／101；未借此声称未知第三方授权已经确立。public-access-verification.json记录边界，草稿按tag读取曾404，改按list／release ID核验，不重建或重传已成功附件。
+
+README已更新公开0.1.20下载入口。后补仅README／主计划／验收，不改变160程序输入，无需重建或再次覆盖Tools；main/test按既定方式普通快进，最终Release／标签／可见性／旧附件及源一致性核对见本任务release-result.json。无新增领域流程或个人记忆写入；工具与原始证据留本任务目录，现有源码／安装回退材料保持。

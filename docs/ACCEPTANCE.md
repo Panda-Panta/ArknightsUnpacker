@@ -364,3 +364,10 @@ ac552232e5dfe4c51d60cbdda6ba61a519babcd26287f845535a8e66829be1ec
 
 
 0.1.20最终候选74d355e，160程序输入／552程序项及ZIP逐项核验通过。冻结、D:\Tools\ArknightsUnpacker安装EXE内嵌七档ICO原始payload逐字节匹配；实际原生Windows运行的应用／主窗口32／48／256 PNG逐像素一致，256输出已查看。先备份550旧程序项，再新增2、替换7、543保持；335项用户与旧数据同步及隔离运行后SHA保持。备份和实际收据在.work/main-icon-20261102/；Windows系统图标缓存／任务栏未实拍。既有私有main/test普通快进，新发行附件未发布。ZIP SHA256 9f292c24732fb149992dd0f45aedba202e6bcaf01309b888eac93dfb1b44201e。
+
+
+## 0.1.20 Release 与公开（2026-11-02）
+
+本轮独立核对Tools与dist的552程序项大小／SHA完全一致，无需重复覆盖，250非托管文件前后保持；只做文件核对，没有重新启动用户原始会话。ZIP、校验文件、CRC、552程序项和160源输入再次核验通过，沿用14.22已验收制品而未重新构建或业务全测。
+
+[v0.1.20 Release](https://github.com/Panda-Panta/ArknightsUnpacker/releases/tag/v0.1.20)已正式发布为最新版本。annotated标签指向实际构建74d355e；ZIP及SHA文件分别84,564,534／101字节，GitHub服务端digest与本地一致。用户明确要求公开后，仓库已改为public；匿名API和两个附件HEAD均成功HTTP200。此前各节“私有／未发布”是当轮快照，当前发行状态以本节为准；第三方授权未知项未因可见性变更而改写。证据.work/release-0.1.20-20261102/，最终只读核对main/test／标签／公开状态／旧附件保持与160源输入。
