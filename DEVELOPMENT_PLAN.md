@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.19源码与本机已更新；更新记录双击预览修复见第14.21节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.19源码与本机已更新；当前0.1.20接入用户确认的阿米娅纸箱主图标，见第14.22节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1021,3 +1021,21 @@ ZIP83,024,512字节，SHA256 7f6bd6b8b2ae2261a764b58ec3443e5833160634ac8d5bada60
 安装前旧进程已自行退出，未执行任何关闭／终止命令；原先待确认的关闭动作不再需要。重核空闲后，先完整备份并核验548旧0.1.18程序项，再按清单新增QtTest验收库2项、替换7项、541保持、无删除。同步及安装实测后，237项目标用户文件和85项旧数据共322项SHA保持；实测明确指定隔离data-dir/output-dir，未启动用户原始数据的常规会话。备份在backup-0.1.18，结果sync-result.json、final-user-data-verification.json和native/{source,frozen,installed}/preview.json。
 
 ZIP83,278,553字节，SHA256 99b42c11c89429fbbe60f40457a15935286be3abc376430a7097b14a64725cbd；EXE SHA256 d21c498768437058f86e9bb364fdfeddf179b8672c3b82e54253f17a9f2c9c51。本次仅清理当前构建的pyinstaller/tmp共17文件26,667,618字节，1648项程序／回退文件及ZIP再次核对保持；旧版、用户数据、必要备份、失败和验收证据保留。现有工作流与工具足够，无新增领域流程／个人记忆写入。后补仅本计划／README／验收，158程序输入不变；最终远端只读核对见release-result.json。
+
+
+### 14.22 阿米娅纸箱主图标（2026-11-02，实施中）
+
+用户确认最后一版amiya-box-v6.png作为主图标，沿用图稿不再重绘或改变人设／比例。个人模式，test基线ef32e9b，既有私有main/test与D:\Tools\ArknightsUnpacker正式目录授权保持。icon_assets独占resources/ui/app-icon.png与.ico和必要机械转换工具，精确保留权威PNG并生成16／24／32／48／64／128／256透明ICO；icon_runtime独占bootstrap.py的Qt默认应用图标与显式原生烟测证据；主agent负责spec、清单、版本0.1.20、文档和交付，两包实际并行。临时和验证材料隔离.work/main-icon-20261102/，最终资源不引用忽略目录。
+
+现有资源由spec.add_tree完整收集，EXE此前未指定icon，QApplication此前未设主图标。复用paths.resource_root、Pillow、PyInstaller、scripts/verify.ps1／build.ps1及上一轮清单／保护／回退工具，最小改动接入PNG到Qt和ICO到Windows EXE；构建清单要求两份资产。验收分别覆盖原图SHA、ICO多尺寸与透明、Qt实际应用／窗口图标、冻结EXE内嵌图标与本机安装运行，不以源码资产存在替代实际显示。用户设置／历史／导出不变，不建新标签或发布附件；当前目标程序未运行。结果待补。
+
+
+资产与源码验证：正式PNG精确复制已确认v6，1,239,932字节，SHA256 3bb9404b42f6d960cd04c9839bebe085fb95857648e87634493787d9a0025acf；Pillow11.3.0机械转换ICO，117,498字节，SHA256 2fd1df00ae94e5d77722bcfe886446027c049b3d44f1ce22401d565b4455c4e3，七尺寸RGBA／透明完整，联系表已查看。没有裁切、重绘或像素清理。原生Windows源码app/window均继承同一PNG，实际32／48／256像素一致；未采用截到其他前台窗口的屏幕外框图片，已删除该图片并移除焦点／截屏辅助逻辑，最终验收只声明Qt窗口图标与PE资源边界，不把Windows缓存／任务栏当已实拍。PE核验直接比RT_GROUP_ICON／RT_ICON目录与payload：旧0.1.19实际EXE先取得不匹配红证据，最终候选将用同一CLI核验。
+
+首轮统一检查599通过、1失败：test_preview_output_is_not_saved_but_formal_output_is[report-True]在临时settings.json的os.replace遇WinError5，6项单独复核通过。第二轮599通过、1失败：test_extraction_retry_only_selects_failed_objects的重试object_ids为{}，该用例未进入新增bootstrap图标路径；再次完整复核这两模块12项通过。两份原始失败日志保留，未据此擅改配置写入或任务重试逻辑，也未把第二次失败直接归因于文件权限。最终全套改用独立系统临时目录，结果待补。简单可逆图标变更不新增只镜像资源路径的测试，实际资源／Qt／EXE证据为验收依据。
+
+
+临时目录复核：第三轮命令在先执行verify后才取GetTempPath，实际继承了该脚本改写后的工作TEMP，形成过长的嵌套路径；595通过／5失败中3项明确触发160字符输出保护，另两项为相关失败断言／子进程错误显示，不作为产品回归结论。此为主agent验收命令错误，已改用明确短路径.work/icon-test-20，保留source-isolated-verification.log，不修改既有路径保护。最终全量结果以source-shortpath-verification.log为准，不继续无差别重复。
+
+
+最终源码检查：短路径统一scripts/verify.ps1为600 passed、1 local deselected（116.56秒），无警告；原命令／源码均保持，之前失败和修正经过如上保留。两工作包产出已集成，主agent核对bootstrap／spec／manifest实际diff，小尺寸联系表已查看，PE工具独立复核无阻塞。正式候选0.1.20准备构建并按同一PNG／ICO逐项核对冻结与安装；软件用户目录和游戏未为图标验收执行扫描／解码。

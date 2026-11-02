@@ -70,5 +70,6 @@ a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, d
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ArknightsUnpacker",
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
-          console=False, disable_windowed_traceback=False, contents_directory="_internal")
+          console=False, disable_windowed_traceback=False, contents_directory="_internal",
+          icon=str(root / "resources/ui/app-icon.ico"))
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="ArknightsUnpacker")

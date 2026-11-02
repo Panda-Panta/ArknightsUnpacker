@@ -26,7 +26,7 @@ ArknightsUnpacker/
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
 │     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
 │     └─ preview_cache.py        临时预览归属、窗口／生产任务释放、旧缓存回收
-├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主题矢量图标
+├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主图标PNG／ICO及主题矢量图标
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ exports/                       启动自动创建的默认输出，不随源码或程序打包
 ├─ vendor/                        固定 CN FlatBuffers schemas、LZ4AK 和来源摘要
@@ -78,6 +78,8 @@ MainWindow → AppServices.export → build_operator/build_module → reports.ex
 `reports/model.py` 的 entry_id／entry_title 将模组简介与分类横表归为同一条目；Block.kind 标明模组简介、属性、效果、潜能、召唤物与条件，stage 保留兼容字段、新横表统一为空。列为项目／未装备／1级／2级／3级，属性直接读取领域比较结果，文本引用首次相同原文，JSON保留原数据。PNG／HTML／TXT与GUI预览共用这些语义块。PNG 排版实现位于 `reports/render.py`：`ReportOptions.module_image_layout` 为 `single`（默认）或 `paged`，只控制纯模组合集；`single` 按内容生成一张自适应高度图，超过 8,000 万像素时明确提示改用分页或减少选择。`ui/settings.py` 以 `report_module_image_layout` 保存“模组PNG排版”，以 `report_theme` 保存“资料导出主题（PNG / HTML）”，原有 dark/light 值兼容保留。`modules.html` 仍同页容纳全部模组，干员独立报告分页不变。模组复选框由 `ui/entity_view.py` 内局部模型按稳定ID维护，排序／筛选保留勾选并提示隐藏数量；共享 `RecordsModel` 与干员列表选择不变。folder_rules.json 是目录用途分类的实际运行输入。
 
 `scripts/verify-html.cjs` 是真实浏览器验收入口：`node scripts/verify-html.cjs --html <产物路径> --output <证据目录>`。开发环境需提供 Node.js 和 Playwright，可用 `NODE_PATH` 指向已有 Playwright 安装的 `node_modules`；这些工具不属于产品运行依赖。旧 HTML 为静态快照，需重新导出才使用新资产，不迁改已有报告。
+
+主图标权威图稿为`resources/ui/app-icon.png`，`app-icon.ico`保存Windows多尺寸透明版本；bootstrap通过resource_root设置Qt默认应用图标，主窗口及其对话框继承，PyInstaller的EXE.icon嵌入ICO。原生smoke另外记录实际应用／窗口图标及缩略图，构建清单要求两份资产。图稿无需游戏扫描／解码。
 
 构建只收集明确的源码依赖、资源、vendor、Qt 动态库与许可证；不收集游戏原文件、整个项目、测试夹具、应用历史数据库或用户配置。新增格式适配应修改对应 extraction 模块并更新真实样本证据；领域数值只在 gamedata 修改，界面与两个渲染器不得各自重算。
 

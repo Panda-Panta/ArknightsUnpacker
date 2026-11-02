@@ -8,7 +8,7 @@ import traceback
 
 from . import __version__
 from .contracts import ExportFormat, ReportOptions, as_jsonable
-from .paths import atomic_json, validate_data_root, validate_output
+from .paths import atomic_json, resource_root, validate_data_root, validate_output
 
 
 def verify_installation(services, root: str, target: Path) -> dict:
@@ -137,9 +137,11 @@ def main() -> int:
             if sys.stderr is not None:
                 print(str(error), file=sys.stderr)
         else:
+            from PySide6.QtGui import QIcon
             from PySide6.QtWidgets import QApplication, QMessageBox
             from .ui.styles import apply_theme
             app = QApplication.instance() or QApplication(sys.argv[:1])
+            app.setWindowIcon(QIcon(str(resource_root() / 'resources/ui/app-icon.png')))
             apply_theme(app)
             QMessageBox.critical(None, '无法读取或保存程序数据', str(error))
         return 1
@@ -159,12 +161,15 @@ def main() -> int:
         finally:
             services.shutdown()
     from PySide6.QtCore import QTimer, qVersion
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
     from .ui.main_window import MainWindow
     app = QApplication(sys.argv[:1])
     app.setApplicationName("ArknightsUnpacker")
     app.setApplicationVersion(__version__)
     app.setOrganizationName("ArknightsUnpacker")
+    icon_path = resource_root() / 'resources/ui/app-icon.png'
+    app.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow(services, initial_root=args.game_root)
     app.aboutToQuit.connect(services.shutdown)
     window.show()
@@ -175,8 +180,8 @@ def main() -> int:
         window._preview_smoke = PreviewSmoke(app, window, args.preview_source, receipt, args.preview_kind,
                                             updates=args.preview_updates)
     elif args.smoke_test:
+        from hashlib import sha256
         from PySide6.QtGui import QPixmap
-        from .paths import resource_root
         receipt = validate_output(validate_data_root(Path(args.smoke_test)),
                                   args.game_root or services.config.get("game_root"))
         smoke_started = time.monotonic()
@@ -233,11 +238,30 @@ def main() -> int:
                     assert '升级后的技能替换同一位置的旧技能。' not in view.details.toPlainText()
                 image_path = receipt.with_suffix(".png")
                 image_path.parent.mkdir(parents=True, exist_ok=True)
+                icon_evidence = {'source': str(icon_path), 'source_sha256': sha256(icon_path.read_bytes()).hexdigest()}
+                for name, icon in (('application', app.windowIcon()), ('window', window.windowIcon())):
+                    assert not icon.isNull(), f'{name} window icon is empty'
+                    pixmaps = []
+                    for size in (32, 48, 256):
+                        pixmap = icon.pixmap(size, size)
+                        assert not pixmap.isNull(), f'{name} icon has no {size}px pixmap'
+                        pixmap_path = receipt.with_name(f'{receipt.stem}-icon-{name}-{size}.png')
+                        assert pixmap.save(str(pixmap_path)), f'Could not save {pixmap_path}'
+                        pixmaps.append({'requested_size': [size, size],
+                                        'size': [pixmap.width(), pixmap.height()],
+                                        'device_pixel_ratio': pixmap.devicePixelRatio(),
+                                        'path': str(pixmap_path),
+                                        'sha256': sha256(pixmap_path.read_bytes()).hexdigest()})
+                    icon_evidence[name] = {'is_null': icon.isNull(),
+                                           'available_sizes': [[size.width(), size.height()] for size in icon.availableSizes()],
+                                           'matches_application': icon.cacheKey() == app.windowIcon().cacheKey(),
+                                           'pixmaps': pixmaps}
                 window.grab().save(str(image_path))
                 atomic_json(receipt, {"version": __version__, "qt_version": qVersion(),
                                       "visible": window.isVisible(), "width": window.width(), "height": window.height(),
                                       "tabs": [window.tabs.tabText(i) for i in range(window.tabs.count())],
                                       "screenshot": str(image_path), "frozen": bool(getattr(sys, "frozen", False)),
+                                      "app_icon": icon_evidence,
                                       "qt_platform": app.platformName(), "data_root": str(services.data_root),
                                       "output_root": services.config.get("output_root"),
                                       "output_directory_exists": Path(services.config["output_root"]).is_dir(),
@@ -279,6 +303,9 @@ def main() -> int:
                                       "theme_icons": {name: not QPixmap(str(resource_root() / 'resources/ui' / name)).isNull()
                                                       for name in ('arrow-down.svg', 'arrow-up.svg', 'check.svg')},
                                       "jobs": [{"job_id": job.job_id, "title": job.title, "status": job.status} for job in window.queue.jobs]})
+            except Exception:
+                app.exit(1)
+                raise
             finally:
                 if not rescheduled:
                     window.close()
