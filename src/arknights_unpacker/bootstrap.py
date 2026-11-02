@@ -200,6 +200,7 @@ def main() -> int:
                     return
             try:
                 if args.profile_export_test:
+                    assert not window.queue.busy and not window._restore_pending, 'Timed out waiting for the export queue to settle'
                     if profile_export_job is None:
                         assert window.operators.current_profile is not None, 'No saved operator selected for export'
                         previous_jobs = {job.job_id for job in window.queue.jobs}
