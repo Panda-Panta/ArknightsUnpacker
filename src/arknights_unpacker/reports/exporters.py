@@ -50,7 +50,8 @@ def _export_html(context: ExportContext) -> None:
     if len(context.documents) > 1:
         context.cancel.check()
         path = context.directory / 'index.html'
-        context.write(path, render_index(entries, display_title(context.document), theme=context.document.options.theme))
+        context.write(path, render_index(entries, display_title(context.document), theme=context.document.options.theme,
+                                         font_path=context.document.options.font_path))
         context.record(ReportArtifact(str(path), 'html', context.document.title + ' · 目录'))
 
 

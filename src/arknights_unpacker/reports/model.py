@@ -77,6 +77,20 @@ class Block:
     entry_title: str = ''
     stage: int | None = None
     kind: str = ''
+    notes: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _terminology_rows(effects):
+    rows = []
+    for effect in effects:
+        definitions = [*(effect.get('term_definitions') or []),
+                       *((effect.get('comparison') or {}).get('original_term_definitions') or [])]
+        for definition in definitions:
+            term = plain(definition.get('term', '')).strip()
+            text = plain(definition.get('description', '')).strip()
+            if term and text and (term, text) not in rows:
+                rows.append((term, text))
+    return rows
 
 
 def _known_text(value: Any, fallback: str) -> str:
@@ -97,6 +111,19 @@ def _potential_text(effect: dict[str, Any]) -> str:
     if not isinstance(delta, dict):
         return plain(delta)
     description = _effect_value(effect)
+    annotated_description = False
+    evidence = [(change.get('metadata') or {}).get('description_evidence') if isinstance(change, dict) else None
+                for change in delta.values()]
+    if evidence and isinstance(evidence[0], dict) and all(item == evidence[0] for item in evidence):
+        source = evidence[0]
+        before, after = source.get('before'), source.get('after')
+        if before and after and description == after:
+            # Reversing every official potential annotation must reproduce the
+            # entire baseline. One annotation cannot conceal another change.
+            if source.get('annotated'):
+                annotated_description = True
+            else:
+                return f'基础天赋：{_effect_text(before)}\n当前潜能：{_effect_text(after)}'
     remaining = {}
     for key, change in delta.items():
         name = ATTRIBUTE_LABELS.get(key)
@@ -106,6 +133,11 @@ def _potential_text(effect: dict[str, Any]) -> str:
         # description already carries this attribute's potential increment.
         annotations = re.finditer(pattern + r'([^，。；\n（）()]*?)[（(][+-]\d+(?:\.\d+)?%?[）)]', description)
         if name and any(not any(other in match.group(1) for other in ATTRIBUTE_LABELS.values()) for match in annotations):
+            continue
+        # Internal implementation values need no extra warning when the game
+        # supplies a complete annotated description. Known gameplay attributes
+        # still require their own adjacent annotation above.
+        if annotated_description and not name:
             continue
         remaining[key] = change
     return present('potential_delta', remaining) if remaining else ''
@@ -326,9 +358,10 @@ def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = 
     states = _module_states(phases)
     columns = ['项目', '未装备', *[label_text for label_text, _ in states]]
 
-    def matrix(title_text, kind, cells):
+    def matrix(title_text, kind, cells, notes=None):
         if cells:
-            blocks.append(Block(title_text, columns=list(columns), cells=cells, group='模组', kind=kind, **entry))
+            blocks.append(Block(title_text, columns=list(columns), cells=cells, group='模组', kind=kind,
+                                notes=notes or [], **entry))
 
     attributes = {}
     for state, members in states:
@@ -378,7 +411,8 @@ def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = 
         effects.append(['特性', *_compact_cells([baseline_trait, *traits], columns[1:])])
     talent_rows, potential_rows = _effect_matrix_rows(_effect_groups(states, 'talents', module_unlock, token_names), states)
     effects.extend(talent_rows)
-    matrix('特性与天赋', 'module-effects', effects)
+    matrix('特性与天赋', 'module-effects', effects, _terminology_rows(
+        effect for phase in phases for effect in phase.get('talents', [])))
     matrix('潜能增量', 'module-potential', potential_rows)
 
     summons, token_potentials = _effect_matrix_rows(_effect_groups(states, 'token_effects', module_unlock, token_names), states)
@@ -393,7 +427,8 @@ def _module_blocks(module: dict[str, Any], prefix: str = '', *, owner_id: str = 
                     token_attributes.setdefault(label_text, {}).setdefault(state, []).append(text)
     summons.extend([label_text, '未提供', *[_unique_text(values.get(state, [])) for state, _ in states]]
                    for label_text, values in token_attributes.items())
-    matrix('召唤物', 'module-summons', summons)
+    matrix('召唤物', 'module-summons', summons, _terminology_rows(
+        effect for phase in phases for effect in phase.get('token_effects', [])))
     matrix('召唤物潜能增量', 'module-potential', token_potentials)
     extra = []
     if any(value not in {'—', '未提供'} for value in conditions):
@@ -484,7 +519,8 @@ def semantic_blocks(document: ReportDocument) -> list[Block]:
             rows = _complete_rows(talent, ('description','unlock_condition'), {'name','potential_delta'})
             if potential := _potential_text(talent):
                 rows.append(('潜能增量', potential))
-            blocks.append(Block('天赋 · ' + _player_name(talent.get('name'), '未命名天赋'), rows, group='天赋'))
+            blocks.append(Block('天赋 · ' + _player_name(talent.get('name'), '未命名天赋'), rows,
+                                group='天赋', notes=_terminology_rows([talent])))
         if not profile.talents:
             blocks.append(Block('天赋', [('状态', _missing(profile, '天赋', ('talent','天赋')))], group='天赋'))
         for skill in profile.building_skills:
@@ -550,4 +586,5 @@ def text_report(document: ReportDocument) -> str:
         if block.columns:
             lines.append(' | '.join(block.columns))
             lines.extend(' | '.join(row) for row in block.cells)
+        lines.extend(f'{key}：{value}' for key, value in block.notes)
     return '\n'.join(lines) + '\n'

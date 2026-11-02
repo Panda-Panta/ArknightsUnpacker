@@ -1,6 +1,6 @@
 # 实际工程结构
 
-更新：2026-11-01。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新：2026-11-02。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
@@ -19,6 +19,7 @@ ArknightsUnpacker/
 │  │  └─ module_comparison.py    同培养条件的模组各级属性、原效果与前一级对照
 │  ├─ reports/                    语义块、模组单张／分页PNG、独立HTML与批次清单
 │  │  ├─ style.py                共用亮色／暗色调色板、字体与资料分区顺序
+│  │  ├─ fonts.py                自选TTF／OTF只读加载、PNG字形与HTML离线内嵌
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
@@ -60,6 +61,10 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 0.1.18 的 `jobs.py` 通过 `__main__.py --worker-server` 为对象列表和临时资源预览按需复用单个隔离解码进程，保留逐任务请求、结果、取消和事件；每次重新读取源文件，不缓存 Unity 环境，闲置约60秒／退出回收。正式解包和核心表继续一次性进程。`main_window.py` 提供三种检查方式，默认资料检查结束后再提交全文件扫描，取消不启动后续阶段；核心表缺失保留失败任务并继续默认文件扫描。`application.load_data` 只刷新资料，保留既有文件扫描与 catalog，没有扫描时创建明确空 catalog。`library.scan` 用目录栈携带相对路径和 DirEntry 元数据；`resolver` 每层预计算相对前缀、同次 live 观测共享父目录元数据，snapshot 恢复不访问游戏文件。`ui.explorer` 按 catalog/root 缓存当前资源基础行，在更换数据或目录根时失效，搜索及用途筛选复用这些行。
 
 `ui/profile_navigation.py`给干员右侧现有QTextBrowser添加紧凑目录，目录与profile_html共用同一最终semantic_blocks，按序号创建内部锚点；EntityView负责换角色／空状态时重置导航，PNG预览窗口不增加目录。干员与模组的only_changes均为隐藏兼容属性，不参与筛选或状态保存，旧状态恢复时忽略；后勤额外通用提示Block已移除，真实阶段条目及JSON原始字段保留。
+
+0.1.21的天赋`term_definitions`由`render_description`按游戏术语标签收集；模组原天赋定义位于`comparison.original_term_definitions`，不混入模组业务变化。共用`Block.notes`将定义附在对应表格后，HTML／Qt以小字号段落显示，PNG以较小字体显示，不增加目录或章节；TXT保留完整文字，JSON保留结构。潜能描述证据位于各增量的metadata，官方注解可完整还原基础说明时去重，标准属性未说明的变化继续提示。`diff._without_text`将术语定义视为文字，保留文字勘误分类。
+
+字体选项`ReportOptions.font_path`由设置页的`report_font_path`传入，旧配置默认空路径。`reports/fonts.py`按已选文件bytes统一构造PNG字体与HTML的内嵌font-face，PNG分页和绘制共用同一布局／字形；批次目录也内嵌字体。JSON／TXT不加载字体，未选时保持既有自动字体。显式`--smoke-test --profile-export-test`在隔离状态恢复当前干员后点击真实导出按钮、等待既有队列，并记录产物；普通启动不执行。
 
 主要调用链：
 

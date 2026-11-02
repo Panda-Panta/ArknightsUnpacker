@@ -110,7 +110,7 @@ def test_single_module_option_does_not_change_operator_pagination(tmp_path, incl
 
 def test_oversized_single_image_fails_before_allocation_and_has_no_artifact(tmp_path, monkeypatch):
     document = module_document(count=1)
-    monkeypatch.setattr(render, "layout_pages", lambda *args, **kwargs: [[render.DrawLine("too tall", 200_000)]])
+    monkeypatch.setattr(render, "_layout_pages", lambda *args, **kwargs: [[render.DrawLine("too tall", 200_000)]])
 
     def forbidden_allocation(*args, **kwargs):
         pytest.fail("Oversized RGB canvas was allocated before the 80M pixel limit")

@@ -1,4 +1,35 @@
 """Explicit unlock ordering instead of source-array ordering."""
+from decimal import Decimal
+import re
+
+
+_POTENTIAL_ANNOTATION = re.compile(
+    r'(-?\d+(?:\.\d+)?)(%?)<@ba\.talpu>[（(]([+-]\d+(?:\.\d+)?)(%?)[）)]</>')
+
+
+def _potential_description(candidate):
+    from .descriptions import TERM, render_description
+    text = (candidate.get('description') or candidate.get('upgradeDescription') or
+            candidate.get('overrideDescripton') or '')
+    addition = candidate.get('additionalDescription') or ''
+    if addition:
+        text += ('\n' if text else '') + addition
+    # Compare the game's labels, independently of where term definitions appear.
+    text = TERM.sub(lambda match: match.group(2), text)
+    board = candidate.get('blackboard')
+    rendered, _ = render_description(text, board)
+    annotations = []
+
+    def original_value(match):
+        current, unit, increment, increment_unit = match.groups()
+        if unit != increment_unit:
+            return match.group(0)
+        annotations.append(match.group(0))
+        original = Decimal(current) - Decimal(increment)
+        return format(original.normalize(), 'f') + unit
+
+    original, _ = render_description(_POTENTIAL_ANNOTATION.sub(original_value, text), board)
+    return rendered, original, bool(annotations)
 
 
 def phase_number(value):
@@ -28,4 +59,13 @@ def potential_delta(candidate, baseline):
     from .descriptions import blackboard_map
     new = blackboard_map(candidate.get('blackboard'))
     old = blackboard_map((baseline or {}).get('blackboard'))
-    return {key: {'before': old[key], 'after': value, 'delta': round(value - old[key], 12), 'kind': 'potential'} for key, value in new.items() if isinstance(value, (int, float)) and isinstance(old.get(key), (int, float)) and value != old[key]}
+    changes = {key: {'before': old[key], 'after': value, 'delta': round(value - old[key], 12), 'kind': 'potential'} for key, value in new.items() if isinstance(value, (int, float)) and isinstance(old.get(key), (int, float)) and value != old[key]}
+    if changes and baseline:
+        before, _, _ = _potential_description(baseline)
+        after, original, annotated = _potential_description(candidate)
+        if before and after and before != after:
+            evidence = {'before': before, 'after': after,
+                        'annotated': annotated and original == before}
+            for change in changes.values():
+                change['metadata'] = {'description_evidence': evidence}
+    return changes

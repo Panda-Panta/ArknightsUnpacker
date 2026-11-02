@@ -251,6 +251,7 @@ class ReportOptions:
     max_page_height: int = 16000
     title: str = ""
     module_image_layout: str = "single"
+    font_path: str = ""
 
 
 @dataclass

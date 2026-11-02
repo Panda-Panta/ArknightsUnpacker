@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from PIL.PngImagePlugin import PngInfo
 
 from ..contracts import ReportDocument, CancelToken, null_progress
+from .fonts import load_custom_font
 from .model import display_title
 from .style import ordered_groups, style_version, theme_colors, typography
 
@@ -73,13 +74,19 @@ class _Layout:
     """Measure once with the fonts that will actually paint every line."""
     def __init__(self, options):
         type_style = typography()
-        self.body = _font(options.font_size)
-        self.table_heading = _font(options.font_size, True)
-        self.heading = _font(round(options.font_size * type_style['heading_scale']), True)
-        self.section = _font(round(options.font_size * type_style['section_scale']), True)
-        self.title = _font(round(options.font_size * type_style['title_scale']), True)
+        selected = load_custom_font(options.font_path)
+
+        def font(size, bold=False):
+            return selected.at_size(size) if selected else _font(size, bold)
+
+        self.body = font(options.font_size)
+        self.note = font(max(10, round(options.font_size * .85)))
+        self.table_heading = font(options.font_size, True)
+        self.heading = font(round(options.font_size * type_style['heading_scale']), True)
+        self.section = font(round(options.font_size * type_style['section_scale']), True)
+        self.title = font(round(options.font_size * type_style['title_scale']), True)
         # Fixed page furniture stays readable even at the 320px/96px extreme.
-        self.caption = _font(max(10, min(22, round(options.font_size * type_style['caption_scale']))))
+        self.caption = font(max(10, min(22, round(options.font_size * type_style['caption_scale']))))
         self.margin = min(48, options.width // 14)
         self.width = options.width - self.margin * 2
         self.padding = min(14, max(6, round(options.font_size * .35)))
@@ -174,15 +181,23 @@ def _block_lines(block, layout: _Layout, cancel) -> list[DrawLine]:
                 for column, key in enumerate(block.columns):
                     add_row(key, str(row[column]) if column < len(row) else '', row_index)
                 lines.append(DrawLine('', max(4, gap // 2), 'separator', group=block.group))
+    for term, definition in block.notes:
+        wrapped = wrap_text(f'{term}：{definition}', layout.note, layout.width - inset * 2, cancel=cancel)
+        for index, text in enumerate(wrapped):
+            lines.append(DrawLine(text, fitted_height([text], layout.note, math.ceil(layout.note.size * 1.4)),
+                'note', continued=index > 0, group=block.group, inset=inset))
     lines.append(DrawLine('', padding + gap, 'card-end', padding_bottom=gap,
                           group=block.group))
     return lines
 
 
 def layout_pages(document: ReportDocument, *, cancel: CancelToken | None = None, emit=null_progress) -> list[list[DrawLine]]:
+    return _layout_pages(document, _Layout(document.options), cancel=cancel, emit=emit)
+
+
+def _layout_pages(document, layout, *, cancel, emit):
     options = document.options
     single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
-    layout = _Layout(options)
     capacity = None if single_module_image else layout.capacity
     pages: list[list[DrawLine]] = []
     current: list[DrawLine] = []
@@ -249,9 +264,10 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                emit=null_progress, on_page=None) -> list[Path]:
     options = document.options
     single_module_image = bool(document.modules) and not document.operators and options.module_image_layout == 'single'
-    pages = layout_pages(document, cancel=cancel, emit=emit)
-    colors = theme_colors(options.theme)
+    # Pagination and painting must use the exact same loaded font bytes.
     layout = _Layout(options)
+    pages = _layout_pages(document, layout, cancel=cancel, emit=emit)
+    colors = theme_colors(options.theme)
     margin = layout.margin
     right = options.width - margin
     paths = []
@@ -356,7 +372,8 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                 else:
                     warning = line.group == '草稿警告'
                     border = colors['warning_rule'] if warning else colors['rule']
-                    background = (colors['warning_bg'] if warning else colors['gold_bg'] if line.kind == 'potential'
+                    background = (colors['paper'] if line.kind == 'note' else
+                                  colors['warning_bg'] if warning else colors['gold_bg'] if line.kind == 'potential'
                                   else colors['table_alt'] if line.row_index % 2 else colors['paper'])
                     draw.rectangle((margin, y, right, bottom), fill=background)
                     draw.line((margin, y, margin, bottom), fill=border)
@@ -364,10 +381,11 @@ def render_png(document: ReportDocument, directory: Path, stem: str, *, cancel: 
                     if line.first or line_index == 0:
                         draw.line((margin, y, right, y), fill=border)
                     if line.text:
-                        draw.text((margin + (line.inset or layout.padding), _text_y(layout.body, line.text, y, line.height)), line.text,
-                                  font=layout.body, fill=colors['warning_ink'] if warning else colors['gold']
+                        font = layout.note if line.kind == 'note' else layout.body
+                        draw.text((margin + (line.inset or layout.padding), _text_y(font, line.text, y, line.height)), line.text,
+                                  font=font, fill=colors['muted'] if line.kind == 'note' else colors['warning_ink'] if warning else colors['gold']
                                   if line.kind == 'potential' else colors['ink'], anchor='lt')
-                if line_index == len(lines) - 1 and line.kind in {'body', 'potential', 'table', 'table-header', 'heading', 'warning-heading'}:
+                if line_index == len(lines) - 1 and line.kind in {'body', 'potential', 'note', 'table', 'table-header', 'heading', 'warning-heading'}:
                     draw.line((margin, bottom - 1, right, bottom - 1), fill=colors['rule'])
                 y = bottom
             footer = f'第 {index} / {len(pages)} 页'

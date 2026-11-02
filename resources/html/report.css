@@ -17,6 +17,8 @@ body {
 a { color: var(--link); text-decoration: none; transition: color 0.15s ease; }
 a:hover { color: var(--link-hover); text-decoration: underline; }
 button, input { font: inherit; }
+.term-notes { margin-top: 8px; color: var(--muted); font-size: .85em; }
+.term-notes p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 button {
   cursor: pointer;
   border: 1px solid var(--rule);

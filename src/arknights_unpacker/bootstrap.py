@@ -121,6 +121,7 @@ def main() -> int:
     parser.add_argument("--preview-kind", choices=('image', 'audio', 'video', 'text'), default='image', help=argparse.SUPPRESS)
     parser.add_argument("--preview-updates", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--profile-navigation-test", action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument("--profile-export-test", action='store_true', help=argparse.SUPPRESS)
     parser.add_argument("--headless-verify", metavar="DIR", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.preview_source and not args.smoke_test:
@@ -129,6 +130,8 @@ def main() -> int:
         parser.error('--preview-updates requires --smoke-test and --preview-source')
     if args.profile_navigation_test and (not args.smoke_test or args.preview_source):
         parser.error('--profile-navigation-test requires --smoke-test without --preview-source')
+    if args.profile_export_test and (not args.smoke_test or args.preview_source):
+        parser.error('--profile-export-test requires --smoke-test without --preview-source')
     from .application import AppServices
     try:
         services = AppServices(args.data_dir, output_root=args.output_dir)
@@ -187,14 +190,26 @@ def main() -> int:
         smoke_started = time.monotonic()
         profile_navigation_proof = {}
         profile_navigation_target = None
+        profile_export_job = None
         def record():
-            nonlocal profile_navigation_target
+            nonlocal profile_navigation_target, profile_export_job
             rescheduled = False
             if window.queue.busy or window._restore_pending:
                 if time.monotonic() - smoke_started < 25:
                     QTimer.singleShot(100, record)
                     return
             try:
+                if args.profile_export_test:
+                    if profile_export_job is None:
+                        assert window.operators.current_profile is not None, 'No saved operator selected for export'
+                        previous_jobs = {job.job_id for job in window.queue.jobs}
+                        window.operators.export_selected.click()
+                        profile_export_job, = [job for job in window.queue.jobs if job.job_id not in previous_jobs]
+                        rescheduled = True
+                        QTimer.singleShot(100, record)
+                        return
+                    assert profile_export_job.status == '成功', profile_export_job.last_error or profile_export_job.status
+                    assert profile_export_job.artifacts, 'Export completed without artifacts'
                 if args.profile_navigation_test:
                     view = window.operators
                     navigation = getattr(view, 'profile_navigation', None)
@@ -268,6 +283,8 @@ def main() -> int:
                                       "settings_output": window.settings.output.text(),
                                       "module_image_layout": window.settings.report_options().module_image_layout,
                                       "report_theme": window.settings.report_options().theme,
+                                      "report_font_path": window.settings.report_options().font_path,
+                                      "profile_export": as_jsonable(profile_export_job.artifacts) if profile_export_job else [],
                                       "report_theme_options": [window.settings.theme.itemData(i) for i in range(window.settings.theme.count())],
                                       "report_theme_labels": [window.settings.theme.itemText(i) for i in range(window.settings.theme.count())],
                                       "queue_idle": not window.queue.busy,

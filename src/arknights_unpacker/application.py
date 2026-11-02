@@ -54,7 +54,7 @@ class AppServices:
         self.config_file = self.data_root / "settings.json"
         self.config = {"game_root": "", "output_root": str(default_output_root()),
                        "hours": 24.0, "report_width": 1200, "report_font_size": 28,
-                       "report_theme": "dark", "monitor": False,
+                       "report_theme": "dark", "report_font_path": "", "monitor": False,
                        "formats": ["png", "html"], "extraction_mode": "auto",
                        "data_locale": "unknown",
                        "extraction_kinds": ["image", "text", "audio", "spine"]}

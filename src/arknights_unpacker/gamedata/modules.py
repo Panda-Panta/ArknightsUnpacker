@@ -63,8 +63,12 @@ def build_module(data, equip_id, spec=None):
             addition = selected.get('additionalDescription') or ''
             if addition:
                 raw_description = raw_description + ('\n' if raw_description else '') + addition
-            description, ds = render_description(raw_description, selected.get('blackboard'), terms, inherited=inherited_board)
+            term_definitions = []
+            description, ds = render_description(raw_description, selected.get('blackboard'), terms, inherited=inherited_board,
+                                                term_definitions=term_definitions if target in ('TALENT', 'TALENT_DATA_ONLY') else None)
             effect = {'name':selected.get('name', ''), 'description':description, 'potential_delta':potential_delta(selected, baseline), 'target':target, 'talent_index':selected.get('talentIndex'), 'operation':'replace' if selected.get('overrideDescripton') or target in ('TALENT','TALENT_DATA_ONLY') else 'append', 'scope':{**scope, 'validModeIndices':selected.get('validModeIndices'), 'tokenKey':selected.get('tokenKey')}, 'unlock_condition':condition(selected), 'blackboard':selected.get('blackboard')}
+            if term_definitions:
+                effect['term_definitions'] = term_definitions
             stage['effects'].append(effect)
             stage['diagnostics'].extend(ds)
             if part.get('isToken'):

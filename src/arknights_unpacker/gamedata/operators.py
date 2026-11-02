@@ -37,9 +37,11 @@ def build_operator(data, char_id, spec=None):
         if not candidate or candidate.get('isHideTalent'):
             continue
         baseline = choose(candidates, phase, level, 0)
-        description, ds = render_description(candidate.get('description'), candidate.get('blackboard'), terms)
+        term_definitions = []
+        description, ds = render_description(candidate.get('description'), candidate.get('blackboard'), terms,
+                                            term_definitions=term_definitions)
         p.diagnostics.extend(ds)
-        p.talents.append({'name':candidate.get('name', ''), 'description':description, 'potential_delta':potential_delta(candidate, baseline), 'unlock_condition':condition(candidate), 'blackboard':candidate.get('blackboard'), 'token_key':candidate.get('tokenKey')})
+        p.talents.append({'name':candidate.get('name', ''), 'description':description, 'term_definitions':term_definitions, 'potential_delta':potential_delta(candidate, baseline), 'unlock_condition':condition(candidate), 'blackboard':candidate.get('blackboard'), 'token_key':candidate.get('tokenKey')})
     for index, slot in enumerate(ch.get('skills') or [], 1):
         if not unlocked(condition(slot), phase, level):
             continue

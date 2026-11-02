@@ -271,6 +271,8 @@ def blocks_html(blocks, *, anchor_prefix=None):
             for row in block.cells:
                 parts.append('<tr>' + ''.join('<td>' + _escaped_text(cell) + '</td>' for cell in row) + '</tr>')
             parts.append('</table>')
+        parts.extend('<p style="font-size:10px; color:#607786;"><b>' + _escaped_text(term) + '：</b>'
+                     + _escaped_text(text) + '</p>' for term, text in block.notes)
     return ''.join(parts)
 
 

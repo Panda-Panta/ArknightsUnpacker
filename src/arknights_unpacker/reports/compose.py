@@ -17,6 +17,8 @@ def validate_options(options: ReportOptions) -> None:
         raise ValueError('报告主题须为 dark 或 light')
     if options.module_image_layout not in {'single', 'paged'}:
         raise ValueError('模组图片排版须为 single 或 paged')
+    if not isinstance(options.font_path, str):
+        raise ValueError('导出字体须为本地字体文件路径')
 
 
 def compose_report(selection: ReportSelection, options: ReportOptions | None = None) -> ReportDocument:

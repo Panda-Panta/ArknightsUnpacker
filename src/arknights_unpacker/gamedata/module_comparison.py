@@ -40,10 +40,15 @@ def add_comparisons(data, ch, spec, module, base_trait):
     before = {row['key']: row for row in panel(data.tables, ch, phase, level, rank, spec.trust, [], diagnostics)}
     terms = data.tables.get('gamedata_const', {}).get('termDescriptionDict', {})
     originals = {}
+    original_definitions = {}
     for index, slot in enumerate(ch.get('talents') or []):
         talent = choose(slot.get('candidates'), phase, level, rank)
         if talent and not talent.get('isHideTalent'):
-            originals[index], _ = render_description(talent.get('description'), talent.get('blackboard'), terms)
+            definitions = []
+            originals[index], ds = render_description(talent.get('description'), talent.get('blackboard'), terms,
+                                                    term_definitions=definitions)
+            original_definitions[index] = definitions
+            module.diagnostics.extend(ds)
     previous = None
     for stage in module.phases:
         previous_level = previous['level'] if previous else 0
@@ -76,6 +81,8 @@ def add_comparisons(data, ch, spec, module, base_trait):
             # A token's talent index refers to the token, never to the operator.
             original = None if effect.get('scope', {}).get('isToken') else originals.get(effect.get('talent_index'))
             effect['comparison'] = {'original': original,
+                                    'original_term_definitions': [dict(definition) for definition in
+                                        original_definitions.get(effect.get('talent_index'), [])] if original is not None else [],
                                     'previous': _previous_description(effect, old_effects, original),
                                     'current': effect.get('description', ''),
                                     'previous_level': previous_level}

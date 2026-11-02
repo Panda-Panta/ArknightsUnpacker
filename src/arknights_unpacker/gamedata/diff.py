@@ -55,7 +55,8 @@ def _fields(before, after):
 
 def _without_text(value):
     if isinstance(value,dict):
-        return {key:_without_text(item) for key,item in value.items() if key not in ('name','description','trait','potentials')}
+        return {key:_without_text(item) for key,item in value.items()
+                if key not in ('name','description','trait','potentials','term_definitions')}
     if isinstance(value,list):
         return [_without_text(item) for item in value]
     return value
