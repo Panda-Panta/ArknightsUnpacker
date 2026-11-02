@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：0.1.25角色透明提取／表情制作交付验证中（第14.28节）；Windows 0.1.24源码与本机已更新，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.25源码与本机已更新，角色透明提取／表情制作见第14.28节；0.1.24，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1148,7 +1148,7 @@ ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28b
 ZIP 86,229,986字节，SHA256 9a415d68db99ff7bbf26ac81e6bab2aa1e982a886f7a431051eb4fd24b80760a；EXE SHA256 3b33258259ab9d2984ad56cd1b13e0217a1b8789757bfbe95b313f4475deeefe。只清理本构建已确认中间文件，复核源／安装／回退及ZIP，旧版／用户文件和原始失败／验收证据保留；详见cleanup-result.json。现有工具与领域规程足够，无新个人记忆写入。后补仅README／主计划／验收（并保留旧验收正文的原始换行字节），165程序输入不变，无需重建；最终远端核验另记。
 
 
-### 14.28 AVG角色透明提取与表情差分制作（2026-11-02，调查及实施中）
+### 14.28 AVG角色透明提取与表情差分制作（2026-11-02，源码与本机已交付）
 
 用户指定avg/characters，要求修复部分图片的Alpha提取并实现表情差分；随后明确自动按配置批量导出、手动选择／预览／导出两种都要。个人模式沿用test基线5218d1d、main及Tools交付，开工无未提交工作。原游戏目录只读，证据／工具／样本放.work/character-expression-20261102/各子任务目录。
 
@@ -1165,3 +1165,9 @@ ZIP 86,229,986字节，SHA256 9a415d68db99ff7bbf26ac81e6bab2aa1e982a886f7a431051
 普通image导出仍按原生Sprite裁片；角色合成才恢复逻辑画布和裁剪offset。新ExtractionRequest.character_options默认None，旧请求及工作历史可读；character_catalog为隐藏内部读取；expression未完成来源整体重试，保留既有产物并避开Raw Unity对象ID枚举。新依赖为零，版本0.1.25，仅editable元数据更新。完整检查使用既有scripts/verify.ps1及短路径.work/ce-all，源码／冻结／安装原生分别取证，不使用用户原始数据库、不全量扫描游戏。
 
 完整统一检查最终808 passed、1 local deselected（224.82秒），仅既有pytest缓存权限警告；不再重复无关全套。原生源码8.75秒通过真实可露希尔配置→两次手动预览（X505改508）→正式同像素导出→配置批量5张，透明1024²、源SHA、hidden目录读取、当前页、全局输出和lease回收均通过，截图已查看；.work/ce-native/source/smoke.json及source-verification.json。自动批量的默认表情与初始预览同像素，证明未混入手动位移。候选准备构建并晋升main/test后按清单同步既定Tools目标，未创建发行标签或附件；当前目标程序只读检查无在用实例。
+
+最终交付：干净候选7277083a42e6c0de6ac6d0ddc8dc2a73d327bc2a，构建20261102-221303-1c01015b，169程序输入与提交一致，557程序项及ZIP逐项SHA／CRC通过。main/test已普通快进，无新增标签或发行附件。冻结／安装分别完成真实手选参数、两次透明预览、正式等像素导出、自动5张批量、当前页／输出／隐藏读取、关闭回收；耗时9.73／9.84秒。普通图片提取也在两环境独立worker以实际Sprite按显式配置Alpha逐像素核对通过。源游戏SHA保持，未全量重扫或使用用户原始数据库。
+
+安装时旧0.1.24程序未运行，无需关闭用户窗口。先完整备份并核验557程序项，再更新D:/Tools/ArknightsUnpacker至0.1.25：替换7项、550保持，无新增／删除。安装实测后557项程序一致，2057目标用户文件与85旧数据共2142项SHA保持。备份.work/character-expression-20261102/backup-0.1.24；收据sync-result.json、{frozen,installed}-verification.json、{frozen,installed}-ordinary-alpha.json、final-user-data-verification.json。
+
+ZIP 86,266,162字节，SHA256 1c031f115dff99d32daad1905ad48f14671c744ccc8197db50c152a4ae665e91；EXE SHA256 5cca594e3fd41debb86d070c6a257e2a4e2ef41dc9e95c7b6300cf8e19a36ab9。仅清理本构建17文件／4目录共31,489,647字节，保留源／安装／回退1671管理项、ZIP及sidecar再次核验；旧版／用户数据／原始失败与真实图片证据保留，见cleanup-result.json。现有worker／lease／清单工具与领域规程足够，schema和维护入口记录在character_config.py、characters.py、结构索引和使用指南，无个人记忆写入。后补仅README／主计划／验收，不改变169程序输入，无需重建；最终远端核验另记。
