@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：Windows 0.1.18源码与本机已更新；当前0.1.19修复更新记录双击预览，见第14.21节，验证与交付进行中。远端发行附件尚未发布。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.19源码与本机已更新；更新记录双击预览修复见第14.21节。远端发行附件尚未发布。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1007,10 +1007,17 @@ ZIP ArknightsUnpacker-0.1.16-win64.zip为83,009,917字节，SHA256 120a2ee0f8209
 
 ZIP83,024,512字节，SHA256 7f6bd6b8b2ae2261a764b58ec3443e5833160634ac8d5bada6041c3cc8fb04c9；EXE SHA256 703955a8a290faf9cdba607037cb50729bb46432524c08ac849a87fe300d1033。按既有核验脚本清理本构建中间文件，清单及保留文件复核见cleanup-result.json；旧构建、回退、用户文件及本次原始证据保留。复用既有清单交付工具并在本任务保存参数化副本，无新领域流程或个人记忆更新。后补仅本计划／README／验收，不改变158程序输入；最终verify_remote.py --pending-release只读核对main/test、输入一致性、新版发行缺席与旧0.1.15附件保持，不创建标签或上传附件。
 
-### 14.21 更新记录页双击预览（2026-11-02，源码验证通过，交付中）
+### 14.21 更新记录页双击预览（2026-11-02，源码与本机已交付）
 
 用户报告更新记录中双击文件无法预览。沿用个人模式、干净test基线2502c52、既有私有main/test与正式D:\Tools\ArknightsUnpacker交付目标。复用UpdatesView的资源／存在状态／根目录限制、ExplorerPage到MainWindow.objects的既有对象窗口／右侧自动预览链路，以及scripts/verify.ps1和build.ps1，不改变解码或存储格式。update_preview_regression独占tests/gui/test_update_preview.py，preview_path_investigation独立调查并补现有显式原生验收入口bootstrap.py/preview_smoke.py；主agent独占updates.py/pages.py的修复、版本／文档、集成与交付，两包实际并行。原始证据隔离.work/update-preview-20261102/。
 
 根因已复现：UpdatesView没有双击处理或objects_requested信号，UpdatesPage也未连接MainWindow.objects。真实Qt鼠标双击经UpdatesPage的4项正向测试全失败，3项已删／非资源／越界拒绝测试通过（0.77秒）；此前两次测试临时目录设置错误已排除，不改产品逻辑。修复以实际点击行派发，避免多选／排序时取错文件；保留路径与资源校验。验收需双击后真实图片显示及关闭回收，不能仅用原本直接调用window.objects的烟测代替。本次0.1.19候选将完成相关GUI、统一检查与真实源码／冻结／安装预览；备份并保护设置、历史和导出，不新建发行标签或附件。结果待补。
 
 源码结果：修复新8项及原筛选／导出合计19项通过；独立复核无阻塞。首次绿测把JSON误当非资源的1项失败，按既有正式文本支持改为正向，反例换为EXE，未更改产品类型规则。统一scripts/verify.ps1为600 passed、1 local deselected（123.47秒），仅既有pytest缓存权限警告。原生Windows在隔离data-dir从真实71_i01.ab更新记录行鼠标双击，打开对象窗口并自动显示1600×900图片，3.56秒；源SHA保持、窗口关闭回收成功，截图已查看。新增隐藏--preview-updates只用于显式验收，默认路径不变。安装盘点为548程序项、237目标用户文件及85旧数据文件；旧版进程36512仍运行，不直接关闭或覆盖运行程序，先完成可审阅候选及冻结验收。
+
+
+最终交付：干净候选a66db521201a6d3f448741328818d43f731466aa，构建20261102-120824-e0b53d54，158程序输入与提交逐项一致，550程序项与ZIP逐项SHA／CRC通过。冻结EXE通过真实更新行双击预览3.14秒，安装EXE3.50秒；均为Windows、1600×900图片、源SHA保持、关闭缓存回收，截图已查看。既有私有main/test已普通快进到已验收候选，无新标签／发行附件。
+
+安装前旧进程已自行退出，未执行任何关闭／终止命令；原先待确认的关闭动作不再需要。重核空闲后，先完整备份并核验548旧0.1.18程序项，再按清单新增QtTest验收库2项、替换7项、541保持、无删除。同步及安装实测后，237项目标用户文件和85项旧数据共322项SHA保持；实测明确指定隔离data-dir/output-dir，未启动用户原始数据的常规会话。备份在backup-0.1.18，结果sync-result.json、final-user-data-verification.json和native/{source,frozen,installed}/preview.json。
+
+ZIP83,278,553字节，SHA256 99b42c11c89429fbbe60f40457a15935286be3abc376430a7097b14a64725cbd；EXE SHA256 d21c498768437058f86e9bb364fdfeddf179b8672c3b82e54253f17a9f2c9c51。本次仅清理当前构建的pyinstaller/tmp共17文件26,667,618字节，1648项程序／回退文件及ZIP再次核对保持；旧版、用户数据、必要备份、失败和验收证据保留。现有工作流与工具足够，无新增领域流程／个人记忆写入。后补仅本计划／README／验收，158程序输入不变；最终远端只读核对见release-result.json。
