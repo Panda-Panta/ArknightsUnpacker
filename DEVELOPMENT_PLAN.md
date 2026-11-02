@@ -1,6 +1,6 @@
 # 明日方舟 PC 资源解包与资料导出工具 — 完整开发计划
 
-> 状态：正在修复资源排序及补齐创建时间／首次观测对照（第14.27节）。Windows 0.1.23源码与本机已更新，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
+> 状态：Windows 0.1.24源码与本机已更新，资源排序、时间对照与包内大小见第14.27节，当前页保持和内部读取隐藏见第14.26节，系统字体及同窗切换见第14.25节；GitHub公开发行仍为v0.1.20，见第14.23节。既有版本交付证据见各增量记录。
 > 执行者入口：遵循用户的 `agent-dev-workflow`；实施时按依赖分批并行，主 agent 负责公共契约、集成和交付。可结合 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 逐项执行。复选框仅在对应证据取得后勾选。
 
 **目标：** 用户选择 PC 游戏目录后，可以理解目录用途、浏览资源、识别文件变化、按资源类型解包，并将新增干员的完整资料和新增／变更模组导出为中文PNG及可离线浏览的HTML资料页。
@@ -1123,7 +1123,7 @@ README已更新公开0.1.20下载入口。后补仅README／主计划／验收�
 ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28bbabb80ea2f389；EXE SHA256 74aef7be1b39d15cd3a03adf178bdf1c6594fec9f9cfc8d885250a426400e6fc。只清理本构建已确认中间内容并复核源／安装／回退及ZIP，旧版和用户文件、原始失败／验收证据保留。无新领域skill或个人记忆写入；最后后补README／计划／验收，不改变164程序输入。最终远端与输入复核见final-delivery-verification.json。
 
 
-### 14.27 资源排序与创建时间／首次观测对照（2026-11-02，实施中）
+### 14.27 资源排序与创建时间／首次观测对照（2026-11-02，源码与本机已交付）
 
 用户反馈排序错误（尤其大小），资源浏览需比较创建时间和首次观测。个人模式沿用test／main及既定本机交付目标，基线e6f8c1b，开工无用户未提交修改。实际Qt复现：90B／1KiB／20MiB升序得到1KiB／20MiB／90B，筛选刷新后不沿用表头顺序。
 
@@ -1140,3 +1140,9 @@ ZIP86,215,985字节，SHA256 7f385603919dd0ca879aa64e20581fffb77713a314e24f3e28b
 第一阶段scripts/verify.ps1全套720 passed、1 local deselected（226.47秒），一个既有pytest缓存权限警告；追加对象功能后补engine/app/受影响GUI，首轮264 passed／1 failed（58.04秒），原始extraction-result.json明确为旧图片导出原子replace的WinError5，与新增清单size路径分开记录，不为求绿更改导出逻辑。最终复核进行中。证据source-verification.log、object-verification*.log以及.work/rs-native/source-final和.work/rs-objects/source；未使用用户原始数据库，也不重扫真实游戏。
 
 追加范围最终同一命令、独立短路径复核265 passed（60.17秒），仅既有pytest缓存权限警告；未改图片导出逻辑，首轮WinError5及输出现场保留。源／对象原生截图已查看。版本0.1.24，依赖未变，uv以工程缓存完成editable元数据更新（首轮未设置UV_CACHE_DIR遭沙箱缓存拒绝，修正环境后成功）。候选准备构建；不创建新发行标签或附件，沿用本机清单／备份更新。
+
+最终交付：干净候选ec46429e0db563538e8fca280c4ef626f972d278，构建20261102-212040-dda7b2c9，165输入与候选提交一致，557程序项及ZIP逐项SHA／CRC通过。main/test已普通快进，无新增发行标签或附件。冻结／安装各自通过隔离两次扫描及表头排序，真实71_i01.ab对象大小／选中身份／1600×900预览与关闭回收，收据分别为.work/rs-native/{frozen,installed}及.work/rs-objects/{frozen,installed}/smoke.json。图片外部流式载荷未计入对象大小，未据此推断导出文件大小。
+
+安装时精确目标程序未运行，无需关闭用户会话；先完整备份并核验557旧0.1.23程序项，再替换7项、550保持，无新增／删除，更新D:/Tools/ArknightsUnpacker至0.1.24。安装实测后557程序项一致，433目标用户文件与85旧数据共518项SHA保持；用户原数据库未用于运行烟测。备份.work/resource-sorting-20261102/backup-0.1.23，收据sync-result.json、installed-verification.json、installed-objects-verification.json、final-user-data-verification.json。
+
+ZIP 86,229,986字节，SHA256 9a415d68db99ff7bbf26ac81e6bab2aa1e982a886f7a431051eb4fd24b80760a；EXE SHA256 3b33258259ab9d2984ad56cd1b13e0217a1b8789757bfbe95b313f4475deeefe。只清理本构建已确认中间文件，复核源／安装／回退及ZIP，旧版／用户文件和原始失败／验收证据保留；详见cleanup-result.json。现有工具与领域规程足够，无新个人记忆写入。后补仅README／主计划／验收（并保留旧验收正文的原始换行字节），165程序输入不变，无需重建；最终远端核验另记。
