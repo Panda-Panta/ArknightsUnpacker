@@ -263,6 +263,40 @@ class ModulesPage(EntityPage):
     profile_method = 'module_profile'
 
 
+class GameplayPage(PageController):
+    view_module = '.gameplay_page'
+    view_class = 'GameplayView'
+
+    def create_view(self):
+        module = import_module(self.view_module, package=__package__)
+        return getattr(module, self.view_class)(self.window)
+
+    def connect(self):
+        self.view.connect()
+
+    def set_root(self, root):
+        self.view.set_root(root)
+
+    def scanned(self, snapshot, changes, catalog):
+        root = value(snapshot, 'root')
+        if root:
+            self.set_root(root)
+        self.view.set_catalog(getattr(self.window.services, 'gameplay_catalog', None))
+
+    def data_loaded(self):
+        services = self.window.services
+        root = value(services.installation, 'root')
+        if root:
+            self.set_root(root)
+        self.view.set_catalog(getattr(services, 'gameplay_catalog', None))
+
+    def save_state(self):
+        return self.view.save_state()
+
+    def restore_state(self, state):
+        self.view.restore_state(state)
+
+
 class JobsPage(PageController):
     view_module = '.jobs'
 
@@ -307,6 +341,7 @@ PAGE_DEFINITIONS = (
     PageDefinition('updates', '更新记录', UpdatesPage),
     PageDefinition('operators', '干员资料', OperatorsPage),
     PageDefinition('modules', '模组更新', ModulesPage),
+    PageDefinition('gameplay', '玩法资料', GameplayPage),
     PageDefinition('jobs', '导出任务', JobsPage),
     PageDefinition('settings', '设置', SettingsPage),
 )

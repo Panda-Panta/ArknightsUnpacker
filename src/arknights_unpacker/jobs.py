@@ -63,6 +63,10 @@ def worker_entry(request_file: str) -> int:
                 from .extraction.unity import load_bundle
                 from .extraction.characters import character_catalog
                 value = character_catalog(load_bundle(args['path']), check=cancel.check)
+            elif operation in {"gameplay", "gameplay_level"}:
+                from .extraction.gameplay import load_autochess, load_gameplay_level
+                load = load_autochess if operation == "gameplay" else load_gameplay_level
+                value = load(**args, emit=emit, cancel=cancel)
             else:
                 raise ValueError(f"未知工作进程操作: {operation}")
         cancel.check()
