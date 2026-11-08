@@ -16,6 +16,7 @@ class LevelTagsDialog(QDialog):
         self.setWindowTitle(f'{caption} · 作战指标')
         self.resize(620, 660)
         self.tags = source['tags']
+        self.graph = source.get('graph')
         self.level = source['level']
         self.buttons = {}
         self.groups = []
@@ -24,6 +25,10 @@ class LevelTagsDialog(QDialog):
         layout = QVBoxLayout(self)
         self.score = QLabel()
         layout.addWidget(self.score)
+        if self.graph is not None:
+            rules = QLabel('指标须通过所选节点连到赛季起点。关键节点解锁进度由游戏记录。')
+            rules.setWordWrap(True)
+            layout.addWidget(rules)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         options = QWidget()
@@ -82,15 +87,20 @@ class LevelTagsDialog(QDialog):
         return [tag for tag in self.tags if self.buttons[tag['id']].isChecked()]
 
     def _refresh_score(self, *_):
-        selected = self._selected()
-        self.score.setText(f"已选 {len(selected)} 项 · {sum(tag['score'] for tag in selected)} 分")
+        self._show_selection_score(self._selected())
         self.status.setText('选择已变更。应用后会重新生成受支持的关卡脚本。')
+
+    def _show_selection_score(self, selected):
+        text = f'已选 {len(selected)} 项'
+        if self.graph is None:
+            text += f" · {sum(tag['score'] for tag in selected)} 分"
+        self.score.setText(text)
 
     def _apply(self):
         selected = self._selected()
-        self.score.setText(f"已选 {len(selected)} 项 · {sum(tag['score'] for tag in selected)} 分")
+        self._show_selection_score(selected)
         try:
-            self.variant = apply_level_tags(self.level, self.tags, [tag['id'] for tag in selected])
+            self.variant = apply_level_tags(self.level, self.tags, [tag['id'] for tag in selected], graph=self.graph)
         except ValueError as error:
             self.status.setText(str(error))
             return

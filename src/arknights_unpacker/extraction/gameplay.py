@@ -25,6 +25,7 @@ def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, canc
     """Read the active index once for the gameplay and level directories."""
     from .level_catalog import build_level_catalog
     from .level_map_image import find_level_map_images
+    from .level_scenes import find_level_scenes
 
     active = catalog.manifest
     result = {'root': snapshot.root, 'resource_version': str(active.get('versionId', 'unknown')),
@@ -59,10 +60,14 @@ def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, canc
         gameplay = _identify(result, index, catalog, cancel)
         levels = build_level_catalog(snapshot.root, result['resource_version'], index, catalog,
                                      previous_levels, cancel)
-        images = find_level_map_images(index, catalog.resources, (row['id'] for row in levels['levels']), cancel)
+        ids = [row['id'] for row in levels['levels']]
+        images = find_level_map_images(index, catalog.resources, ids, cancel)
+        scenes = find_level_scenes(index, catalog.resources, ids, cancel)
         for row in levels['levels']:
             if row['id'] in images:
                 row['map_image'] = images[row['id']]
+            if row['id'] in scenes:
+                row['scene'] = scenes[row['id']]
         return gameplay, levels
     except (OSError, ValueError, TypeError, KeyError, IndexError, struct.error) as error:
         result['diagnostics'].append(f'玩法识别暂不可用：{error}')
@@ -141,6 +146,10 @@ def load_autochess(root, logical_path, resource_version, *, emit=null_progress, 
 def load_gameplay_level(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
     if not _AUTOCHESS_LEVEL.fullmatch(logical_path):
         raise ValueError('关卡路径不属于卫戍协议。')
+    return load_level_preview_info(root, logical_path, resource_version, emit=emit, cancel=cancel)
+
+
+def load_level_preview_info(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
     result, data = load_level_data(root, logical_path, resource_version, emit=emit, cancel=cancel)
     name = logical_path.rsplit('/', 1)[-1]
     grid = (data.get('mapData') or {}).get('map') or {}
@@ -150,6 +159,7 @@ def load_gameplay_level(root, logical_path, resource_version, *, emit=null_progr
             'route_count': len(data.get('routes') or []),
             'wave_count': len(data.get('waves') or []),
             'enemy_ids': list(dict.fromkeys(row['id'] for row in enemy_refs if row.get('id'))),
+            'resource_version': result.resource_version,
             'diagnostics': result.diagnostics}
 
 

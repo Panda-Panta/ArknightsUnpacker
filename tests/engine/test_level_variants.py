@@ -101,3 +101,23 @@ def test_invalid_required_exclusive_or_unknown_selection_is_rejected(selected):
     with pytest.raises(ValueError):
         apply_level_tags({}, tags, selected)
     assert apply_level_tags({}, tags, ["base", "b"])["selected_ids"] == ["base", "b"]
+
+
+def test_crisis_indicators_need_one_connected_path_and_respect_exclusions():
+    tags = [
+        {**_tag("left"), "name": "左路", "excludes": ["right"]},
+        {**_tag("right"), "name": "右路"},
+        {**_tag("goal"), "name": "终点"},
+    ]
+    graph = {"start_ids": ["start"], "nodes": {
+        "start": {"adjacent": ["left", "right"]},
+        "left": {"adjacent": ["start", "goal"]},
+        "right": {"adjacent": ["start", "goal"]},
+        "goal": {"adjacent": ["left", "right"]},
+    }}
+
+    assert apply_level_tags({}, tags, ["right", "goal"], graph=graph)["selected_ids"] == ["right", "goal"]
+    with pytest.raises(ValueError, match="未连接"):
+        apply_level_tags({}, tags, ["goal"], graph=graph)
+    with pytest.raises(ValueError, match="互斥"):
+        apply_level_tags({}, tags, ["left", "right"], graph=graph)

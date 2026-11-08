@@ -1,4 +1,4 @@
-"""Apply statically verifiable RecalRune effects to a copy of LevelData."""
+"""Apply statically verifiable indicator effects to a copy of LevelData."""
 from collections.abc import Collection
 from copy import deepcopy
 import re
@@ -42,6 +42,24 @@ def _selected_tags(tags, selected_ids):
     return active
 
 
+def _validate_indicator_graph(graph, active):
+    selected = {tag['id'] for tag in active}
+    for tag in active:
+        if selected.intersection(tag.get('excludes') or ()):
+            raise ValueError(f"存在互斥指标：{tag['name']}。")
+    nodes = graph['nodes']
+    reachable = set(graph['start_ids'])
+    pending = list(reachable)
+    while pending:
+        for adjacent in nodes[pending.pop()]['adjacent']:
+            if adjacent in selected and adjacent not in reachable:
+                reachable.add(adjacent)
+                pending.append(adjacent)
+    disconnected = [tag['name'] for tag in active if tag['id'] not in reachable]
+    if disconnected:
+        raise ValueError('所选指标尚未连接到赛季起点：' + '、'.join(disconnected))
+
+
 def _action_phases(level):
     for wave in level.get("waves") or ():
         yield from wave.get("fragments") or ()
@@ -63,7 +81,7 @@ def _locations(value, grid):
     return positions
 
 
-def apply_level_tags(level: dict, tags: list[dict], selected_ids: Collection[str]) -> dict:
+def apply_level_tags(level: dict, tags: list[dict], selected_ids: Collection[str], *, graph=None) -> dict:
     """Return a copied level, selected IDs, changes and unsupported effects.
 
     Apply effects in tag sort order. A later command for the same hidden group
@@ -71,6 +89,8 @@ def apply_level_tags(level: dict, tags: list[dict], selected_ids: Collection[str
     Invalid combinations raise ValueError before any effects are evaluated.
     """
     active = _selected_tags(tags, selected_ids)
+    if graph is not None:
+        _validate_indicator_graph(graph, active)
     variant = deepcopy(level)
     groups = {}
     replacements = {}

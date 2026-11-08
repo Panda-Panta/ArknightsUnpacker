@@ -10,6 +10,9 @@ from PySide6.QtWidgets import (
 from .models import RecordsModel
 
 
+_INDICATOR_CATEGORIES = {'全息作战矩阵', '危机合约'}
+
+
 CATEGORY_ORDER = ('主线', '支线', '支线与插曲', '插曲', '集成战略', '特殊活动')
 UNKNOWN_CHAPTER = ('', '')
 
@@ -157,6 +160,7 @@ class LevelCatalogView(QWidget):
         self.search.textChanged.connect(self._refresh)
         self.only_new.toggled.connect(self._refresh)
         self.table.selectionModel().selectionChanged.connect(self._show_selection)
+        self.table.doubleClicked.connect(self._open_index)
         self.tags_button.clicked.connect(self._request_tags)
         self.preview_button.clicked.connect(self._request_preview)
         self.set_catalog(None)
@@ -281,20 +285,26 @@ class LevelCatalogView(QWidget):
             state = '关卡数据已安装' if row['available'] else '关卡数据未安装'
             preview = _preview_status(row)
             category = f"{row['category']} · 新增" if row['is_new'] else row['category']
-            self.details.setText(f'{category}\n{_chapter_label(row)}\n\n{state}\n{preview}')
+            scene = row.get('scene')
+            scene_status = ('原始场景主包已安装' if scene['available'] else '原始场景主包未安装') if scene else '原始场景未匹配'
+            self.details.setText(f'{category}\n{_chapter_label(row)}\n\n{state}\n{scene_status}\n{preview}')
             self.selected_path.setText(row['id'])
-        self.preview_button.setEnabled(bool(row and (
-            row.get('map_image') or (row['available'] and row.get('preview_ready'))
-        )))
-        self.tags_button.setVisible(bool(row and row['category'] == '全息作战矩阵'))
+        self.preview_button.setEnabled(row is not None)
+        self.tags_button.setVisible(bool(row and row['category'] in _INDICATOR_CATEGORIES))
         self.tags_button.setEnabled(bool(row and row['available']))
+        self.tags_button.setText('导入赛季指标…' if row and row['category'] == '危机合约' else '配置作战指标…')
 
     def _request_tags(self):
         row = self._selected_row()
-        if row and row['available'] and row['category'] == '全息作战矩阵':
+        if row and row['available'] and row['category'] in _INDICATOR_CATEGORIES:
             self.tags_requested.emit(row['id'], row.get('code') or _level_name(row))
 
     def _request_preview(self):
         row = self._selected_row()
-        if row and (row.get('map_image') or (row['available'] and row.get('preview_ready'))):
+        if row:
+            self.preview_requested.emit(row['id'])
+
+    def _open_index(self, index):
+        row = index.data(Qt.ItemDataRole.UserRole)
+        if row:
             self.preview_requested.emit(row['id'])

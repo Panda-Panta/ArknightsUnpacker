@@ -17,17 +17,23 @@ def _has_mp4_header(path):
 
 
 class LevelPreviewDialog(QDialog):
-    def __init__(self, path: Path, caption: str, parent=None):
+    def __init__(self, path: Path | None, caption: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f'{caption} · 地图预览')
         self.resize(1020, 660)
 
         layout = QVBoxLayout(self)
-        heading = QLabel(caption)
-        heading.setTextFormat(Qt.TextFormat.PlainText)
-        heading.setWordWrap(True)
-        heading.setProperty('role', 'pageTitle')
-        layout.addWidget(heading)
+        self.heading = QLabel(caption)
+        self.heading.setTextFormat(Qt.TextFormat.PlainText)
+        self.heading.setWordWrap(True)
+        self.heading.setProperty('role', 'pageTitle')
+        layout.addWidget(self.heading)
+
+        self.detail = QLabel()
+        self.detail.setTextFormat(Qt.TextFormat.PlainText)
+        self.detail.setWordWrap(True)
+        self.detail.setVisible(False)
+        layout.addWidget(self.detail)
 
         self.viewer = ResourcePreviewWidget(self)
         self.viewer.status.hide()
@@ -38,6 +44,18 @@ class LevelPreviewDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        if path is not None:
+            self.show_media(path)
+
+    def show_detail(self, text):
+        self.detail.setText(text)
+        self.detail.setVisible(bool(text))
+
+    def show_message(self, text):
+        self.viewer.clear()
+        self.viewer.preview.setPlainText(text)
+
+    def show_media(self, path):
         suffix = path.suffix.casefold()
         if suffix not in {'.mp4', '.png'}:
             self.viewer.preview.setPlainText('地图预览需要 PNG 或 MP4 文件。')

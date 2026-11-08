@@ -17,7 +17,7 @@ from .models import selected_records, value
 
 # Numeric tabs saved before page IDs always refer to this original order.
 LEGACY_PAGE_ORDER = ('explorer', 'updates', 'operators', 'modules', 'jobs', 'settings')
-REQUIRED_PAGES = frozenset(('jobs', 'settings'))
+REQUIRED_PAGES = frozenset(('settings',))
 
 
 class PageController:
@@ -384,7 +384,7 @@ class LevelCatalogPage(PageController):
         return find(*identity) if identity is not None and find is not None else {}
 
     def _open_preview(self, path):
-        if self._preview_dialog is not None or self._map_job is not None:
+        if self._preview_dialog is not None:
             return
         if self._catalog is None:
             return
@@ -392,17 +392,26 @@ class LevelCatalogPage(PageController):
         if row is None:
             return
         metadata = self._metadata['levels'].get(path, {}) if self._metadata else {}
-        caption = metadata.get('code') or metadata.get('name') or row['name']
+        caption = ' · '.join(filter(None, (metadata.get('code'), metadata.get('name')))) or row['name']
         clip = self._clips().get(path)
+        dialog = self._show_preview(clip, caption)
         if clip is not None:
-            self._show_preview(clip, f'{caption} · 原资源动画试渲染')
+            status = '原资源动画试渲染'
         elif row.get('map_image'):
-            self._load_map_image(path, caption)
+            status = '游戏原图 · 关卡动画待适配'
+            dialog.show_message('正在读取游戏原图…')
+            self._load_map_image(path, dialog)
+        elif row['available']:
+            status = '关卡动画待适配'
+            dialog.show_message('当前关卡还没有可播放动画或游戏原图。')
         else:
-            self._render()
-            self.window.show_status('本机试渲染动画已失效，请重新生成。')
+            status = '关卡资源未安装'
+            dialog.show_message('请在游戏客户端下载关卡资源，然后重新扫描。')
+        dialog.show_detail(status)
+        if row['available']:
+            self._load_preview_info(path, dialog, status)
 
-    def _show_preview(self, path, caption, lease=None):
+    def _show_preview(self, path, caption):
         from PySide6.QtCore import Qt
         from .level_preview_dialog import LevelPreviewDialog
 
@@ -413,13 +422,12 @@ class LevelCatalogPage(PageController):
 
         def closed(*_):
             self._preview_dialog = None
-            if lease is not None:
-                lease.release()
 
         dialog.finished.connect(closed)
         dialog.open()
+        return dialog
 
-    def _load_map_image(self, path, caption):
+    def _load_map_image(self, path, dialog):
         identity = self._identity(self._catalog)
         load = getattr(self.window.services, 'load_level_map_preview', None)
         if identity is None or load is None:
@@ -428,34 +436,51 @@ class LevelCatalogPage(PageController):
         try:
             lease = self.window.preview_cache.allocate('objects')
         except (OSError, ValueError) as error:
-            self.window.show_status(str(error))
+            dialog.show_message(str(error))
             return
-        shown = False
-
         def done(result):
-            nonlocal shown
             if (job.token.cancelled or self.window._closing or self._identity(self._catalog) != identity
-                    or result['resource_version'] != version):
+                    or self._preview_dialog is not dialog or result['resource_version'] != version):
                 return
             media = Path(result['path']).resolve()
             if media.parent != lease.path or media.suffix != '.png' or not media.is_file():
                 raise ValueError('原版地图图像未生成到预览目录。')
-            self._show_preview(media, f'{caption} · 游戏原图', lease)
-            shown = True
+            dialog.show_media(media)
 
         def settled(completed):
             if completed is not job:
                 return
             self.window.queue.settled.disconnect(settled)
-            self._map_job = None
+            if self._map_job is job:
+                self._map_job = None
             lease.finish()
-            if not shown:
-                lease.release()
+            if job.status != '成功' and self._preview_dialog is dialog:
+                dialog.show_message('读取游戏原图失败，请检查游戏资源后重试。')
 
         job = self.window.queue.submit('读取游戏原版地图', lambda **kw: load(root, path, version, lease.path, **kw),
                                        done, show_in_tasks=False)
         self._map_job = job
         self.window.queue.settled.connect(settled)
+        dialog.finished.connect(lambda *_: job.token.cancel())
+        dialog.finished.connect(lambda *_: lease.release())
+
+    def _load_preview_info(self, path, dialog, status):
+        load = getattr(self.window.services, 'load_level_preview_info', None)
+        identity = self._identity(self._catalog)
+        if load is None or identity is None:
+            return
+        root, version = identity
+
+        def done(info):
+            if self._preview_dialog is not dialog or info['resource_version'] != version:
+                return
+            rows, columns = info['map_size']
+            size = f'地图 {rows}×{columns} · ' if rows and columns else ''
+            dialog.show_detail(f"{status} · {size}{info['wave_count']} 波 · {info['route_count']} 条路线")
+
+        job = self.window.queue.submit('读取关卡脚本', lambda **kw: load(root, path, version, **kw),
+                                       done, show_in_tasks=False)
+        dialog.finished.connect(lambda *_: job.token.cancel())
 
     @staticmethod
     def _with_metadata(row, by_level, chapters):
@@ -501,6 +526,15 @@ class LevelCatalogPage(PageController):
         if identity is None or load is None or self._tags_job is not None or self._tags_dialog is not None:
             return
         root, version = identity
+        options = {}
+        if path.startswith('gamedata/levels/obt/crisis/'):
+            from PySide6.QtWidgets import QFileDialog
+
+            archive, _ = QFileDialog.getOpenFileName(self.window, '导入危机合约赛季指标', '',
+                                                     '指标数据 (*.json)')
+            if not archive:
+                return
+            options['crisis_info_path'] = archive
 
         def done(result):
             if self._tags_job is not job or result['resource_version'] != version:
@@ -517,7 +551,7 @@ class LevelCatalogPage(PageController):
             dialog.finished.connect(lambda *_: setattr(self, '_tags_dialog', None))
             dialog.open()
 
-        job = self.window.queue.submit('读取关卡作战指标', lambda **kw: load(root, path, version, **kw),
+        job = self.window.queue.submit('读取关卡作战指标', lambda **kw: load(root, path, version, **options, **kw),
                                        done, show_in_tasks=False)
         self._tags_job = job
 
@@ -530,26 +564,6 @@ class LevelCatalogPage(PageController):
 
     def restore_state(self, state):
         self.view.restore_state(state)
-
-
-class JobsPage(PageController):
-    view_module = '.jobs'
-
-    def create_view(self):
-        from .jobs import JobsView
-        return JobsView(self.window.queue)
-
-    def connect(self):
-        self.view.artifacts_requested.connect(self.window.show_report_artifacts)
-
-    def queue_changed(self):
-        queue = self.window.queue
-        waiting = sum(job.status == '排队中' for job in queue.visible_jobs)
-        active_visible = queue.busy and queue.active is not None and queue.active.show_in_tasks
-        count = waiting + int(active_visible)
-        index = self.window.tabs.indexOf(self.widget)
-        if index >= 0:
-            self.window.tabs.setTabText(index, f'导出任务 ({count})' if count else '导出任务')
 
 
 class SettingsPage(PageController):
@@ -578,7 +592,6 @@ PAGE_DEFINITIONS = (
     PageDefinition('modules', '模组更新', ModulesPage),
     PageDefinition('gameplay', '玩法资料', GameplayPage),
     PageDefinition('levels', '关卡预览', LevelCatalogPage),
-    PageDefinition('jobs', '导出任务', JobsPage),
     PageDefinition('settings', '设置', SettingsPage),
 )
 

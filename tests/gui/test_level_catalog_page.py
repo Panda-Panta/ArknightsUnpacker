@@ -1,4 +1,5 @@
 import json
+from PySide6.QtCore import Qt
 
 from arknights_unpacker.ui.level_catalog_page import LevelCatalogView
 
@@ -43,7 +44,7 @@ def test_category_search_and_new_filter_round_trip(qtbot):
     assert restored.model.rowCount() == 1
 
 
-def test_playback_requires_installed_data_and_verified_resources(qtbot):
+def test_preview_opens_for_any_selected_level_and_double_click(qtbot):
     view = LevelCatalogView()
     qtbot.addWidget(view)
     result = catalog()
@@ -52,12 +53,20 @@ def test_playback_requires_installed_data_and_verified_resources(qtbot):
     view.table.selectRow(0)
     assert '已安装' in view.details.text()
     assert '待校验' in view.details.text()
-    assert not view.preview_button.isEnabled()
+    assert view.preview_button.isEnabled()
 
     view.search.setText('卫戍协议')
     view.table.selectRow(0)
     assert '未安装' in view.details.text()
-    assert not view.preview_button.isEnabled()
+    assert view.preview_button.isEnabled()
+    view.resize(1040, 680)
+    view.show()
+    index = view.model.index(0, 0)
+    position = view.table.visualRect(index).center()
+    qtbot.mouseClick(view.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    with qtbot.waitSignal(view.preview_requested) as emitted:
+        qtbot.mouseDClick(view.table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+    assert emitted.args == [result['levels'][2]['id']]
 
     view.search.setText('险路')
     view.table.selectRow(0)

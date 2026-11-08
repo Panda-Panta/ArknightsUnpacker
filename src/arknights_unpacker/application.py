@@ -228,6 +228,13 @@ class AppServices:
         catalog = self._level_catalog_for_version(root, resource_version)
         return cached_previews(self.data_root, catalog)
 
+    def load_level_preview_info(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        if not any(row['id'] == logical_path and row['available'] for row in catalog['levels']):
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        return self.runner.run('level_preview_info', {'root': str(root), 'logical_path': logical_path,
+                                                     'resource_version': resource_version}, emit, cancel)
+
     def load_level_map_preview(self, root, logical_path, resource_version, output_dir,
                                emit=null_progress, cancel=None):
         catalog = self._level_catalog_for_version(root, resource_version)
@@ -241,12 +248,15 @@ class AppServices:
                                                   'resource_version': resource_version,
                                                   'output_dir': str(directory)}, emit, cancel)
 
-    def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
+    def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None,
+                               *, crisis_info_path=None):
         catalog = self._level_catalog_for_version(root, resource_version)
         if not any(row['id'] == logical_path and row['available'] for row in catalog['levels']):
             raise ValueError('关卡数据未安装或已变化，请重新扫描。')
-        return self.runner.run('level_tag_options', {'root': str(root), 'logical_path': logical_path,
-                                                    'resource_version': resource_version}, emit, cancel)
+        args = {'root': str(root), 'logical_path': logical_path, 'resource_version': resource_version}
+        if crisis_info_path is not None:
+            args['crisis_info_path'] = str(crisis_info_path)
+        return self.runner.run('level_tag_options', args, emit, cancel)
 
     def load_data(self, root, emit=null_progress, cancel=None):
         from .gamedata import load_gamedata, compare_entities
