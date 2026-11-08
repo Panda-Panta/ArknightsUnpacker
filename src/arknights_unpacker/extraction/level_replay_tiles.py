@@ -6,7 +6,9 @@ import numpy as np
 from arknights_unpacker.library.discover import discover_installation
 
 from .engine import validate_output_root
-from .level_scene_assets import _Glb, _hierarchy, _material, _meshes, _open_scene, _primitive, _srgb_to_linear
+from .level_scene_assets import (
+    _Glb, _hierarchy, _material, _meshes, _open_scene, _prefab_objects, _primitive, _srgb_to_linear,
+)
 
 
 _GATES = {'tile_start', 'tile_end'}
@@ -34,24 +36,6 @@ def _gate_positions(level, layout):
             position[2] += _HEIGHTS[tile['heightType']]
             gates[key].append(position.tolist())
     return gates
-
-
-def _prefab_objects(objects, path):
-    for reader in objects:
-        if reader.type.name != 'AssetBundle':
-            continue
-        bundle = reader.read()
-        for name, info in bundle.m_Container:
-            if name != path:
-                continue
-            root = info.asset.deref()
-            if root.type.name != 'GameObject':
-                continue
-            refs = bundle.m_PreloadTable[info.preloadIndex : info.preloadIndex + info.preloadSize]
-            path_ids = {ref.path_id for ref in refs if not ref.file_id}
-            return root, tuple(obj for obj in objects if obj.assets_file is root.assets_file
-                               and obj.path_id in path_ids)
-    raise ValueError(f'无法在资源包内找到原版入口物件：{path}')
 
 
 def _export_gate(installation, version, key, output):

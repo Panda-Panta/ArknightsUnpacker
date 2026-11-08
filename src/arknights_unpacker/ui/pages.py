@@ -473,7 +473,9 @@ class LevelCatalogPage(PageController):
                     if server is None:
                         reason = [line for line in job.last_error.strip().splitlines()
                                   if line and not line.startswith('诊断日志：')]
-                        dialog.show_replay_status(reason[-1] if reason else '出怪预览暂不可用。')
+                        message = reason[-1] if reason else ''
+                        message = message.removeprefix('RuntimeError: ').removeprefix('ValueError: ')
+                        dialog.show_replay_status(message or '出怪预览暂不可用。')
 
             def close(*_):
                 nonlocal server

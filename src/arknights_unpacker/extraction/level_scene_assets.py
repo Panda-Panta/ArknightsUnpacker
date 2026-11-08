@@ -105,6 +105,24 @@ def _hierarchy(objects):
     return by_game, resolve
 
 
+def _prefab_objects(objects, path):
+    for reader in objects:
+        if reader.type.name != 'AssetBundle':
+            continue
+        bundle = reader.read()
+        for name, info in bundle.m_Container:
+            if name != path:
+                continue
+            root = info.asset.deref()
+            if root.type.name != 'GameObject':
+                continue
+            refs = bundle.m_PreloadTable[info.preloadIndex : info.preloadIndex + info.preloadSize]
+            path_ids = {ref.path_id for ref in refs if not ref.file_id}
+            return root, tuple(obj for obj in objects if obj.assets_file is root.assets_file
+                               and obj.path_id in path_ids)
+    raise ValueError(f'无法在资源包内找到原版预制体：{path}')
+
+
 class _Glb:
     def __init__(self):
         self.bin = bytearray()
@@ -299,30 +317,59 @@ def _primitive(glb, renderer, pose, source, sub, material):
             "indices": glb.accessor(faces.ravel(), "SCALAR", index=True)}, len(vertices), len(faces)
 
 
+def _camera_record(name, pose, data):
+    point = REFLECT_Z @ pose[:3, 3]
+    ray = REFLECT_Z @ pose[:3, 2]
+    return {'name': name, 'position': point.tolist(), 'target': (point + ray).tolist(),
+            'fov': data['field of view'], 'orthographic': data['orthographic']}
+
+
+def _default_battle_camera(installation, version):
+    logical = 'battle/[pack]common/prefabs/cameracontroller'
+    _environment, objects, asset = _open_scene(installation, logical, version, extension='.prefab')
+    _, objects = _prefab_objects(objects, asset['path'])
+    by_game, hierarchy = _hierarchy(objects)
+    for reader in objects:
+        if reader.type.name != 'Camera':
+            continue
+        data = reader.read_typetree()
+        path_id = by_game.get(data['m_GameObject']['m_PathID'])
+        if path_id is None:
+            continue
+        name, pose, active = hierarchy(path_id)
+        if active and data['m_Enabled'] and not data['orthographic'] and name.endswith('/Offset/Camera'):
+            return _camera_record(name, pose, data)
+    raise ValueError('共享相机预制体没有可用的默认战斗镜头。')
+
+
 def _scene_settings(objects, by_game, hierarchy, output):
     cameras, lights, atlases, anchors = [], [], [], []
     map_effects = None
+    default_views = []
     for reader in objects:
         kind = reader.type.name
         if kind in ("Camera", "Light", "MonoBehaviour"):
             data = reader.read_typetree()
             name, pose, active = hierarchy(by_game[data["m_GameObject"]["m_PathID"]])
-            point = REFLECT_Z @ pose[:3, 3]
-            ray = REFLECT_Z @ pose[:3, 2]
             if kind == "Camera" and active and data["m_Enabled"]:
-                cameras.append({"name": name, "position": point.tolist(), "target": (point + ray).tolist(),
-                                "fov": data["field of view"], "orthographic": data["orthographic"]})
+                cameras.append(_camera_record(name, pose, data))
             elif kind == "Light" and active and data["m_Enabled"]:
                 lights.append({"name": name, "type": data["m_Type"], "baking": data["m_Lightmapping"],
                                "color": [data["m_Color"][axis] for axis in "rgb"],
-                               "intensity": data["m_Intensity"], "rayDirection": ray.tolist(),
+                               "intensity": data["m_Intensity"], "rayDirection": (REFLECT_Z @ pose[:3, 2]).tolist(),
                                "shadow": bool(data["m_Shadows"]["m_Type"])})
             elif kind == "MonoBehaviour":
                 if "_gridPos" in data and active:
                     grid = data["_gridPos"]
-                    anchors.append({"row": grid["row"], "col": grid["col"], "position": point.tolist()})
+                    anchors.append({"row": grid["row"], "col": grid["col"],
+                                    "position": (REFLECT_Z @ pose[:3, 3]).tolist()})
                 if "_effectSettings" in data:
                     map_effects = data["_effectSettings"]
+                settings = data.get('_mapSettings') or {}
+                if active and 'cameraView' in settings:
+                    has_focus = any(item['key'] == 'camera_focus' and item['value']['m_PathID']
+                                    for item in data.get('_objects') or ())
+                    default_views.append(None if has_focus else settings['cameraView'])
         if kind == "LightmapSettings":
             for index, atlas in enumerate(reader.read_typetree()["m_Lightmaps"]):
                 entry = {}
@@ -333,7 +380,7 @@ def _scene_settings(objects, by_game, hierarchy, output):
                         texture.image.save(output / name)
                         entry[field] = {"image": name, "format": texture.m_LightmapFormat}
                 atlases.append(entry)
-    return cameras, lights, atlases, anchors, map_effects
+    return cameras, lights, atlases, anchors, map_effects, default_views
 
 
 def _grid_axes(anchors):
@@ -382,9 +429,13 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
     if not counts["meshes"]:
         raise ValueError(f"场景没有可导出的静态网格：{scene_asset}")
     model = f"{asset['name']}.glb"
-    cameras, lights, atlases, anchors, map_effects = _scene_settings(objects, by_game, hierarchy, output)
+    cameras, lights, atlases, anchors, map_effects, default_views = _scene_settings(objects, by_game, hierarchy, output)
     glb.finish(output / model)
     camera = next((item for item in cameras if item["name"].endswith("/Camera") and not item["orthographic"]), None)
+    if camera is None and default_views == [0]:
+        # With no camera focus, cameraView 0 selects the shared 16:9 battle view.
+        camera = _default_battle_camera(installation, resource_version)
+        cameras.append(camera)
     sun = next((item for item in lights if item["type"] == 1 and item["baking"] != 2), None)
     grid = _grid_axes(anchors)
     layout_diagnostics = []

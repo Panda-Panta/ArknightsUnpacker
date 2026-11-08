@@ -68,12 +68,28 @@ def _offset(data):
     return (data or {}).get('x', 0), (data or {}).get('y', 0)
 
 
+def _path_length(path):
+    return sum(hypot(x2 - x1, y2 - y1) for (x1, y1), (x2, y2) in zip(path, path[1:]))
+
+
+def sample_spawn_route(route, rng):
+    range_x, range_y = route['spawn_range']
+    if range_x == range_y == 0:
+        return route
+    path = route['path'].copy()
+    x, y = path[0]
+    # Route.GetSpawnOffset adds two independent symmetric draws to the fixed offset.
+    path[0] = x + rng.uniform(-range_x, range_x), y + rng.uniform(-range_y, range_y)
+    return {**route, 'path': path, 'distance': _path_length(path)}
+
+
 def _route(grid, source, check):
     mask = _PASSABLE.get(source.get('motionMode'))
     if mask is None:
         raise ValueError('此移动模式需要实战触发。')
-    if any(_offset(source.get('spawnRandomRange'))):
-        raise ValueError('路线使用随机出生位置。')
+    spawn_range = _offset(source.get('spawnRandomRange'))
+    if any(not isfinite(value) or value < 0 for value in spawn_range):
+        raise ValueError('路线的随机出生范围无效。')
     current = _point(source['startPosition'])
     path, waits = [current], {}
     diagonal = source.get('allowDiagonalMove', False)
@@ -95,8 +111,8 @@ def _route(grid, source, check):
     if offset_x or offset_y:
         x, y = path[0]
         path[0] = x + offset_x, y + offset_y
-    distance = sum(hypot(x2 - x1, y2 - y1) for (x1, y1), (x2, y2) in zip(path, path[1:]))
-    return {'path': path, 'waits': waits, 'distance': distance, 'wait_seconds': sum(waits.values())}
+    return {'path': path, 'waits': waits, 'distance': _path_length(path),
+            'wait_seconds': sum(waits.values()), 'spawn_range': spawn_range}
 
 
 def build_level_routes(level, *, cancel=None):
