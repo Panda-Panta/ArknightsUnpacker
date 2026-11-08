@@ -248,6 +248,23 @@ class AppServices:
                                                   'resource_version': resource_version,
                                                   'output_dir': str(directory)}, emit, cancel)
 
+    def load_level_replay(self, root, logical_path, resource_version, output_dir, *, caption,
+                          tag_ids=None, crisis_info_path=None, emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        row = next((item for item in catalog['levels'] if item['id'] == logical_path), None)
+        if row is None or not row['available']:
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        directory = Path(output_dir).resolve()
+        if directory.parent != self.data_root / 'preview' or not directory.is_dir():
+            raise ValueError('出怪预览输出目录不属于当前会话缓存。')
+        if 'scene' not in row and catalog.get('scene_bindings_checked'):
+            raise ValueError('未能从当前资源索引绑定原场景，需要适配场景别名或组装规则。')
+        return self.runner.run('level_replay', {
+            'game_root': str(root), 'level_id': logical_path, 'resource_version': resource_version,
+            'output': str(directory), 'caption': caption, 'scene': row.get('scene'), 'tag_ids': tag_ids,
+            'crisis_info': str(crisis_info_path) if crisis_info_path else None,
+        }, emit, cancel)
+
     def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None,
                                *, crisis_info_path=None):
         catalog = self._level_catalog_for_version(root, resource_version)

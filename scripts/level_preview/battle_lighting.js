@@ -63,7 +63,10 @@ vec3 gameDiffuse = (0.779084 * (1.0 - battleDiffuseMetal)) * battleAlbedo;
 vec3 gameSpecular = mix(vec3(0.220916), battleAlbedo, battleSpecularMetal);
 vec4 packedBaked = texture2D(lightMap, vLightMapUv);
 vec3 gameBaked = packedBaked.rgb * (packedBaked.a * battleLightmapMultiplier);
-float gameOcclusion = clamp(dot(texture2D(battleStaticMask, vLightMapUv), battleOcclusion), 0.0, 1.0);
+float gameOcclusion = 1.0;
+#ifdef BATTLE_STATIC_MASK
+  gameOcclusion = clamp(dot(texture2D(battleStaticMask, vLightMapUv), battleOcclusion), 0.0, 1.0);
+#endif
 #ifdef BATTLE_DYNAMIC_SHADOW
   gameOcclusion = min(gameOcclusion, getShadowMask());
 #endif
@@ -95,7 +98,7 @@ function applyStandard(material, lighting, useBlend) {
   material.vertexColors = false;
   material.lightMap = lighting.lightmap;
   material.toneMapped = false;
-  material.customProgramCacheKey = () => `torappu-forward:${useBlend}:${Boolean(metalMap)}:${lighting.dynamicShadow}`;
+  material.customProgramCacheKey = () => `battle-forward:${useBlend}:${Boolean(metalMap)}:${Boolean(lighting.shadowMask)}:${lighting.dynamicShadow}`;
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, {
       battleStaticMask: { value: lighting.shadowMask },
@@ -124,6 +127,7 @@ function applyStandard(material, lighting, useBlend) {
       .replace('#include <common>', [
         '#include <common>', blendDefinition,
         metalMap ? '#define BATTLE_METALLIC_GLOSS' : '',
+        lighting.shadowMask ? '#define BATTLE_STATIC_MASK' : '',
         lighting.dynamicShadow ? '#define BATTLE_DYNAMIC_SHADOW' : '',
         uniformsGLSL,
       ].join('\n'))
@@ -146,13 +150,15 @@ float battleWeight = 0.0;
 }
 
 export async function loadBattleLighting(layout) {
+  if (!layout.lightMap) return null;
   const config = layout.battleLighting ?? {};
   const loader = new THREE.TextureLoader();
-  const shadowMaskUrl = config.shadowMask ?? layout.lightMap.replace('_light.png', '_shadowmask.png');
+  const shadowMaskUrl = config.shadowMask === undefined
+    ? layout.lightMap.replace('_light.png', '_shadowmask.png') : config.shadowMask;
   const mapEntries = Object.entries(config.metallicGlossMaps ?? {});
   const [lightmap, shadowMask, ...metallicGlossMaps] = await Promise.all([
     loadRawTexture(loader, layout.lightMap, 1),
-    loadRawTexture(loader, shadowMaskUrl, 1),
+    shadowMaskUrl ? loadRawTexture(loader, shadowMaskUrl, 1) : null,
     ...mapEntries.map(([, url]) => loadRawTexture(loader, url)),
   ]);
   return {
@@ -168,19 +174,22 @@ export async function loadBattleLighting(layout) {
 
 export function applyBattleLighting(scene, lighting) {
   const cache = new Map();
-  const stats = { nativeMeshes: 0, metallicMaps: 0, vertexBlendMeshes: 0 };
+  const stats = { nativeMeshes: 0, unityStandardMeshes: 0, metallicMaps: 0, vertexBlendMeshes: 0 };
+  if (!lighting) return stats;
   scene.traverse(node => {
     if (!node.isMesh) return;
     const original = node.material;
     if (Array.isArray(original)) return;
     const data = original.userData;
-    if (data.unityShader !== STANDARD || !node.geometry.attributes.uv1) return;
+    const isTorappu = data.unityShader === STANDARD;
+    const isUnityStandard = data.unityShader === 'Standard' && !original.transparent;
+    if ((!isTorappu && !isUnityStandard) || !node.geometry.attributes.uv1) return;
     const useBlend = Boolean(node.geometry.attributes.color && data.unityKeywords?.includes(VERTEX_BLEND));
     const key = `${original.uuid}:${useBlend}`;
     if (!cache.has(key)) cache.set(key, applyStandard(original.clone(), lighting, useBlend));
     node.material = cache.get(key);
     node.receiveShadow = lighting.dynamicShadow && !node.material.transparent;
-    stats.nativeMeshes += 1;
+    stats[isTorappu ? 'nativeMeshes' : 'unityStandardMeshes'] += 1;
     if (useBlend) stats.vertexBlendMeshes += 1;
     if (lighting.metallicGlossMaps[data.unityTextures?._MetallicGlossMap?.name]) stats.metallicMaps += 1;
   });

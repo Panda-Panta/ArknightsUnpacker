@@ -1,7 +1,7 @@
 """Edit a level's client-defined modifiers and apply supported script changes."""
 from collections import defaultdict
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QDialog, QDialogButtonBox, QGroupBox, QLabel,
     QPushButton, QRadioButton, QScrollArea, QVBoxLayout, QWidget,
@@ -11,6 +11,8 @@ from ..extraction.level_variants import apply_level_tags
 
 
 class LevelTagsDialog(QDialog):
+    variant_applied = Signal(list)
+
     def __init__(self, source, caption, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f'{caption} · 作战指标')
@@ -105,6 +107,7 @@ class LevelTagsDialog(QDialog):
             self.status.setText(str(error))
             return
         result = self.variant
+        self.variant_applied.emit(result['selected_ids'])
         changes = result['changes']
         self.status.setText(
             f"脚本启用 {changes['enabled_actions']} 个动作，停用 {changes['disabled_actions']} 个动作，"

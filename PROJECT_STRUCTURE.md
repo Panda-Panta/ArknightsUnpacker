@@ -12,6 +12,7 @@ ArknightsUnpacker/
 │  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
 │  ├─ level_preview_cache.py      按安装、资源版本和关卡绑定本地动画
+│  ├─ level_preview_server.py     向本机浏览器提供当前回放的所需资源
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
@@ -22,6 +23,8 @@ ArknightsUnpacker/
 │  │  ├─ level_scenes.py        活动索引内的原始场景和地图预制体绑定
 │  │  ├─ level_tags.py          全息矩阵指标和危机合约赛季指标导入
 │  │  ├─ level_variants.py      指标对关卡脚本和禁部署格的变更
+│  │  ├─ level_replay_assets.py 组合原始场景、门、骨骼和波次的 worker 入口
+│  │  ├─ level_replay.py        路线与时间轴的衔接
 │  │  └─ autochess.py           PC 卫戍协议的赛季结构及策略、盟约、调度解码
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器

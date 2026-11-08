@@ -11,45 +11,110 @@ const resolution = 100;
 const actorCanvas = 512;
 const origin = 256;
 
-function loadEnemy(config) {
-  return new Promise((resolve, reject) => {
-    const loader = new PIXI.Loader();
-    loader.onError.add(reject);
-    loader.add('enemy', config.skeleton, {
-      metadata: {spineSkeletonScale: config.skeletonScale},
-    });
-    loader.load((_, resources) => {
-      if (!resources.enemy.spineData) {
-        reject(new Error('Spine data missing'));
-        return;
-      }
-      const sprite = new PIXI.spine.Spine(resources.enemy.spineData);
-      sprite.autoUpdate = false;
-      sprite.state.setAnimation(0, config.clip, true);
-      sprite.position.set(origin, origin);
-      sprite.scale.set(resolution);
-      const surface = new PIXI.Application({
-        width: actorCanvas, height: actorCanvas, autoStart: false,
-        antialias: true, backgroundAlpha: 0, preserveDrawingBuffer: true,
-      });
-      surface.stage.addChild(sprite);
-      resolve({sprite, surface, version: resources.enemy.spineData.version});
-    });
-  });
+function positive(value) {
+  return Number.isFinite(value) && value > 0;
 }
 
-function routeAt(points, distance) {
-  let direction = -1;
-  for (let i = 1; i < points.length; i++) {
-    const [x, y] = points[i - 1];
-    const [nextX, nextY] = points[i];
-    const step = Math.hypot(nextX - x, nextY - y);
-    if (nextX !== x) direction = Math.sign(nextX - x);
-    if (step && distance < step) {
-      const part = distance / step;
-      return [x + (nextX - x) * part, y + (nextY - y) * part, direction];
+function prepareRun(run) {
+  const legacy = run.actors === undefined && run.events === undefined;
+  const source = legacy ? {enemy: run} : run.actors;
+  const entries = legacy ? [{enemyId: 'enemy', time: run.spawn, path: run.path, waits: run.waits}] : run.events;
+  if (!source || typeof source !== 'object' || Array.isArray(source) || !Array.isArray(entries)) {
+    throw new Error('Invalid preview fixture: expected actors and events');
+  }
+  const configs = new Map();
+  let defaultSpeedCount = 0;
+  const events = entries.map((event, index) => {
+    const {enemyId, time, path, waits = {}} = event ?? {};
+    if (typeof enemyId !== 'string' || !Object.hasOwn(source, enemyId) || !source[enemyId]) {
+      throw new Error(`Spawn ${index + 1}: missing original actor resources for ${enemyId}`);
     }
-    distance -= step;
+    const config = source[enemyId];
+    if (!configs.has(enemyId)) {
+      if (typeof config.skeleton !== 'string' || !config.skeleton ||
+          typeof config.clip !== 'string' || !config.clip ||
+          !positive(config.skeletonScale) || !positive(config.graphicScale) ||
+          !positive(config.clipSpeed ?? 1)) {
+        throw new Error(`${enemyId}: missing or invalid original Spine resources`);
+      }
+      configs.set(enemyId, config);
+    }
+    if (!Number.isFinite(time) || time < 0 || !Array.isArray(path) || !path.length ||
+        path.some(point => !Array.isArray(point) || point.length !== 2 || !point.every(Number.isFinite))) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): invalid time or route`);
+    }
+    if (!waits || typeof waits !== 'object' || Array.isArray(waits) ||
+        Object.entries(waits).some(([point, seconds]) =>
+          !/^(0|[1-9][0-9]*)$/.test(point) || Number(point) >= path.length ||
+          !Number.isFinite(seconds) || seconds < 0)) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): invalid route waits`);
+    }
+    const length = path.reduce((sum, [x, y], i) => i === 0 ? sum :
+      sum + Math.hypot(x - path[i - 1][0], y - path[i - 1][1]), 0);
+    const speed = event.moveSpeed ?? config.moveSpeed;
+    if (speed === undefined || speed === null) defaultSpeedCount++;
+    const moveSpeed = speed ?? 1;
+    const waitTime = Object.values(waits).reduce((sum, seconds) => sum + seconds, 0);
+    const end = time + length / moveSpeed + waitTime;
+    if (!positive(moveSpeed) || !Number.isFinite(end) || end <= time) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): invalid speed or empty route`);
+    }
+    return {enemyId, time, path, waits, moveSpeed, end};
+  });
+  events.sort((a, b) => a.time - b.time);
+  return {configs, events, defaultSpeedCount};
+}
+
+async function loadActors(configs) {
+  if (!configs.size) return new Map();
+  const loader = new PIXI.Loader();
+  const assetNames = new Map();
+  const actorNames = new Map();
+  for (const [id, config] of configs) {
+    const key = `${config.skeletonScale}:${config.skeleton}`;
+    if (!assetNames.has(key)) {
+      const name = `actor-${assetNames.size}`;
+      assetNames.set(key, name);
+      loader.add(name, config.skeleton, {metadata: {spineSkeletonScale: config.skeletonScale}});
+    }
+    actorNames.set(id, assetNames.get(key));
+  }
+  const resources = await new Promise((resolve, reject) => {
+    loader.onError.add((error, _, resource) => {
+      reject(new Error(`Failed to load original Spine resource ${resource?.url || ''}: ${error.message}`));
+    });
+    loader.load((_, loaded) => resolve(loaded));
+  });
+  return new Map(Array.from(configs, ([id, config]) => {
+    const data = resources[actorNames.get(id)]?.spineData;
+    if (!data) throw new Error(`${id}: Spine data or atlas missing (${config.skeleton})`);
+    if (!data.findAnimation(config.clip)) throw new Error(`${id}: Spine animation ${config.clip} missing`);
+    const sprite = new PIXI.spine.Spine(data);
+    sprite.autoUpdate = false;
+    sprite.position.set(origin, origin);
+    const track = sprite.state.setAnimation(0, config.clip, true);
+    return [id, {config, sprite, track, version: data.version}];
+  }));
+}
+
+function routeAt({path, waits, moveSpeed}, elapsed) {
+  let direction = -1;
+  let motionTime = 0;
+  for (let i = 0; i < path.length; i++) {
+    const [x, y] = path[i];
+    const wait = waits[i] ?? 0;
+    if (elapsed < wait) return [x, y, direction, motionTime];
+    elapsed -= wait;
+    if (i + 1 === path.length) break;
+    const [nextX, nextY] = path[i + 1];
+    const step = Math.hypot(nextX - x, nextY - y) / moveSpeed;
+    if (nextX !== x) direction = Math.sign(nextX - x);
+    if (elapsed < step) {
+      const part = elapsed / step;
+      return [x + (nextX - x) * part, y + (nextY - y) * part, direction, motionTime + elapsed];
+    }
+    elapsed -= step;
+    motionTime += step;
   }
   return null;
 }
@@ -71,16 +136,109 @@ function applySpineDepth(material, baseline) {
   };
 }
 
+function createActorLayer(scene, layout, footShadow, actors, events) {
+  if (!events.length) return () => 0;
+  const surface = new PIXI.Application({
+    width: actorCanvas, height: actorCanvas, autoStart: false,
+    antialias: true, backgroundAlpha: 0, preserveDrawingBuffer: true,
+  });
+  const worldOrigin = new THREE.Vector3().fromArray(layout.origin);
+  const columns = new THREE.Vector3().fromArray(layout.columns);
+  const rows = new THREE.Vector3().fromArray(layout.rows);
+  const defaultOffset = new THREE.Vector3().fromArray(layout.actorOffset ?? [0, 0, 0]);
+  const offsets = new Map(Array.from(actors, ([id, {config}]) => [id,
+    config.actorOffset ? new THREE.Vector3().fromArray(config.actorOffset) : defaultOffset,
+  ]));
+  const shadowOffset = footShadow ? new THREE.Vector3().fromArray(layout.actorShadow.offset) : null;
+  const avatarGeometry = new THREE.PlaneGeometry(1, 1);
+  const shadowGeometry = footShadow ? new THREE.PlaneGeometry(...layout.actorShadow.size) : null;
+  const shadowMaterial = footShadow ? new THREE.MeshBasicMaterial({
+    map: footShadow, transparent: true, depthWrite: false, opacity: layout.actorShadow.opacity,
+  }) : null;
+  const slots = [];
+
+  function addSlot() {
+    // The shared Pixi canvas is overwritten for each pose. Give each visible
+    // Three mesh its own snapshot and reuse these slots across spawn events.
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = actorCanvas;
+    const context = canvas.getContext('2d');
+    context.globalCompositeOperation = 'copy';
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    const material = new THREE.MeshBasicMaterial({
+      map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
+    applySpineDepth(material, layout.actorBaseline ?? 0);
+    const avatar = new THREE.Mesh(avatarGeometry, material);
+    avatar.rotation.x = Math.PI / 6;
+    const shadow = footShadow ? new THREE.Mesh(shadowGeometry, shadowMaterial) : null;
+    if (shadow) {
+      shadow.renderOrder = -1;
+      scene.add(shadow);
+    }
+    scene.add(avatar);
+    const slot = {avatar, shadow, context, texture};
+    slots.push(slot);
+    return slot;
+  }
+
+  return time => {
+    let visible = 0;
+    for (const event of events) {
+      if (event.time > time) break;
+      if (event.end <= time) continue;
+      const position = routeAt(event, time - event.time);
+      if (!position) continue;
+      const [col, row, direction, motionTime] = position;
+      const slot = slots[visible++] ?? addSlot();
+      const actor = actors.get(event.enemyId);
+      const {sprite, track, config} = actor;
+      const {avatar, shadow, context, texture} = slot;
+      avatar.visible = true;
+      avatar.position.copy(worldOrigin).addScaledVector(columns, col).addScaledVector(rows, row);
+      if (shadow) {
+        shadow.visible = true;
+        shadow.position.copy(avatar.position).add(shadowOffset);
+      }
+      avatar.position.add(offsets.get(event.enemyId));
+
+      // Evaluate a pose from its own spawn time even after a backward seek or
+      // when two instances of this skeleton are drawn in the same frame.
+      sprite.skeleton.setToSetupPose();
+      track.trackTime = motionTime * (config.clipSpeed ?? 1);
+      sprite.update(0);
+      const bounds = sprite.getLocalBounds();
+      const extent = Math.max(Math.abs(bounds.x), Math.abs(bounds.right),
+        Math.abs(bounds.y), Math.abs(bounds.bottom));
+      const pixelsPerUnit = Math.min(resolution, (origin - 2) / extent);
+      sprite.scale.set(pixelsPerUnit * direction, pixelsPerUnit);
+      avatar.scale.setScalar(actorCanvas / pixelsPerUnit * config.graphicScale * (layout.actorScale ?? 1));
+      surface.renderer.render(sprite);
+      context.drawImage(surface.view, 0, 0);
+      texture.needsUpdate = true;
+    }
+    for (let i = visible; i < slots.length; i++) {
+      slots[i].avatar.visible = false;
+      if (slots[i].shadow) slots[i].shadow.visible = false;
+    }
+    return visible;
+  };
+}
+
 async function main() {
   const [run, layout] = await Promise.all(
     ['fixture.json', 'scene-layout.json'].map(path => fetch(path).then(r => r.json())),
   );
+  const {configs, events, defaultSpeedCount} = prepareRun(run);
   const loader = new GLTFLoader();
-  const [map, enemy, lighting, footShadow, ...props] = await Promise.all([
+  const [map, actors, lighting, footShadow, ...props] = await Promise.all([
     loader.loadAsync(layout.asset),
-    loadEnemy(run),
+    loadActors(configs),
     loadBattleLighting(layout),
-    new THREE.TextureLoader().loadAsync(layout.actorShadow.texture),
+    configs.size && layout.actorShadow ? new THREE.TextureLoader().loadAsync(layout.actorShadow.texture) : null,
     ...layout.props.map(prop => loader.loadAsync(prop.asset)),
   ]);
   const renderer = new THREE.WebGLRenderer({
@@ -139,51 +297,11 @@ async function main() {
   sun.shadow.needsUpdate = true;
   scene.add(sun);
 
-  const texture = new THREE.CanvasTexture(enemy.surface.view);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.generateMipmaps = false;
-  texture.minFilter = THREE.LinearFilter;
-  const size = actorCanvas / resolution * run.graphicScale * (layout.actorScale ?? 1);
-  const actorMaterial = new THREE.MeshBasicMaterial({
-    map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-  });
-  applySpineDepth(actorMaterial, layout.actorBaseline ?? 0);
-  const avatar = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size),
-    actorMaterial,
-  );
-  avatar.rotation.x = Math.PI / 6;
-  scene.add(avatar);
-  const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(...layout.actorShadow.size),
-    new THREE.MeshBasicMaterial({
-      map: footShadow, transparent: true, depthWrite: false, opacity: layout.actorShadow.opacity,
-    }),
-  );
-  shadow.renderOrder = -1;
-  scene.add(shadow);
-  const worldOrigin = new THREE.Vector3().fromArray(layout.origin);
-  const columns = new THREE.Vector3().fromArray(layout.columns);
-  const rows = new THREE.Vector3().fromArray(layout.rows);
-  const actorOffset = new THREE.Vector3().fromArray(layout.actorOffset ?? [0, 0, 0]);
-  const shadowOffset = new THREE.Vector3().fromArray(layout.actorShadow.offset);
+  const renderActors = createActorLayer(scene, layout, footShadow, actors, events);
+  let maxVisibleActors = 0;
 
   function render(time) {
-    const elapsed = time - run.spawn;
-    const position = elapsed >= 0 ? routeAt(run.path, elapsed * run.moveSpeed) : null;
-    avatar.visible = shadow.visible = Boolean(position);
-    if (position) {
-      avatar.position.copy(worldOrigin).addScaledVector(columns, position[0])
-        .addScaledVector(rows, position[1]);
-      shadow.position.copy(avatar.position).add(shadowOffset);
-      avatar.position.add(actorOffset);
-      enemy.sprite.scale.x = resolution * position[2];
-      const track = enemy.sprite.state.getCurrent(0);
-      track.trackTime = elapsed * run.clipSpeed;
-      enemy.sprite.update(0);
-      enemy.surface.renderer.render(enemy.surface.stage);
-      texture.needsUpdate = true;
-    }
+    maxVisibleActors = Math.max(maxVisibleActors, renderActors(time));
     renderer.render(scene, camera);
   }
 
@@ -191,17 +309,25 @@ async function main() {
     const count = Number(capture);
     const start = Number(query.get('start') ?? 0);
     const fps = Number(query.get('fps') ?? 30);
+    const format = query.get('format') === 'jpg' ? 'image/jpeg' : 'image/png';
     for (let i = 0; i < count; i++) {
       render(start + i / fps);
-      const blob = await new Promise(resolve => renderer.domElement.toBlob(resolve, 'image/png'));
+      const blob = await new Promise(resolve => renderer.domElement.toBlob(resolve, format, 0.97));
       await post('/frame/' + i, blob);
     }
+    const actorDetails = Array.from(actors, ([enemyId, actor]) => ({
+      enemyId, clip: actor.config.clip, version: actor.version,
+    }));
     await post('/done', JSON.stringify({
       scene: layout.asset,
-      clip: run.clip,
-      version: enemy.version,
+      clip: actorDetails[0]?.clip ?? null,
+      version: actorDetails[0]?.version ?? null,
       camera: layout.camera,
-      spawn: run.spawn,
+      spawn: events[0]?.time ?? 0,
+      events: events.length,
+      actors: actorDetails,
+      defaultSpeedCount,
+      maxVisibleActors,
       start,
       fps,
       actorDepth: 'alpha-split-z-distorted',
@@ -213,10 +339,9 @@ async function main() {
   const play = document.querySelector('#play');
   const slider = document.querySelector('#time');
   const stamp = document.querySelector('#stamp');
-  slider.max = String(run.spawn + run.path.reduce((distance, point, i, path) => {
-    if (!i) return distance;
-    return distance + Math.hypot(point[0]-path[i-1][0], point[1]-path[i-1][1]);
-  }, 0) / run.moveSpeed + 1);
+  const lastExit = events.reduce((end, event) => Math.max(end, event.end), 0);
+  slider.max = String(Math.max(lastExit, run.duration ?? 0) + 1);
+  document.querySelector('footer span').textContent = run.caption ?? layout.asset;
   function seek(time) {
     slider.value = time;
     stamp.value = time.toFixed(2) + ' 秒';

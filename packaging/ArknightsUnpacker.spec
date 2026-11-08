@@ -23,6 +23,8 @@ add_tree(root / "packaging" / "licenses", "licenses")
 datas.append((str(root / "vendor" / "Ark-Unpacker-LICENSE"), "licenses/Ark-Unpacker"))
 for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"):
     datas.append((str(root / "docs" / name), "docs"))
+for name in ("scene.html", "scene.js", "battle_lighting.js"):
+    datas.append((str(root / "scripts" / "level_preview" / name), "scripts/level_preview"))
 
 # Data-driven class imports and embedded typetrees are essential to UnityPy.
 datas += collect_data_files("UnityPy")

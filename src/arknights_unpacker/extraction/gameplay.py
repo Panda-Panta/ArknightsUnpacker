@@ -63,6 +63,7 @@ def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, canc
         ids = [row['id'] for row in levels['levels']]
         images = find_level_map_images(index, catalog.resources, ids, cancel)
         scenes = find_level_scenes(index, catalog.resources, ids, cancel)
+        levels['scene_bindings_checked'] = True
         for row in levels['levels']:
             if row['id'] in images:
                 row['map_image'] = images[row['id']]

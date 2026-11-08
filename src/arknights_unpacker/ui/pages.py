@@ -308,6 +308,7 @@ class LevelCatalogPage(PageController):
         self._metadata_job = None
         self._tags_job = None
         self._tags_dialog = None
+        self._applied_tags = {}
         self._preview_dialog = None
         self._map_job = None
         super().__init__(window)
@@ -340,6 +341,7 @@ class LevelCatalogPage(PageController):
         if catalog is self._catalog:
             return
         if self._identity(catalog) != self._identity(self._catalog):
+            self._applied_tags.clear()
             if self._metadata_job is not None:
                 self._metadata_job.token.cancel()
                 self._metadata_job = None
@@ -410,6 +412,85 @@ class LevelCatalogPage(PageController):
         dialog.show_detail(status)
         if row['available']:
             self._load_preview_info(path, dialog, status)
+            self._configure_replay(path, caption, dialog)
+
+    def _configure_replay(self, path, caption, dialog):
+        load = getattr(self.window.services, 'load_level_replay', None)
+        identity = self._identity(self._catalog)
+        if identity is None or load is None:
+            return
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from ..level_preview_server import LevelPreviewServer, missing_preview_runtime
+        from ..paths import resource_root
+
+        root, version = identity
+        runtime = self.window.services.data_root / 'level-preview-runtime'
+        player = resource_root() / 'scripts' / 'level_preview'
+        server = None
+
+        def open_player():
+            if not QDesktopServices.openUrl(QUrl(server.url)):
+                dialog.show_replay_status('无法启动默认浏览器，请确认浏览器设置后重试。')
+
+        def play():
+            if server is not None:
+                open_player()
+                return
+            if missing_preview_runtime(runtime):
+                dialog.show_replay_status(f'缺少本机播放组件。配置目录为 {runtime}')
+                return
+            try:
+                lease = self.window.preview_cache.allocate('objects')
+            except (OSError, ValueError) as error:
+                dialog.show_replay_status(str(error))
+                return
+            dialog.replay_button.setEnabled(False)
+            dialog.show_replay_status('正在准备游戏原场景、角色和波次…')
+            tags, archive = self._applied_tags.get(path, (None, None))
+
+            def done(result):
+                nonlocal server
+                if (job.token.cancelled or self._preview_dialog is not dialog or
+                        self._identity(self._catalog) != identity):
+                    return
+                if result['level_id'] != path or result['resource_version'] != version:
+                    raise ValueError('回放来源与当前关卡不匹配。')
+                server = LevelPreviewServer(lease.path, player, runtime)
+                dialog.show_replay_status(f"无部署出怪预览 · {result['spawns']} 次出怪 · {result['duration']:.1f} 秒")
+                dialog.replay_button.setText('打开浏览器回放')
+                open_player()
+
+            def settled(completed):
+                if completed is not job:
+                    return
+                self.window.queue.settled.disconnect(settled)
+                lease.finish()
+                if server is None:
+                    lease.release()
+                if self._preview_dialog is dialog:
+                    dialog.replay_button.setEnabled(True)
+                    if server is None:
+                        reason = [line for line in job.last_error.strip().splitlines()
+                                  if line and not line.startswith('诊断日志：')]
+                        dialog.show_replay_status(reason[-1] if reason else '出怪预览暂不可用。')
+
+            def close(*_):
+                nonlocal server
+                job.token.cancel()
+                if server is not None:
+                    server.close()
+                    server = None
+                lease.release()
+
+            job = self.window.queue.submit('准备关卡出怪预览', lambda **kw: load(
+                root, path, version, lease.path, caption=caption, tag_ids=tags, crisis_info_path=archive, **kw),
+                done, show_in_tasks=False)
+            self.window.queue.settled.connect(settled)
+            dialog.finished.connect(close)
+
+        dialog.replay_button.clicked.connect(play)
+        dialog.replay_button.show()
 
     def _show_preview(self, path, caption):
         from PySide6.QtCore import Qt
@@ -545,9 +626,15 @@ class LevelCatalogPage(PageController):
             from PySide6.QtCore import Qt
             from .level_tags_dialog import LevelTagsDialog
 
+            archive = options.get('crisis_info_path')
+            previous = self._applied_tags.get(path)
+            if previous is not None and previous[1] == archive:
+                selected = set(previous[0])
+                result = {**result, 'tags': [{**tag, 'selected': tag['id'] in selected} for tag in result['tags']]}
             dialog = LevelTagsDialog(result, caption, self.view)
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self._tags_dialog = dialog
+            dialog.variant_applied.connect(lambda ids: self._applied_tags.__setitem__(path, (ids, archive)))
             dialog.finished.connect(lambda *_: setattr(self, '_tags_dialog', None))
             dialog.open()
 

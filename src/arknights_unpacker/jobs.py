@@ -76,6 +76,9 @@ def worker_entry(request_file: str) -> int:
             elif operation == "level_preview_info":
                 from .extraction.gameplay import load_level_preview_info
                 value = load_level_preview_info(**args, emit=emit, cancel=cancel)
+            elif operation == "level_replay":
+                from .extraction.level_replay_assets import prepare_level_playback
+                value = prepare_level_playback(**args, emit=emit, cancel=cancel)
             elif operation == "level_tag_options":
                 from .extraction.gameplay import load_level_data
                 from .extraction.level_tags import load_level_tags

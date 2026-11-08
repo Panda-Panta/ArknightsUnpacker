@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout
 
 from .resource_preview import ResourcePreviewWidget
 
@@ -39,7 +39,16 @@ class LevelPreviewDialog(QDialog):
         self.viewer.status.hide()
         layout.addWidget(self.viewer, 1)
 
+        self.replay_status = QLabel()
+        self.replay_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.replay_status.setWordWrap(True)
+        self.replay_status.hide()
+        layout.addWidget(self.replay_status)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        self.replay_button = QPushButton('播放出怪…')
+        self.replay_button.setToolTip('读取原始场景和出怪脚本，在浏览器内播放。')
+        buttons.addButton(self.replay_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.replay_button.hide()
         buttons.button(QDialogButtonBox.StandardButton.Close).setText('关闭')
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -50,6 +59,10 @@ class LevelPreviewDialog(QDialog):
     def show_detail(self, text):
         self.detail.setText(text)
         self.detail.setVisible(bool(text))
+
+    def show_replay_status(self, text):
+        self.replay_status.setText(text)
+        self.replay_status.setVisible(bool(text))
 
     def show_message(self, text):
         self.viewer.clear()

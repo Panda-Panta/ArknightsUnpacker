@@ -12,18 +12,22 @@ _SOURCES = (
 )
 
 
+def level_scene_sources(level):
+    if not is_level_path(level):
+        return
+    relative = level.removeprefix('gamedata/levels/')
+    leaf = relative.rsplit('/', 1)[-1]
+    for folder, kind, extension in _SOURCES:
+        yield f'{folder}/{relative}/{leaf}', kind, extension
+
+
 def find_level_scenes(index, resources, level_ids, cancel):
     """Bind full level paths to Unity assets and report the main bundle's availability."""
     cancel.check()
     expected = {}
     for level in level_ids:
         cancel.check()
-        if not is_level_path(level):
-            continue
-        relative = level.removeprefix("gamedata/levels/")
-        leaf = relative.rsplit("/", 1)[-1]
-        for folder, kind, extension in _SOURCES:
-            asset = f"{folder}/{relative}/{leaf}"
+        for asset, kind, extension in level_scene_sources(level):
             expected[asset] = (level, kind, f"dyn/{asset}.{extension}")
     if not expected:
         return {}
