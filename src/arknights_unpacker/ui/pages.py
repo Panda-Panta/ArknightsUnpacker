@@ -297,6 +297,241 @@ class GameplayPage(PageController):
         self.view.restore_state(state)
 
 
+class LevelCatalogPage(PageController):
+    view_module = '.level_catalog_page'
+    view_class = 'LevelCatalogView'
+
+    def __init__(self, window):
+        self.root = None
+        self._catalog = None
+        self._metadata = None
+        self._metadata_job = None
+        self._tags_job = None
+        self._tags_dialog = None
+        self._preview_dialog = None
+        self._map_job = None
+        super().__init__(window)
+
+    def connect(self):
+        self.window.tabs.currentChanged.connect(self._load_metadata)
+        self.window.queue.settled.connect(self._metadata_settled)
+        self.window.queue.settled.connect(self._tags_settled)
+        self.view.tags_requested.connect(self._load_tags)
+        self.view.preview_requested.connect(self._open_preview)
+
+    def set_root(self, root):
+        root = Path(root).resolve()
+        if root != self.root:
+            self.root = root
+            self._set_catalog(None)
+
+    def scanned(self, snapshot, changes, catalog):
+        self.data_loaded()
+
+    def data_loaded(self):
+        services = self.window.services
+        root = value(services.installation, 'root')
+        if root:
+            self.set_root(root)
+        levels = getattr(services, 'level_catalog', None)
+        self._set_catalog(levels if levels and Path(levels['root']).resolve() == self.root else None)
+
+    def _set_catalog(self, catalog):
+        if catalog is self._catalog:
+            return
+        if self._identity(catalog) != self._identity(self._catalog):
+            if self._metadata_job is not None:
+                self._metadata_job.token.cancel()
+                self._metadata_job = None
+            if self._tags_job is not None:
+                self._tags_job.token.cancel()
+                self._tags_job = None
+            if self._tags_dialog is not None:
+                self._tags_dialog.close()
+            if self._preview_dialog is not None:
+                self._preview_dialog.close()
+            if self._map_job is not None:
+                self._map_job.token.cancel()
+            self._metadata = None
+        self._catalog = catalog
+        self._render()
+        self._load_metadata()
+
+    @staticmethod
+    def _identity(catalog):
+        return (catalog['root'], catalog['resource_version']) if catalog and catalog['levels'] else None
+
+    def _render(self):
+        catalog = self._catalog
+        if catalog is not None:
+            metadata = self._metadata or {}
+            by_level = metadata.get('levels', {})
+            chapters = metadata.get('chapters', {})
+            clips = self._clips()
+            catalog = {
+                **catalog,
+                'levels': [
+                    {**self._with_metadata(row, by_level, chapters), 'preview_ready': row['id'] in clips}
+                    for row in catalog['levels']
+                ],
+                'diagnostics': [*catalog['diagnostics'], *metadata.get('diagnostics', ())],
+            }
+        self.view.set_catalog(catalog)
+
+    def _clips(self):
+        identity = self._identity(self._catalog)
+        find = getattr(self.window.services, 'level_preview_clips', None)
+        return find(*identity) if identity is not None and find is not None else {}
+
+    def _open_preview(self, path):
+        if self._preview_dialog is not None or self._map_job is not None:
+            return
+        if self._catalog is None:
+            return
+        row = next((item for item in self._catalog['levels'] if item['id'] == path), None)
+        if row is None:
+            return
+        metadata = self._metadata['levels'].get(path, {}) if self._metadata else {}
+        caption = metadata.get('code') or metadata.get('name') or row['name']
+        clip = self._clips().get(path)
+        if clip is not None:
+            self._show_preview(clip, f'{caption} · 原资源动画试渲染')
+        elif row.get('map_image'):
+            self._load_map_image(path, caption)
+        else:
+            self._render()
+            self.window.show_status('本机试渲染动画已失效，请重新生成。')
+
+    def _show_preview(self, path, caption, lease=None):
+        from PySide6.QtCore import Qt
+        from .level_preview_dialog import LevelPreviewDialog
+
+        dialog = LevelPreviewDialog(path, caption, self.view)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.window._track_dialog(dialog)
+        self._preview_dialog = dialog
+
+        def closed(*_):
+            self._preview_dialog = None
+            if lease is not None:
+                lease.release()
+
+        dialog.finished.connect(closed)
+        dialog.open()
+
+    def _load_map_image(self, path, caption):
+        identity = self._identity(self._catalog)
+        load = getattr(self.window.services, 'load_level_map_preview', None)
+        if identity is None or load is None:
+            return
+        root, version = identity
+        try:
+            lease = self.window.preview_cache.allocate('objects')
+        except (OSError, ValueError) as error:
+            self.window.show_status(str(error))
+            return
+        shown = False
+
+        def done(result):
+            nonlocal shown
+            if (job.token.cancelled or self.window._closing or self._identity(self._catalog) != identity
+                    or result['resource_version'] != version):
+                return
+            media = Path(result['path']).resolve()
+            if media.parent != lease.path or media.suffix != '.png' or not media.is_file():
+                raise ValueError('原版地图图像未生成到预览目录。')
+            self._show_preview(media, f'{caption} · 游戏原图', lease)
+            shown = True
+
+        def settled(completed):
+            if completed is not job:
+                return
+            self.window.queue.settled.disconnect(settled)
+            self._map_job = None
+            lease.finish()
+            if not shown:
+                lease.release()
+
+        job = self.window.queue.submit('读取游戏原版地图', lambda **kw: load(root, path, version, lease.path, **kw),
+                                       done, show_in_tasks=False)
+        self._map_job = job
+        self.window.queue.settled.connect(settled)
+
+    @staticmethod
+    def _with_metadata(row, by_level, chapters):
+        folder = row['id'].rsplit('/', 1)[0]
+        while folder:
+            chapter = chapters.get(folder + '/')
+            if chapter:
+                row = {**row, **chapter}
+                break
+            folder = folder.rpartition('/')[0]
+        exact = by_level.get(row['id'], {})
+        return {**row, **{key: value for key, value in exact.items() if value}}
+
+    def _load_metadata(self, *_):
+        if self.window.tabs.currentWidget() is not self.view:
+            return
+        identity = self._identity(self._catalog)
+        load = getattr(self.window.services, 'load_level_metadata', None)
+        if identity is None or load is None or self._metadata is not None or self._metadata_job is not None:
+            return
+        root, version = identity
+
+        def done(result):
+            if self._metadata_job is job and result['resource_version'] == version:
+                self._metadata = result
+                self._render()
+
+        job = self.window.queue.submit('读取关卡名称和章节', lambda **kw: load(root, version, **kw),
+                                       done, show_in_tasks=False)
+        self._metadata_job = job
+
+    def _metadata_settled(self, job):
+        if job is not self._metadata_job:
+            return
+        self._metadata_job = None
+        if job.status != '成功' and self._catalog is not None and not self.window._closing:
+            self._metadata = {'levels': {}, 'diagnostics': ['章节与关卡名称读取失败，当前显示资源代号。']}
+            self._render()
+
+    def _load_tags(self, path, caption):
+        identity = self._identity(self._catalog)
+        load = getattr(self.window.services, 'load_level_tag_options', None)
+        if identity is None or load is None or self._tags_job is not None or self._tags_dialog is not None:
+            return
+        root, version = identity
+
+        def done(result):
+            if self._tags_job is not job or result['resource_version'] != version:
+                return
+            if not result['tags']:
+                self.window.show_status('；'.join(result['diagnostics']) or '此关卡没有作战指标。')
+                return
+            from PySide6.QtCore import Qt
+            from .level_tags_dialog import LevelTagsDialog
+
+            dialog = LevelTagsDialog(result, caption, self.view)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            self._tags_dialog = dialog
+            dialog.finished.connect(lambda *_: setattr(self, '_tags_dialog', None))
+            dialog.open()
+
+        job = self.window.queue.submit('读取关卡作战指标', lambda **kw: load(root, path, version, **kw),
+                                       done, show_in_tasks=False)
+        self._tags_job = job
+
+    def _tags_settled(self, job):
+        if job is self._tags_job:
+            self._tags_job = None
+
+    def save_state(self):
+        return self.view.save_state()
+
+    def restore_state(self, state):
+        self.view.restore_state(state)
+
+
 class JobsPage(PageController):
     view_module = '.jobs'
 
@@ -342,6 +577,7 @@ PAGE_DEFINITIONS = (
     PageDefinition('operators', '干员资料', OperatorsPage),
     PageDefinition('modules', '模组更新', ModulesPage),
     PageDefinition('gameplay', '玩法资料', GameplayPage),
+    PageDefinition('levels', '关卡预览', LevelCatalogPage),
     PageDefinition('jobs', '导出任务', JobsPage),
     PageDefinition('settings', '设置', SettingsPage),
 )

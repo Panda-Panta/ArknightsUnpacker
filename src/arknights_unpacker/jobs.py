@@ -67,6 +67,20 @@ def worker_entry(request_file: str) -> int:
                 from .extraction.gameplay import load_autochess, load_gameplay_level
                 load = load_autochess if operation == "gameplay" else load_gameplay_level
                 value = load(**args, emit=emit, cancel=cancel)
+            elif operation == "level_metadata":
+                from .extraction.level_metadata import load_level_metadata
+                value = load_level_metadata(**args, emit=emit, cancel=cancel)
+            elif operation == "level_map_image":
+                from .extraction.level_map_image import load_level_map_image
+                value = load_level_map_image(**args, emit=emit, cancel=cancel)
+            elif operation == "level_tag_options":
+                from .extraction.gameplay import load_level_data
+                from .extraction.level_tags import load_level_tags
+                value = load_level_tags(**args, emit=emit, cancel=cancel)
+                if value["tags"]:
+                    level_source, level = load_level_data(**args, emit=emit, cancel=cancel)
+                    value["level"] = level
+                    value["diagnostics"].extend(level_source.diagnostics)
             else:
                 raise ValueError(f"未知工作进程操作: {operation}")
         cancel.check()

@@ -44,6 +44,7 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
     monkeypatch.setattr(services.runner, 'run', lambda *a, **kw: pytest.fail('scan decoded gameplay'))
     services.scan(game)
     catalog = services.gameplay_catalog
+    levels = services.level_catalog
     assert catalog['resource_version'] == 'resource-1'
     assert [mode['id'] for mode in catalog['modes']] == ['autochess', 'roguelike']
     autochess, roguelike = catalog['modes']
@@ -60,6 +61,7 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
                             lambda *a: pytest.fail('restore read the game index'))
         restored.restore(game)
         assert restored.gameplay_catalog == catalog
+        assert restored.level_catalog == levels
     finally:
         restored.shutdown()
 
@@ -71,6 +73,46 @@ def test_index_error_does_not_fail_resource_scan(gameplay_installation, tmp_path
         assert result['snapshot'].complete
         assert services.gameplay_catalog['modes'] == []
         assert services.gameplay_catalog['diagnostics']
+    finally:
+        services.shutdown()
+
+
+def test_level_catalog_keeps_last_readable_baseline(gameplay_installation, tmp_path, monkeypatch):
+    from arknights_unpacker.extraction import gameplay
+
+    game = gameplay_installation
+    new_level = 'gamedata/levels/obt/main/level_main_01-02'
+    index = {'assets': [{'assetName': LEVEL, 'bundle': 'levels.ab'}]}
+    broken = False
+
+    def read_index(path):
+        if broken:
+            raise ValueError('invalid index')
+        return index
+
+    def change_version(version):
+        path = game / 'hot_update_list.json'
+        manifest = json.loads(path.read_text(encoding='utf-8'))
+        manifest['versionId'] = version
+        path.write_text(json.dumps(manifest), encoding='utf-8')
+
+    monkeypatch.setattr(gameplay, 'read_resource_manifest', read_index)
+    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
+    try:
+        services.scan(game)
+        assert [(row['id'], row['is_new']) for row in services.level_catalog['levels']] == [(LEVEL, False)]
+
+        broken = True
+        change_version('resource-2')
+        services.scan(game)
+        assert not services.level_catalog['levels']
+
+        broken = False
+        change_version('resource-3')
+        index['assets'].append({'assetName': new_level, 'bundle': 'levels.ab'})
+        for _ in range(2):
+            services.scan(game)
+            assert [row['id'] for row in services.level_catalog['levels'] if row['is_new']] == [new_level]
     finally:
         services.shutdown()
 
@@ -100,5 +142,26 @@ def test_gameplay_job_checks_catalog_and_only_loads_requested_assets(gameplay_in
         assert [(kind, args['logical_path']) for kind, args in calls] == [
             ('gameplay', ACTIVITY), ('gameplay_level', LEVEL),
         ]
+    finally:
+        services.shutdown()
+
+
+def test_level_animation_cache_follows_the_scanned_resource_version(gameplay_installation, tmp_path):
+    from arknights_unpacker.level_preview_cache import preview_directory, preview_filename
+
+    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
+    game = gameplay_installation.resolve()
+    services.level_catalog = {'root': str(game), 'resource_version': 'resource-1',
+                              'levels': [{'id': LEVEL, 'available': True}]}
+    directory = preview_directory(services.data_root, game, 'resource-1')
+    directory.mkdir(parents=True)
+    clip = directory / preview_filename(LEVEL)
+    clip.touch()
+    try:
+        assert services.level_preview_clips(game, 'resource-1') == {LEVEL: clip}
+        with pytest.raises(ValueError, match='重新扫描'):
+            services.level_preview_clips(tmp_path / 'another-game', 'resource-1')
+        services.level_catalog['resource_version'] = 'resource-2'
+        assert services.level_preview_clips(game, 'resource-2') == {}
     finally:
         services.shutdown()

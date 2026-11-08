@@ -83,6 +83,7 @@ class AppServices:
         self.file_changes = None
         self.catalog = None
         self.gameplay_catalog = None
+        self.level_catalog = None
         self.gamedata = None
         self.entity_changes = None
         self.baseline = None
@@ -100,6 +101,7 @@ class AppServices:
             self.file_changes = None
             self.catalog = None
             self.gameplay_catalog = None
+            self.level_catalog = None
             self.gamedata = None
             self.entity_changes = None
             self.baseline = None
@@ -151,13 +153,14 @@ class AppServices:
         self._select_installation(installation)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, changes, catalog
         self.gameplay_catalog = snapshot.manifest_versions.get('gameplay') if snapshot is not None else None
+        self.level_catalog = snapshot.manifest_versions.get('level_catalog') if snapshot is not None else None
         self.gamedata, self.entity_changes, self.baseline = data, entity_changes, baseline
         emit({"type": "progress", "message": "已恢复保存结果；重新扫描时将与完整基线比较。"})
         return {"snapshot": snapshot, "changes": changes, "catalog": catalog,
                 "gamedata": data, "entity_changes": entity_changes}
 
     def scan(self, root, hours=24.0, strict=False, emit=null_progress, cancel=None):
-        from .extraction.gameplay import discover_gameplay
+        from .extraction.gameplay import discover_game_content
         from .library import scan_installation, compare_files, resolve_resources
         cancel = cancel or CancelToken()
         installation = self._installation(root)
@@ -166,12 +169,18 @@ class AppServices:
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
         catalog.installation = installation
-        gameplay = discover_gameplay(snapshot, catalog, cancel)
-        if gameplay is not None:
-            snapshot.manifest_versions['gameplay'] = gameplay
+        previous_versions = previous.manifest_versions if previous is not None else {}
+        previous_levels = previous_versions.get('level_catalog_baseline', previous_versions.get('level_catalog'))
+        gameplay, levels = discover_game_content(snapshot, catalog, cancel, previous_levels=previous_levels)
+        cancel.check()
+        snapshot.manifest_versions['gameplay'] = gameplay
+        snapshot.manifest_versions['level_catalog'] = levels
+        if not levels['levels'] and previous_levels and previous_levels['levels']:
+            snapshot.manifest_versions['level_catalog_baseline'] = previous_levels
         self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
         self.gameplay_catalog = gameplay
+        self.level_catalog = levels
         self.config["hours"] = float(hours)
         self.save_config()
         return {"snapshot": snapshot, "changes": change_set, "catalog": catalog}
@@ -200,6 +209,44 @@ class AppServices:
             raise ValueError('关卡不在当前扫描的卫戍协议资源中，请重新扫描。')
         return self.runner.run('gameplay_level', {'root': str(root), 'logical_path': logical_path,
                                                   'resource_version': resource_version}, emit, cancel)
+
+    def _level_catalog_for_version(self, root, resource_version):
+        catalog = self.level_catalog
+        if (catalog is None or catalog['resource_version'] != resource_version
+                or Path(catalog['root']) != Path(root).resolve()):
+            raise ValueError('关卡清单与游戏目录或资源版本不一致，请重新扫描。')
+        return catalog
+
+    def load_level_metadata(self, root, resource_version, emit=null_progress, cancel=None):
+        self._level_catalog_for_version(root, resource_version)
+        return self.runner.run('level_metadata', {'root': str(root), 'resource_version': resource_version},
+                               emit, cancel)
+
+    def level_preview_clips(self, root, resource_version):
+        from .level_preview_cache import cached_previews
+
+        catalog = self._level_catalog_for_version(root, resource_version)
+        return cached_previews(self.data_root, catalog)
+
+    def load_level_map_preview(self, root, logical_path, resource_version, output_dir,
+                               emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        row = next((item for item in catalog['levels'] if item['id'] == logical_path), None)
+        if row is None or not row.get('map_image'):
+            raise ValueError('当前资源索引里没有这张原版地图图像。')
+        directory = Path(output_dir).resolve()
+        if directory.parent != self.data_root / 'preview' or not directory.is_dir():
+            raise ValueError('地图预览输出目录不属于当前会话缓存。')
+        return self.runner.run('level_map_image', {'root': str(root), 'logical_asset': row['map_image'],
+                                                  'resource_version': resource_version,
+                                                  'output_dir': str(directory)}, emit, cancel)
+
+    def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        if not any(row['id'] == logical_path and row['available'] for row in catalog['levels']):
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        return self.runner.run('level_tag_options', {'root': str(root), 'logical_path': logical_path,
+                                                    'resource_version': resource_version}, emit, cancel)
 
     def load_data(self, root, emit=null_progress, cancel=None):
         from .gamedata import load_gamedata, compare_entities

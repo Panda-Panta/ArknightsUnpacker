@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import struct
 
-from ..contracts import CancelledError, ResourceCatalog, ScanSnapshot, null_progress
+from ..contracts import ResourceCatalog, ScanSnapshot, null_progress
 from ..library.discover import safe_path
 from .decoder import decode_table_bytes
 from .manifest import read_resource_manifest
@@ -21,8 +21,11 @@ _AUTOCHESS_LEVEL = re.compile(r'gamedata/levels/activities/act[0-9]+v?autochess/
 _AUTOCHESS_GUIDE = re.compile(r'gamedata/story/activities/(?:act[0-9]+v?autochess|autochess)/')
 
 
-def discover_gameplay(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel) -> dict | None:
-    """Use the scan's active manifest and installed-resource decisions."""
+def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel, *, previous_levels=None):
+    """Read the active index once for the gameplay and level directories."""
+    from .level_catalog import build_level_catalog
+    from .level_map_image import find_level_map_images
+
     active = catalog.manifest
     result = {'root': snapshot.root, 'resource_version': str(active.get('versionId', 'unknown')),
               'modes': [], 'diagnostics': []}
@@ -53,12 +56,19 @@ def discover_gameplay(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel) 
         info = path.stat()
         if (info.st_size, info.st_mtime_ns) != observed:
             raise OSError('资源索引在识别玩法期间发生变化，请重新扫描。')
-        return _identify(result, index, catalog, cancel)
-    except CancelledError:
-        return None
+        gameplay = _identify(result, index, catalog, cancel)
+        levels = build_level_catalog(snapshot.root, result['resource_version'], index, catalog,
+                                     previous_levels, cancel)
+        images = find_level_map_images(index, catalog.resources, (row['id'] for row in levels['levels']), cancel)
+        for row in levels['levels']:
+            if row['id'] in images:
+                row['map_image'] = images[row['id']]
+        return gameplay, levels
     except (OSError, ValueError, TypeError, KeyError, IndexError, struct.error) as error:
         result['diagnostics'].append(f'玩法识别暂不可用：{error}')
-        return result
+        levels = {'root': snapshot.root, 'resource_version': result['resource_version'],
+                  'levels': [], 'diagnostics': [f'关卡索引暂不可用：{error}']}
+        return result, levels
 
 
 def _identify(result, index, catalog, cancel):
@@ -131,12 +141,8 @@ def load_autochess(root, logical_path, resource_version, *, emit=null_progress, 
 def load_gameplay_level(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
     if not _AUTOCHESS_LEVEL.fullmatch(logical_path):
         raise ValueError('关卡路径不属于卫戍协议。')
+    result, data = load_level_data(root, logical_path, resource_version, emit=emit, cancel=cancel)
     name = logical_path.rsplit('/', 1)[-1]
-
-    def decode(raw, _name):
-        return decode_table_bytes(raw, 'prts___levels')
-
-    result, data = _load_source(root, logical_path, name, decode, resource_version, emit, cancel)
     grid = (data.get('mapData') or {}).get('map') or {}
     enemy_refs = data.get('enemyDbRefs') or []
     return {'level_id': data.get('levelId') or name,
@@ -145,3 +151,16 @@ def load_gameplay_level(root, logical_path, resource_version, *, emit=null_progr
             'wave_count': len(data.get('waves') or []),
             'enemy_ids': list(dict.fromkeys(row['id'] for row in enemy_refs if row.get('id'))),
             'diagnostics': result.diagnostics}
+
+
+def load_level_data(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
+    from .level_catalog import is_level_path
+
+    if not is_level_path(logical_path):
+        raise ValueError('无效的关卡数据路径。')
+    name = logical_path.rsplit('/', 1)[-1]
+
+    def decode(raw, _name):
+        return decode_table_bytes(raw, 'prts___levels')
+
+    return _load_source(root, logical_path, name, decode, resource_version, emit, cancel)

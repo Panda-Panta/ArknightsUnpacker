@@ -11,10 +11,16 @@ ArknightsUnpacker/
 │  ├─ application.py              AppServices 用例集成，负责所选安装与输出保护
 │  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
+│  ├─ level_preview_cache.py      按安装、资源版本和关卡绑定本地动画
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
-│  │  ├─ gameplay.py            生效资源索引中的玩法识别和按需详情读取
+│  │  ├─ gameplay.py            生效资源索引读取、玩法识别和按需详情
+│  │  ├─ level_catalog.py       关卡发现、分类和新增判定
+│  │  ├─ level_metadata.py      真实关卡编号、标题、章节和活动名
+│  │  ├─ level_map_image.py     游戏原版地图原图的绑定和提取
+│  │  ├─ level_tags.py          全息作战矩阵指标读取与默认选择
+│  │  ├─ level_variants.py      指标对关卡脚本和禁部署格的变更
 │  │  └─ autochess.py           PC 卫戍协议的赛季结构及策略、盟约、调度解码
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器
@@ -26,7 +32,10 @@ ArknightsUnpacker/
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
-│     ├─ gameplay_page.py        玩法子页、赛季选择及按需关卡预览
+│     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
+│     ├─ level_catalog_page.py   分类关卡目录和新增筛选
+│     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
+│     ├─ level_tags_dialog.py    作战指标选择与脚本效果
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
 │     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
