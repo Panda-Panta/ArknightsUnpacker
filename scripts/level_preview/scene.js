@@ -37,6 +37,7 @@ function prepareRun(run) {
       throw new Error(`Spawn ${index + 1}: missing original actor resources for ${enemyId}`);
     }
     const config = source[enemyId];
+    const lifetime = config.stationaryLifetime;
     if (!configs.has(enemyId)) {
       const attack = config.periodicAttack;
       if (typeof config.skeleton !== 'string' || !config.skeleton ||
@@ -56,6 +57,12 @@ function prepareRun(run) {
           !Number.isFinite(phase.start) || phase.start >= attack.duration ||
           (i > 0 && phase.start <= phases[i - 1].start)))) {
         throw new Error(`${enemyId}: invalid original channeling phases`);
+      }
+      if (lifetime && (!Number.isFinite(lifetime.appearAfter) || lifetime.appearAfter < 0 ||
+          !Number.isFinite(lifetime.retireAfter) || lifetime.retireAfter <= lifetime.appearAfter ||
+          typeof lifetime.visibleClip !== 'string' || !lifetime.visibleClip ||
+          !positive(lifetime.visibleClipSpeed) || typeof lifetime.visibleClipLoop !== 'boolean')) {
+        throw new Error(`${enemyId}: invalid original stationary lifetime`);
       }
       configs.set(enemyId, config);
     }
@@ -79,8 +86,12 @@ function prepareRun(run) {
     if (speed === undefined || speed === null) defaultSpeedCount++;
     const moveSpeed = speed ?? 1;
     const waitTime = [...Object.values(waits), ...Object.values(hiddenWaits)].reduce((sum, seconds) => sum + seconds, 0);
-    const routeTime = length / moveSpeed + waitTime;
-    if (!positive(moveSpeed) || !positive(routeTime)) {
+    if (lifetime && (moveSpeed !== 0 || path.length !== 1 || patrolStart !== null ||
+        waitTime < lifetime.retireAfter || !positive(event.exitTime - time))) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): invalid stationary route or exit time`);
+    }
+    const routeTime = lifetime ? waitTime : length / moveSpeed + waitTime;
+    if ((!lifetime && !positive(moveSpeed)) || !positive(routeTime)) {
       throw new Error(`Spawn ${index + 1} (${enemyId}): invalid speed or empty route`);
     }
     let patrol = null;
@@ -99,7 +110,7 @@ function prepareRun(run) {
     }
     const end = patrol ? Infinity : event.exitTime ?? time + routeTime;
     return {enemyId, time, path, waits, hiddenWaits, jumps, moveSpeed, end, patrol,
-      attack: config.periodicAttack};
+      lifetime, attack: lifetime ? null : config.periodicAttack};
   });
   events.sort((a, b) => a.time - b.time);
   return {configs, events, defaultSpeedCount};
@@ -129,7 +140,8 @@ async function loadActors(configs) {
     const data = resources[actorNames.get(id)]?.spineData;
     if (!data) throw new Error(`${id}: Spine data or atlas missing (${config.skeleton})`);
     const phases = config.periodicAttack?.phases ?? [];
-    for (const clip of [config.clip, config.idleClip, config.periodicAttack?.clip, ...phases.map(phase => phase.clip)]) {
+    for (const clip of [config.clip, config.idleClip, config.stationaryLifetime?.visibleClip,
+      config.periodicAttack?.clip, ...phases.map(phase => phase.clip)]) {
       if (clip && !data.findAnimation(clip)) throw new Error(`${id}: Spine animation ${clip} missing`);
     }
     const sprite = new PIXI.spine.Spine(data);
@@ -181,15 +193,20 @@ function actorClocks(battleAge, attack) {
   };
 }
 
-function updateActorPose(actor, motionTime, idleTime, attackTime) {
+function updateActorPose(actor, motionTime, idleTime, attackTime, stationaryAge) {
   const {sprite, config} = actor;
-  const idle = idleTime !== undefined && config.idleClip;
+  const lifetime = stationaryAge === undefined ? null : config.stationaryLifetime;
+  const visible = lifetime && stationaryAge >= lifetime.appearAfter;
+  const idle = !lifetime && idleTime !== undefined && config.idleClip;
   const attack = attackTime === undefined ? null : config.periodicAttack;
   const phase = attack?.phases?.findLast(item => item.start <= attackTime) ?? attack;
-  const clip = phase?.clip ?? (idle || config.clip);
-  const loop = phase ? (phase.loop ?? false) : (idle ? config.idleClipLoop : config.clipLoop) ?? true;
-  const seconds = phase ? attackTime - (phase.start ?? 0) : (idle ? idleTime : motionTime);
-  const speed = (phase?.clipSpeed ?? (idle ? config.idleClipSpeed : config.clipSpeed)) ?? 1;
+  const clip = visible ? lifetime.visibleClip : phase?.clip ?? (idle || config.clip);
+  const loop = visible ? lifetime.visibleClipLoop :
+    phase ? (phase.loop ?? false) : (idle ? config.idleClipLoop : config.clipLoop) ?? true;
+  const seconds = lifetime ? stationaryAge - (visible ? lifetime.appearAfter : 0) :
+    phase ? attackTime - (phase.start ?? 0) : (idle ? idleTime : motionTime);
+  const speed = visible ? lifetime.visibleClipSpeed :
+    (phase?.clipSpeed ?? (idle ? config.idleClipSpeed : config.clipSpeed)) ?? 1;
   // One sprite is reused across instances and may be evaluated after seeking backwards.
   if (actor.track.animation.name !== clip || actor.track.loop !== loop) {
     sprite.state.clearTrack(0);
@@ -221,7 +238,7 @@ async function loadActorShadows(layout, configs) {
   const loader = new THREE.TextureLoader();
   const textures = new Map();
   const shadows = await Promise.all([...configs].map(async ([id, config]) => {
-    const shadow = config.shadow ?? (config.actorPlane ? null : layout.actorShadow);
+    const shadow = config.shadow ?? (config.actorPlane && !Object.hasOwn(config, 'enemyLevel') ? null : layout.actorShadow);
     if (!shadow) return null;
     if (!textures.has(shadow.texture)) textures.set(shadow.texture, loader.loadAsync(shadow.texture));
     const map = await textures.get(shadow.texture);
@@ -317,10 +334,10 @@ function createActorLayer(renderer, scene, layout, shadows, actors, events, stat
     return slot;
   }
 
-  function paintPose(slot, actor, direction, motionTime, idleTime, attackTime) {
+  function paintPose(slot, actor, direction, motionTime, idleTime, attackTime, stationaryAge) {
     const {sprite} = actor;
     const {target, external, texture} = slot;
-    updateActorPose(actor, motionTime, idleTime, attackTime);
+    updateActorPose(actor, motionTime, idleTime, attackTime, stationaryAge);
     const bounds = sprite.getLocalBounds();
     const extent = Math.max(Math.abs(bounds.x), Math.abs(bounds.right),
       Math.abs(bounds.y), Math.abs(bounds.bottom));
@@ -356,11 +373,13 @@ function createActorLayer(renderer, scene, layout, shadows, actors, events, stat
     for (const event of events) {
       if (event.time > time) break;
       if (event.end <= time) continue;
-      const {routeAge, attackTime} = actorClocks(time - event.time, event.attack);
+      const age = time - event.time;
+      const {routeAge, attackTime} = actorClocks(age, event.attack);
       const position = routeAt(event, routeAge);
       if (!position) continue;
       const [col, row, direction, motionTime, idleTime] = position;
-      yield {actorId: event.enemyId, position: [col, row], direction, motionTime, idleTime, attackTime};
+      yield {actorId: event.enemyId, position: [col, row], direction, motionTime, idleTime, attackTime,
+        stationaryAge: event.lifetime ? age : undefined};
     }
   }
 
@@ -369,7 +388,7 @@ function createActorLayer(renderer, scene, layout, shadows, actors, events, stat
     frameRasters.clear();
     surface.reset();
     let visible = 0;
-    for (const {actorId, position, direction, motionTime, idleTime, attackTime, predefined} of visiblePoses(time)) {
+    for (const {actorId, position, direction, motionTime, idleTime, attackTime, stationaryAge, predefined} of visiblePoses(time)) {
       const slot = slots[visible++] ?? addSlot();
       const actor = actors.get(actorId);
       const {config} = actor;
@@ -390,12 +409,13 @@ function createActorLayer(renderer, scene, layout, shadows, actors, events, stat
 
       // Synchronized instances can share an exact pose without changing their
       // independent world positions or shadows.
-      const pose = attackTime !== undefined ? `attack:${attackTime}`
+      const pose = stationaryAge !== undefined ? `stationary:${stationaryAge}`
+        : attackTime !== undefined ? `attack:${attackTime}`
         : idleTime !== undefined && config.idleClip ? `idle:${idleTime}` : `move:${motionTime}`;
       const key = `${actorId}:${direction}:${pose}`;
       let raster = frameRasters.get(key);
       if (!raster) {
-        raster = paintPose(slot, actor, direction, motionTime, idleTime, attackTime);
+        raster = paintPose(slot, actor, direction, motionTime, idleTime, attackTime, stationaryAge);
         frameRasters.set(key, raster);
       }
       avatar.material.map = raster.texture;
@@ -403,7 +423,7 @@ function createActorLayer(renderer, scene, layout, shadows, actors, events, stat
       const plane = planes.get(actorId);
       avatar.matrixAutoUpdate = !plane;
       if (plane) {
-        planeScale.setScalar(actorCanvas / pixelsPerUnit);
+        planeScale.setScalar(actorCanvas / pixelsPerUnit * (predefined ? 1 : layout.actorScale ?? 1));
         avatar.matrix.copy(plane).scale(planeScale).setPosition(avatar.position);
         avatar.matrixWorldNeedsUpdate = true;
       } else {

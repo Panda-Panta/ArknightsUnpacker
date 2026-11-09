@@ -42,7 +42,7 @@ def _fragment_queue(fragment, groups, check):
 
 
 def build_level_timeline(level, finish_time, *, cancel=None, spawn_clock=False, inactive_branches=(),
-                         battle_deadline=None):
+                         battle_deadline=None, not_count_in_total=()):
     """Return spawn events in battle seconds under the preview's movement assumptions.
 
     ``finish_time(enemy_id, route_index, use_extra_route)`` gives seconds from
@@ -51,6 +51,8 @@ def build_level_timeline(level, finish_time, *, cancel=None, spawn_clock=False, 
     With ``spawn_clock``, the callback also receives the spawn, fragment start,
     and wave start times in that order. The starts precede their authored delays.
     ``inactive_branches`` identifies branches proved unreachable in this preview.
+    ``not_count_in_total`` contains enemies excluded from the scheduler's clear
+    sets by the enemy database. Their visual spawn and exit are still recorded.
     Story and tutorial dialogs are treated as skipped. Simulation ticks, player
     actions and mode-specific scheduler plugins are outside this timeline.
     """
@@ -144,11 +146,12 @@ def build_level_timeline(level, finish_time, *, cancel=None, spawn_clock=False, 
                 events.append({'enemyId': enemy, 'time': now, 'exitTime': exit_at,
                                'routeIndex': route, 'useExtraRoute': extra,
                                'waveIndex': wave_index, 'fragmentIndex': fragment_index})
-                if action.get('isUnharmfulAndAlwaysCountAsKilled'):
+                if (action.get('isUnharmfulAndAlwaysCountAsKilled') or action.get('notCountInTotal')
+                        or enemy in not_count_in_total):
                     continue
                 if exit_at is not None:
                     last_exit = max(last_exit, exit_at)
-                if action.get('managedByScheduler', True) and not action.get('notCountInTotal'):
+                if action.get('managedByScheduler', True):
                     unknown_final_exit |= exit_at is None and not persistent
                     persistent_final |= persistent
                     if not action.get('dontBlockWave'):

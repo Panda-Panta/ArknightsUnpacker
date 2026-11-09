@@ -56,6 +56,8 @@ def prepare_replay(game_root, level_id, resource_version, output, *, caption=Non
     overridden_casts = 0
     for enemy_id, actor in actors.items():
         overrides = enemy_refs.get(enemy_id, {}).get('overwrittenData') or {}
+        if overrides:
+            actor.pop('stationaryLifetime', None)
         if 'periodicAttack' in actor and any(overrides.get(field) is not None for field in ('skills', 'talentBlackboard')):
             actor.pop('periodicAttack')
             overridden_casts += 1
@@ -74,6 +76,10 @@ def prepare_replay(game_root, level_id, resource_version, output, *, caption=Non
         replay['diagnostics'].append('定时技能按原始触发计时播放动作，技能的伤害和召唤效果未模拟。')
     if overridden_casts:
         replay['diagnostics'].append(f'{overridden_casts} 种敌人的关卡技能覆写尚未纳入定时动作。')
+    if any(actor.get('stationaryLifetime') for actor in actors.values()):
+        replay['diagnostics'].append('定时显形和退场按原版技能计时播放。')
+        if any(rune.get('key') == 'env_system_new' for rune in level.get('runes') or ()):
+            replay['diagnostics'].append('关卡环境系统的动态召唤、阶段转换和对路线的改动未纳入当前回放。')
     if selection is not None:
         replay['selectedTags'] = selection['selected_ids']
         if selection['not_simulated']:

@@ -10,6 +10,8 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
 
 root = Path(SPECPATH).parent
+preview_only = os.environ.get("ARKNIGHTS_LEVEL_PREVIEW_ONLY") == "1"
+bundle_name = "ArknightsLevelPreview" if preview_only else "ArknightsUnpacker"
 datas = []
 binaries = []
 
@@ -23,12 +25,16 @@ add_tree(root / "vendor" / "ark_fbs", "vendor/ark_fbs", "*.py")
 add_tree(root / "vendor" / "lz4ak", "vendor/lz4ak", "*.py")
 add_tree(root / "packaging" / "licenses", "licenses")
 datas.append((str(root / "vendor" / "Ark-Unpacker-LICENSE"), "licenses/Ark-Unpacker"))
-for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"):
+guide = "LEVEL_PREVIEW_GUIDE.md" if preview_only else "USER_GUIDE.md"
+for name in (guide, "THIRD_PARTY_NOTICES.md"):
     datas.append((str(root / "docs" / name), "docs"))
-for name in ("scene.html", "scene.js", "battle_lighting.js"):
-    datas.append((str(root / "scripts" / "level_preview" / name), "scripts/level_preview"))
+if not preview_only:
+    for name in ("scene.html", "scene.js", "battle_lighting.js"):
+        datas.append((str(root / "scripts" / "level_preview" / name), "scripts/level_preview"))
 
 godot_runtime = os.environ.get("ARKNIGHTS_GODOT_RUNTIME")
+if preview_only and not godot_runtime:
+    raise SystemExit("The level preview bundle requires ARKNIGHTS_GODOT_RUNTIME")
 if godot_runtime:
     godot = Path(godot_runtime).resolve(strict=True)
     godot_source = root / "packaging" / "godot"
@@ -80,21 +86,28 @@ fmod_root = Path(next(iter(find_spec("fmod_toolkit").submodule_search_locations)
 os.environ.setdefault("PYFMODEX_DLL_PATH", str(fmod_root / "libfmod/Windows/x64/fmod.dll"))
 hiddenimports = collect_submodules("UnityPy") + collect_submodules("pyfmodex")
 # Page factories import optional views by name so the shell can omit them.
-hiddenimports += collect_submodules("arknights_unpacker.ui")
+hiddenimports += (["arknights_unpacker.ui.level_catalog_page"] if preview_only
+                  else collect_submodules("arknights_unpacker.ui"))
 hiddenimports += collect_submodules("fontTools.ttLib.tables")
 hiddenimports += ["PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.BmpImagePlugin", "PIL.TgaImagePlugin", "Crypto.Cipher.AES", "bson", "flatbuffers", "numpy", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets"]
 preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
-entrypoint = root / "packaging" / ("preflight.py" if preflight else "entrypoint.py")
+if preflight and preview_only:
+    raise SystemExit("The level preview and decoder preflight build profiles are separate")
+entrypoint = root / "packaging" / ("level_preview_entrypoint.py" if preview_only
+                                 else "preflight.py" if preflight else "entrypoint.py")
+excluded = ["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"]
+if preview_only:
+    excluded += ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebChannel"]
 a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, datas=datas,
              hiddenimports=hiddenimports,
-             excludes=["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"],
+             excludes=excluded,
              hookspath=[], hooksconfig={}, runtime_hooks=[], noarchive=False, optimize=0)
 if godot_runtime:
     # It is launched as a separate process. Preserve the vendor executable byte for byte.
     a.datas.append(("scripts/level_preview/native_player/Godot.exe", str(godot), "DATA"))
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ArknightsUnpacker",
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=bundle_name,
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
           console=False, disable_windowed_traceback=False, contents_directory="_internal",
           icon=str(root / "resources/ui/app-icon.ico"))
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="ArknightsUnpacker")
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=bundle_name)

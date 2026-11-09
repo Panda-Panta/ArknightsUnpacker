@@ -19,6 +19,7 @@ from arknights_unpacker.library.resolver import load_catalog
 from arknights_unpacker.paths import atomic_json, validate_output
 
 from .level_actor_attacks import periodic_attack, read_single_skill, spine_animation_durations
+from .level_actor_lifetimes import read_stationary_lifetime_data, stationary_lifetime
 from .level_scene_assets import REFLECT_Z, _pose
 
 
@@ -43,6 +44,7 @@ def _enemy_database(root, levels, version):
             if wanted not in rows:
                 raise ValueError(f"{key}: 敌人数据库没有等级 {wanted}")
             info = {}
+            sp_data = skills_data = None
             # Undefined fields in a level override retain the base level's value.
             for level in dict.fromkeys((0, wanted)):
                 row = rows.get(level)
@@ -51,12 +53,22 @@ def _enemy_database(root, levels, version):
                 attrs = row.Attributes()
                 if not row.SkillsIsNone():
                     info["singleSkill"] = read_single_skill(row)
+                    skills_data = row
+                if (data := row.SpData()) is not None:
+                    sp_data = data
+                not_counted = row.NotCountInTotal()
+                if not_counted is not None and not_counted.MDefined():
+                    info["notCountInTotal"] = not_counted.MValue()
                 values = {"name": row.Name(), "prefabKey": row.PrefabKey(),
                           "moveSpeed": attrs.MoveSpeed() if attrs is not None else None}
                 for field, value in values.items():
                     if value is not None and value.MDefined():
                         original = value.MValue()
                         info[field] = original.decode() if isinstance(original, bytes) else _float(original)
+            if info.get("moveSpeed") == 0 and info.get("notCountInTotal"):
+                timing = read_stationary_lifetime_data(sp_data, skills_data)
+                if timing is not None:
+                    info["stationaryLifetimeData"] = timing
             selected[key] = info
         return selected, {"format": "flatbuffers"}
 
@@ -84,10 +96,32 @@ def _transform(components):
     return next(component for component in components if component.type.name == "Transform")
 
 
+def _passive_effect_keys(root_transform):
+    pending = [root_transform]
+    keys = set()
+    while pending:
+        node = pending.pop().read()
+        owner = node.m_GameObject.read()
+        if not owner.m_IsActive:
+            continue
+        for component in _components(owner):
+            if component.type.name != "MonoBehaviour":
+                continue
+            tree = component.read_typetree()
+            if not tree.get("m_Enabled") or not tree.get("_buffs"):
+                continue
+            script = _pointer(component, tree["m_Script"]).read()
+            if script.m_ClassName == "PassiveBuffAbility":
+                keys.update(key for buff in tree["_buffs"] if (key := buff.get("overrideEffectKey")))
+        pending.extend(child.deref() for child in node.m_Children)
+    return sorted(keys)
+
+
 def _animator(prefab):
     # The root Enemy component links the animator that drives the actual actor.
     root = prefab.read()
     components = _components(root)
+    empty_animator = False
     for component in components:
         if component.type.name != "MonoBehaviour":
             continue
@@ -102,6 +136,15 @@ def _animator(prefab):
             shadow = ((component, shadow_ref) if shadow_ref.get("m_PathID")
                       and not behaviour.get("_hideShadowOnReset") else None)
             return _transform(components), animator, tree, shadow, component, behaviour
+        script_ref = tree.get("m_Script", {})
+        if script_ref.get("m_PathID"):
+            script = _pointer(animator, script_ref).read()
+            empty_animator |= script.m_Namespace == "Torappu.Battle" and script.m_ClassName == "EmptyAnimator"
+    if empty_animator:
+        reason = f"{root.m_Name}: 原版敌人使用 EmptyAnimator，当前回放尚未适配其非 Spine 外观"
+        if effects := _passive_effect_keys(_transform(components)):
+            reason += f"（原版被动特效 {'、'.join(effects)}）"
+        raise ValueError(reason)
     raise ValueError(f"{root.m_Name}: prefab 没有指向 Spine 动画器的敌人组件")
 
 
@@ -136,24 +179,35 @@ def _resolve_animation(mapped, hook, key):
 def _graphic_transform(skeleton, tree, prefab_transform):
     owner = _pointer(skeleton, tree["m_GameObject"]).read()
     node = _transform(_components(owner)).read()
-    offset = np.zeros(3)
+    pose = np.eye(4)
     scale = 1.0
+    uniform = True
     while (node.object_reader.assets_file, node.object_reader.path_id) != (
             prefab_transform.assets_file, prefab_transform.path_id):
         x, y, z = node.m_LocalScale.x, node.m_LocalScale.y, node.m_LocalScale.z
-        if x <= 0 or not (math.isclose(x, y, abs_tol=1e-6) and math.isclose(x, z, abs_tol=1e-6)):
-            raise ValueError("Spine prefab 使用了当前预览器不支持的非均匀或负缩放")
-        v = np.array([node.m_LocalRotation.x, node.m_LocalRotation.y, node.m_LocalRotation.z])
-        w = node.m_LocalRotation.w
-        point = offset * x
-        # Unity quaternion rotates the child's current offset before translation.
-        offset = point + 2 * np.cross(v, np.cross(v, point) + w * point)
-        offset += np.array([node.m_LocalPosition.x, node.m_LocalPosition.y, node.m_LocalPosition.z])
+        uniform = uniform and min(x, y, z) > 0 and (
+            math.isclose(x, y, abs_tol=1e-6) and math.isclose(x, z, abs_tol=1e-6))
         scale *= x
+        pose = _pose(node) @ pose
         if not node.m_Father:
             raise ValueError("Spine 节点不属于目标敌人 prefab")
         node = node.m_Father.read()
-    return _float(scale), [_float(offset[0]), _float(offset[1]), _float(-offset[2])]
+    if not np.isfinite(pose).all():
+        raise ValueError("Spine prefab 的图形变换无效")
+    offset = [_float(value) for value in REFLECT_Z @ pose[:3, 3]]
+    if uniform:
+        return _float(scale), offset, None
+
+    # A signed or nonuniform transform needs both authored axes. The Spine
+    # raster stays square and the world-space plane supplies the distortion.
+    axes = REFLECT_Z @ pose[:3, :2]
+    if not np.any(np.cross(axes[:, 0], axes[:, 1])):
+        raise ValueError("Spine prefab 的图形平面退化")
+    if tree.get("initialFlipX"):
+        axes[:, 0] *= -1
+    if tree.get("initialFlipY"):
+        axes[:, 1] *= -1
+    return 1., offset, [[_float(value) for value in axis] for axis in axes.T]
 
 
 def _shadow_renderers(node, parent_pose):
@@ -273,7 +327,7 @@ def _extract_prefab(prefab, logical, skill_timings):
     move = _resolve_animation(mapped, hook, "Move") or idle
     if not move or spine["scale"] <= 0:
         raise ValueError(f"{logical}: 没有可播放的原始 Move 或 Idle 动画")
-    scale, offset = _graphic_transform(skeleton, renderer, prefab_transform)
+    scale, offset, plane = _graphic_transform(skeleton, renderer, prefab_transform)
     config = {
         "skeleton": f"actor{suffix}", "atlas": "actor.atlas", "texturePages": pages,
         "skeletonScale": _float(spine["scale"]), "graphicScale": scale,
@@ -282,6 +336,8 @@ def _extract_prefab(prefab, logical, skill_timings):
         "prefabAsset": logical, "skeletonDataName": spine["m_Name"],
         "skeletonDataPathId": str(skeleton_data.path_id),
     }
+    if plane is not None:
+        config["actorPlane"] = plane
     if idle:
         config.update(idleClip=idle["clip"], idleClipSpeed=idle["speed"], idleClipLoop=idle["loop"])
     if attack:
@@ -379,8 +435,12 @@ def extract_actors(root, enemy_ids, resource_version, output_dir, *, enemy_level
                 actor = {**config, "enemyLevel": levels[enemy_id], "name": info.get("name")}
                 if (profile := attacks.get(info.get("singleSkill"))) is not None:
                     actor["periodicAttack"] = profile
-                if (speed := info.get("moveSpeed")) is not None and speed > 0:
+                if (speed := info.get("moveSpeed")) is not None:
                     actor["moveSpeed"] = speed
+                if info.get("notCountInTotal") is True:
+                    actor["notCountInTotal"] = True
+                if lifetime := stationary_lifetime(prefab, info, installation.root, resource_version, cancel):
+                    actor["stationaryLifetime"] = lifetime
                 prepared[enemy_id] = actor, files
 
     result = {}

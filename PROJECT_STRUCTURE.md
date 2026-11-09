@@ -8,6 +8,7 @@ GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 
 ArknightsUnpacker/
 ├─ src/arknights_unpacker/
 │  ├─ __main__.py, bootstrap.py    GUI／worker／验收入口分派
+│  ├─ level_preview_app.py        独立关卡预览器及同程序 worker 入口
 │  ├─ application.py              AppServices 用例集成，负责所选安装与输出保护
 │  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
@@ -44,6 +45,7 @@ ArknightsUnpacker/
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
 │     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
 │     ├─ level_catalog_page.py   分类关卡目录和新增筛选
+│     ├─ level_preview_window.py 独立关卡预览器窗口、扫描与恢复
 │     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
 │     ├─ level_replay_view.py   关卡窗口内的 Qt WebEngine 实时播放器
 │     ├─ level_native_dialog.py Qt 宿主和 Godot 原生回放进程

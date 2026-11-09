@@ -61,7 +61,8 @@ def source_records(root: Path):
     source_inputs = [root / name for name in ("pyproject.toml", "uv.lock")]
     for name in ("src", "resources", "vendor", "packaging", "scripts"):
         source_inputs.extend(files_under(root / name))
-    source_inputs.extend(root / "docs" / name for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
+    source_inputs.extend(root / "docs" / name for name in
+                         ("USER_GUIDE.md", "LEVEL_PREVIEW_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
     return [{"path": p.relative_to(root).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in sorted(set(source_inputs))]
 
 
@@ -103,19 +104,25 @@ def main():
             changed = [path for path in sorted(old.keys() | new.keys()) if old.get(path) != new.get(path)]
             raise SystemExit("Source changed during build; retain intermediate files and rebuild a fixed candidate: " + ", ".join(changed))
     bundle = args.bundle.resolve()
-    if not (bundle / "ArknightsUnpacker.exe").is_file():
+    preview_only = os.environ.get("ARKNIGHTS_LEVEL_PREVIEW_ONLY") == "1"
+    bundle_name = "ArknightsLevelPreview" if preview_only else "ArknightsUnpacker"
+    guide = "LEVEL_PREVIEW_GUIDE.md" if preview_only else "USER_GUIDE.md"
+    if not (bundle / (bundle_name + ".exe")).is_file():
         raise SystemExit("Missing executable")
     required_assets = (
         "resources/folder_rules.json", "resources/report_styles.json", "resources/html/operator.html", "resources/html/report.css",
         "resources/ui/app-icon.png", "resources/ui/app-icon.ico",
         "vendor/ark_fbs/__init__.py", "vendor/ark_fbs/CN/__init__.py", "vendor/ark_fbs/CN/character_table.py",
         "vendor/lz4ak/Block.py", "fmod_toolkit/libfmod/Windows/x64/fmod.dll",
-        "PySide6/plugins/platforms/qwindows.dll", "docs/USER_GUIDE.md", "docs/THIRD_PARTY_NOTICES.md",
+        "PySide6/plugins/platforms/qwindows.dll", f"docs/{guide}", "docs/THIRD_PARTY_NOTICES.md",
         "licenses/Ark-Unpacker/Ark-Unpacker-LICENSE", "licenses/LGPL-3.0-only.txt",
-        *_WEBENGINE_ASSETS,
     )
+    if not preview_only:
+        required_assets += _WEBENGINE_ASSETS
     godot = bundle / "_internal" / _GODOT_EXE
     include_godot = bool(os.environ.get("ARKNIGHTS_GODOT_RUNTIME"))
+    if preview_only and not include_godot:
+        raise SystemExit("The level preview bundle requires ARKNIGHTS_GODOT_RUNTIME")
     if include_godot:
         if not re.search(r"(?:^|[-._])test(?:$|[-._])", args.version, re.IGNORECASE):
             raise SystemExit("ARKNIGHTS_GODOT_RUNTIME is only supported for a test build")
@@ -126,7 +133,8 @@ def main():
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
     relative_paths = (path.relative_to(bundle) for path in files_under(bundle))
-    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path)]
+    forbidden = [path.as_posix() for path in relative_paths
+                 if _forbidden_asset(path) or (preview_only and 'webengine' in path.as_posix().casefold())]
     if forbidden:
         raise SystemExit("Unexpected development or QtWebEngine files in bundle: " + ", ".join(forbidden[:20]))
     provenance = {
@@ -135,6 +143,7 @@ def main():
         **source_provenance(root), "python": platform.python_version(),
         "source_consistency_checked": bool(args.source_snapshot),
         "platform": platform.platform(),
+        "application": bundle_name,
         "preflight": os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
         "acceptance": "Build succeeded; consult docs/ACCEPTANCE.md for runtime acceptance boundaries.",
         "upstreams": {

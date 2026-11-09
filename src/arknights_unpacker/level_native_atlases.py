@@ -50,6 +50,8 @@ def _actor_inputs(assets, configs):
         modes = ['move']
         if config.get('idleClip'):
             modes.append('idle')
+        if config.get('stationaryLifetime'):
+            modes.append('visible')
         if attack := config.get('periodicAttack'):
             if phases := attack.get('phases'):
                 modes.extend(f'attack-{index}' for index in range(len(phases)))

@@ -53,6 +53,18 @@ def _resolve_clock_waits(route, speed, spawn_time, fragment_start, wave_start, a
             'wait_seconds': sum(waits.values()) + sum(hidden_waits.values())}
 
 
+def _stationary_duration(route, lifetime):
+    if lifetime is None:
+        return None
+    appear, retire = lifetime['appearAfter'], lifetime['retireAfter']
+    # Only truncate before the first authored wait finishes. Clock-dependent
+    # waits or an immediately hidden path require a separate runtime model.
+    if (isfinite(appear) and isfinite(retire) and 0 <= appear < retire < route['waits'].get(0, 0)
+            and 0 not in route['hidden_waits'] and 0 not in route['clock_waits']):
+        return retire
+    return None
+
+
 def build_level_replay(level, actors, *, seed=None, inactive_branches=(), battle_deadline=None, cancel=None):
     """Plan an unopposed wave preview using actual enemy movement speeds."""
     speed_factor = (level.get('options') or {}).get('moveMultiplier', 0.5)
@@ -75,9 +87,18 @@ def build_level_replay(level, actors, *, seed=None, inactive_branches=(), battle
             return None
         actor = actors.get(enemy_id, {})
         speed = actor.get('moveSpeed')
-        if speed is None or not isfinite(speed) or speed <= 0:
+        if speed is None or not isfinite(speed) or speed < 0:
             errors.append(f'{enemy_id} · 缺少有效的敌人移动速度。')
             return None
+        if speed == 0:
+            duration = _stationary_duration(routes[route_key], actor.get('stationaryLifetime'))
+            if duration is None:
+                errors.append(f'{enemy_id} · 路线 {route_index} 的敌人原始移动速度为 0，退场时刻未确定。')
+                return None
+            route = sample_spawn_route(routes[route_key], rng)
+            spawn_routes[-1] = {**route, 'path': route['path'][:1], 'waits': {0: duration},
+                                'hidden_waits': {}, 'jumps': [], 'patrol_start': None}
+            return duration
         route = sample_spawn_route(routes[route_key], rng)
         move_speed = speed * speed_factor
         attack = actor.get('periodicAttack')
@@ -89,8 +110,11 @@ def build_level_replay(level, actors, *, seed=None, inactive_branches=(), battle
         spawn_routes[-1] = route
         return inf if route.get('patrol_start') is not None else _battle_clock(seconds, attack)
 
+    not_count_in_total = {enemy_id for enemy_id, actor in actors.items()
+                          if actor.get('notCountInTotal') is True}
     timeline = build_level_timeline(level, travel, spawn_clock=True, inactive_branches=inactive_branches,
-                                    battle_deadline=battle_deadline, cancel=cancel)
+                                    battle_deadline=battle_deadline, not_count_in_total=not_count_in_total,
+                                    cancel=cancel)
     events = []
     for event, route in zip(timeline['events'], spawn_routes, strict=True):
         if route is None:

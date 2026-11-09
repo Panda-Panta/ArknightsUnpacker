@@ -11,7 +11,7 @@ from .level_preview_server import _SEGMENT, _regular_file
 from .paths import atomic_json, validate_output
 
 
-_CACHE_FORMAT = 2
+_CACHE_FORMAT = 3
 _PREWARM_MAX_BYTES = 2 * 1024 ** 3
 _SLOT = re.compile(r'[a-f0-9]{64}')
 _GENERATION = re.compile(r'assets-[a-f0-9]{32}')

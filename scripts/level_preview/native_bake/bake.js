@@ -39,6 +39,8 @@ async function bake() {
     if (config.initialSkin) sprite.skeleton.setSkinByName(config.initialSkin);
     const clips = [clip('move', config.clip, config.clipSpeed, config.clipLoop)];
     if (config.idleClip) clips.push(clip('idle', config.idleClip, config.idleClipSpeed, config.idleClipLoop));
+    const lifetime = config.stationaryLifetime;
+    if (lifetime) clips.push(clip('visible', lifetime.visibleClip, lifetime.visibleClipSpeed, lifetime.visibleClipLoop));
     const attack = config.periodicAttack;
     if (attack?.phases?.length) {
       attack.phases.forEach((phase, index) => {
@@ -87,7 +89,8 @@ async function bake() {
     // Reserve room around deforming meshes whose cached bounds can lag one pose.
     pixelsPerUnit *= 0.90;
     sprite.scale.set(pixelsPerUnit);
-    const size = cellSize / pixelsPerUnit * (config.actorPlane ? 1 : config.graphicScale * actorScale);
+    const stageScale = !config.actorPlane || Object.hasOwn(config, 'enemyLevel') ? actorScale : 1;
+    const size = cellSize / pixelsPerUnit * config.graphicScale * stageScale;
     const actor = {size: [size, size], anchor, offset: config.actorOffset, spineVersion: data.version};
     for (const spec of clips) {
       const {mode, animation, duration, fps, frames, loop} = spec;

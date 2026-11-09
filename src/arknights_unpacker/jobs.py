@@ -16,6 +16,14 @@ from .contracts import CancelToken, CancelledError, ExtractionRequest, as_jsonab
 from .paths import atomic_json
 
 
+def worker_command(args):
+    if "--worker-server" in args:
+        return worker_server_entry(args[args.index("--worker-server") + 1])
+    if "--worker" in args:
+        return worker_entry(args[args.index("--worker") + 1])
+    return None
+
+
 class FileCancelToken(CancelToken):
     def __init__(self, marker: Path):
         super().__init__()

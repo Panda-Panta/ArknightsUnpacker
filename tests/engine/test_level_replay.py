@@ -99,3 +99,46 @@ def test_periodic_cast_pauses_route_progress_without_pausing_battle_clock():
 
     assert resolved['waits'] == {1: 2}
     assert _battle_clock(3 + resolved['wait_seconds'], attack) == 7
+
+
+@pytest.mark.parametrize('wait', [180, 69, None])
+def test_verified_stationary_lifetime_must_end_during_the_first_wait(wait):
+    route = {
+        'motionMode': 0, 'startPosition': {'col': 1, 'row': 0}, 'endPosition': {'col': 0, 'row': 0},
+        'spawnOffset': {'x': 0.1, 'y': 0.05}, 'spawnRandomRange': {'x': 0.3, 'y': 0.0},
+    }
+    stationary_route = {**route, 'checkpoints': [{'type': 1, 'time': wait}]} if wait is not None else route
+    spawn = {'actionType': 0, 'key': 'stationary', 'routeIndex': 0}
+    normal = {'actionType': 0, 'key': 'normal', 'routeIndex': 1}
+    level = {
+        'mapData': {'map': {'rowSize': 1, 'columnSize': 2, 'matrixData': [0, 0]},
+                    'tiles': [{'passableMask': 1}]},
+        'routes': [stationary_route, route],
+        'waves': [{'fragments': [{'actions': [spawn, normal]}]},
+                  {'fragments': [{'actions': [normal]}]}],
+    }
+    actors = {
+        'stationary': {'moveSpeed': 0, 'notCountInTotal': True, 'stationaryLifetime': {
+            'appearAfter': 50, 'retireAfter': 70, 'visibleClip': 'Idle',
+            'visibleClipSpeed': 1, 'visibleClipLoop': True,
+        }},
+        'normal': {'moveSpeed': 1},
+    }
+    replay = build_level_replay(level, actors, seed=20261109)
+
+    if wait != 180:
+        assert not replay['complete']
+        assert any('原始移动速度为 0' in reason for reason in replay['diagnostics'])
+        return
+    assert replay['complete']
+    stationary, first, second = replay['events']
+    assert len(stationary['path']) == 1
+    assert stationary['path'][0][1] == pytest.approx(.05)
+    assert stationary['waits'] == {0: 70}
+    assert stationary['hiddenWaits'] == {}
+    assert stationary['jumps'] == []
+    assert stationary['patrolStart'] is None
+    assert stationary['moveSpeed'] == 0
+    assert stationary['exitTime'] == 70
+    assert second['time'] == first['exitTime'] < stationary['exitTime']
+    assert replay['duration'] == second['exitTime']

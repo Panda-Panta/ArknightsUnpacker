@@ -185,6 +185,42 @@ class AppServices:
         self.save_config()
         return {"snapshot": snapshot, "changes": change_set, "catalog": catalog}
 
+    def _saved_level_catalog(self, installation):
+        path = self.data_root / 'level-catalogs' / f'{installation.profile_id}.json'
+        try:
+            saved = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            saved = None
+        if saved is not None and (not isinstance(saved, dict) or saved.get('root') != str(installation.root)
+                                  or not isinstance(saved.get('levels'), list)):
+            raise ValueError('保存的关卡目录与当前游戏安装不匹配。')
+        return path, saved
+
+    def restore_level_catalog(self, root, emit=null_progress, cancel=None):
+        from .library import discover_installation
+
+        cancel = cancel or CancelToken()
+        installation = self.store.get_installation(root) or discover_installation(root)
+        _, saved = self._saved_level_catalog(installation)
+        cancel.check()
+        self._select_installation(installation)
+        self.level_catalog = saved
+        return {}
+
+    def scan_level_catalog(self, root, emit=null_progress, cancel=None):
+        from .extraction.gameplay import discover_live_level_catalog
+
+        cancel = cancel or CancelToken()
+        installation = self._installation(root)
+        path, previous = self._saved_level_catalog(installation)
+        emit({'message': '正在读取当前资源清单和关卡索引…'})
+        result = discover_live_level_catalog(installation, previous, cancel)
+        cancel.check()
+        if result['levels']:
+            atomic_json(path, result)
+        self.level_catalog = result
+        return {}
+
     def _gameplay_mode(self, root, mode_id, resource_version):
         catalog = self.gameplay_catalog
         if (catalog is None or catalog['resource_version'] != resource_version
@@ -275,7 +311,9 @@ class AppServices:
             raise ValueError('出怪预览输出目录不属于当前会话缓存。')
         args['output'] = str(directory)
         if native:
-            args['native_runtime'] = str(self.data_root / 'level-preview-runtime')
+            runtime = self.config.get('level_preview_runtime')
+            args['native_runtime'] = str(Path(runtime).expanduser().resolve() if runtime
+                                         else self.data_root / 'level-preview-runtime')
             if prewarm:
                 args['native_prewarm'] = True
         return self.runner.run('level_replay', args, emit, cancel)

@@ -23,10 +23,6 @@ _AUTOCHESS_GUIDE = re.compile(r'gamedata/story/activities/(?:act[0-9]+v?autoches
 
 def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel, *, previous_levels=None):
     """Read the active index once for the gameplay and level directories."""
-    from .level_catalog import build_level_catalog
-    from .level_map_image import find_level_map_images
-    from .level_scenes import find_level_scenes
-
     active = catalog.manifest
     result = {'root': snapshot.root, 'resource_version': str(active.get('versionId', 'unknown')),
               'modes': [], 'diagnostics': []}
@@ -50,31 +46,74 @@ def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, canc
         else:
             raise FileNotFoundError('活动资源索引未安装。')
         observed = record.size, record.mtime_ns
-        info = path.stat()
-        if (info.st_size, info.st_mtime_ns) != observed:
-            raise OSError('资源索引在扫描后发生变化，请重新扫描。')
-        index = read_resource_manifest(path)
-        info = path.stat()
-        if (info.st_size, info.st_mtime_ns) != observed:
-            raise OSError('资源索引在识别玩法期间发生变化，请重新扫描。')
+        index = _read_checked_index(path, observed)
         gameplay = _identify(result, index, catalog, cancel)
-        levels = build_level_catalog(snapshot.root, result['resource_version'], index, catalog,
-                                     previous_levels, cancel)
-        ids = [row['id'] for row in levels['levels']]
-        images = find_level_map_images(index, catalog.resources, ids, cancel)
-        scenes = find_level_scenes(index, catalog.resources, ids, cancel)
-        levels['scene_bindings_checked'] = True
-        for row in levels['levels']:
-            if row['id'] in images:
-                row['map_image'] = images[row['id']]
-            if row['id'] in scenes:
-                row['scene'] = scenes[row['id']]
+        levels = _level_directory(snapshot.root, result['resource_version'], index, catalog, previous_levels, cancel)
         return gameplay, levels
     except (OSError, ValueError, TypeError, KeyError, IndexError, struct.error) as error:
         result['diagnostics'].append(f'玩法识别暂不可用：{error}')
         levels = {'root': snapshot.root, 'resource_version': result['resource_version'],
                   'levels': [], 'diagnostics': [f'关卡索引暂不可用：{error}']}
         return result, levels
+
+
+def _read_checked_index(path, observed):
+    info = path.stat()
+    if (info.st_size, info.st_mtime_ns) != observed:
+        raise OSError('资源索引在扫描后发生变化，请重新扫描。')
+    index = read_resource_manifest(path)
+    info = path.stat()
+    if (info.st_size, info.st_mtime_ns) != observed:
+        raise OSError('资源索引在识别玩法期间发生变化，请重新扫描。')
+    return index
+
+
+def _level_directory(root, version, index, catalog, previous, cancel):
+    from .level_catalog import build_level_catalog
+    from .level_map_image import find_level_map_images
+    from .level_scenes import find_level_scenes
+
+    levels = build_level_catalog(root, version, index, catalog, previous, cancel)
+    ids = [row['id'] for row in levels['levels']]
+    images = find_level_map_images(index, catalog.resources, ids, cancel)
+    scenes = find_level_scenes(index, catalog.resources, ids, cancel)
+    levels['scene_bindings_checked'] = True
+    for row in levels['levels']:
+        if row['id'] in images:
+            row['map_image'] = images[row['id']]
+        if row['id'] in scenes:
+            row['scene'] = scenes[row['id']]
+    return levels
+
+
+def discover_live_level_catalog(installation, previous, cancel):
+    """Observe the installed game index without inventorying unrelated files."""
+    from ..library import load_catalog
+    from ..library.manifests import read_manifest
+
+    cancel.check()
+    catalog = load_catalog(installation)
+    manifest = catalog.manifest
+    name, source = manifest.get('manifestName'), manifest.get('_source')
+    if not name or not source:
+        raise ValueError('资源清单没有可用于识别关卡的索引。')
+    for layer in ('hot', 'base'):
+        folder = installation.source_roots.get(layer)
+        if folder is not None and (path := safe_path(folder, name)).is_file():
+            break
+    else:
+        raise FileNotFoundError('活动资源索引未安装。')
+    observed = path.stat()
+    index = _read_checked_index(path, (observed.st_size, observed.st_mtime_ns))
+    result = _level_directory(str(installation.root), str(manifest.get('versionId', 'unknown')),
+                              index, catalog, previous, cancel)
+    # A new hot layer can activate while the index is being read.
+    active = next((safe_path(installation.source_roots[layer], 'hot_update_list.json')
+                  for layer in ('hot', 'base') if layer in installation.source_roots
+                  and (installation.source_roots[layer] / 'hot_update_list.json').is_file()), None)
+    if active is None or read_manifest(active)['_source'] != source:
+        raise OSError('资源清单在识别关卡期间发生变化，请重新扫描。')
+    return result
 
 
 def _identify(result, index, catalog, cancel):

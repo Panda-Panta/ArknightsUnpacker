@@ -248,7 +248,7 @@ func apply_baked_materials(root: Node3D, raw: Dictionary) -> void:
 func build_timeline() -> void:
 	for definition: Dictionary in actors.values():
 		for key: String in definition:
-			if key in ["move", "idle", "attack"] or key.begins_with("attack-"):
+			if key in ["move", "idle", "visible", "attack"] or key.begins_with("attack-"):
 				texture_at(actor_root.path_join(definition[key].file))
 	for item: Dictionary in fixture.events:
 		if not actors.has(item.enemyId):
@@ -371,11 +371,16 @@ func actor_clocks(age: float, attack: Dictionary) -> Array[float]:
 	return [age - cycles * duration - minf(within, duration), within if within < duration else -1.0]
 
 
-func actor_frame(entry: Dictionary, pose: Dictionary, attack_time: float) -> Dictionary:
+func actor_frame(entry: Dictionary, pose: Dictionary, attack_time: float, age: float) -> Dictionary:
 	var definition: Dictionary = entry.definition
 	var mode := "idle" if pose.has("idle") and definition.has("idle") else "move"
 	var sample_time := float(pose.idle) if mode == "idle" else float(pose.motion)
-	if attack_time >= 0.0:
+	var lifetime: Dictionary = entry.config.get("stationaryLifetime", {})
+	if not lifetime.is_empty():
+		var appear_after := float(lifetime.appearAfter)
+		mode = "visible" if age >= appear_after else "move"
+		sample_time = age - appear_after if mode == "visible" else age
+	elif attack_time >= 0.0:
 		var attack_mode := "attack"
 		var phase_start := 0.0
 		var phases: Array = entry.config.periodicAttack.get("phases", [])
@@ -430,7 +435,7 @@ func update_scene() -> void:
 		if not sprite.visible:
 			continue
 		var definition: Dictionary = entry.definition
-		var animation := actor_frame(entry, pose, attack_time)
+		var animation := actor_frame(entry, pose, attack_time, age)
 		var clip: Dictionary = animation.clip
 		var atlas := texture_at(actor_root.path_join(clip.file))
 		var width := int(clip.frameWidth)
