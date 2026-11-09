@@ -5,7 +5,7 @@ import pytest
 from PySide6.QtCore import QItemSelectionModel, QPoint, Qt
 
 from arknights_unpacker.ui.models import selected_records, size_text
-from arknights_unpacker.ui.report_preview import ObjectsDialog
+from arknights_unpacker.ui.object_preview import ObjectsDialog
 
 
 ASC = Qt.SortOrder.AscendingOrder

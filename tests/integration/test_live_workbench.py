@@ -16,7 +16,7 @@ def test_live_gui_scan_extract_profiles_and_reports(qtbot, tmp_path, monkeypatch
     from PIL import Image
     from arknights_unpacker.application import AppServices
     from arknights_unpacker.ui.main_window import MainWindow
-    from arknights_unpacker.ui.report_preview import ObjectsDialog
+    from arknights_unpacker.ui.object_preview import ObjectsDialog
     from arknights_unpacker.extraction.unity import load_bundle
 
     root = Path(os.environ["ARKNIGHTS_GAME_ROOT"])

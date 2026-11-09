@@ -3,7 +3,7 @@ from PySide6.QtCore import QSignalBlocker, Signal, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QSplitter, QTableView, QTextBrowser, QAbstractItemView, QComboBox, QFrame, QStackedWidget
 from arknights_unpacker.contracts import BuildSpec
 from .models import RecordsModel, STATUS, selected_records, value
-from .report_preview import profile_html
+from .profile_html import profile_html
 
 
 PROFESSIONS = {'PIONEER': '先锋', 'WARRIOR': '近卫', 'TANK': '重装', 'SNIPER': '狙击',

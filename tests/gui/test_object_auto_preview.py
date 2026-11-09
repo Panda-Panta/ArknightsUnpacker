@@ -4,7 +4,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QPushButton
 
 from arknights_unpacker.ui.preview_cache import PreviewCache
-from arknights_unpacker.ui.report_preview import ObjectsDialog
+from arknights_unpacker.ui.object_preview import ObjectsDialog
 
 
 def rows():

@@ -5,7 +5,8 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QDialog, QFileDialog, QLineEdit, QMessageBox
 
 from arknights_unpacker.contracts import ReportArtifact
-from arknights_unpacker.ui.report_preview import ObjectsDialog, ReportArtifactsDialog
+from arknights_unpacker.ui.object_preview import ObjectsDialog
+from arknights_unpacker.ui.report_preview import ReportArtifactsDialog
 
 
 def original_png(path):

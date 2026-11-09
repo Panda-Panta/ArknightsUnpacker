@@ -6,7 +6,7 @@ from arknights_unpacker.contracts import ModuleProfile, OperatorProfile, ReportD
 from arknights_unpacker.reports.html_render import render_html
 from arknights_unpacker.reports.model import semantic_blocks, text_report
 from arknights_unpacker.reports.render import layout_pages
-from arknights_unpacker.ui.report_preview import profile_html
+from arknights_unpacker.ui.profile_html import profile_html
 
 
 DEFINITION = '累计满时爆发（普通、精英敌人1000点、领袖2000点累计值），立即受到7000点元素伤害'

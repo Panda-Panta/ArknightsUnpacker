@@ -315,7 +315,7 @@ def test_explicit_branch_names_are_preserved_and_raw_branch_ids_are_not_names():
 
 
 def test_all_building_stages_keep_duplicate_names_unlocks_and_missing_effects(tmp_path):
-    from arknights_unpacker.ui.report_preview import profile_html
+    from arknights_unpacker.ui.profile_html import profile_html
 
     skills = [
         {'id': 'raw_buff_1', 'slot': 1, 'name': '后勤专长', 'description': '生产效率+10%',
@@ -352,7 +352,7 @@ def test_all_building_stages_keep_duplicate_names_unlocks_and_missing_effects(tm
 
 
 def test_empty_building_skills_keep_the_missing_data_status_without_generic_explanation():
-    from arknights_unpacker.ui.report_preview import profile_html
+    from arknights_unpacker.ui.profile_html import profile_html
 
     report = ReportDocument('资料', operators=[OperatorProfile('owner', '干员')])
     original = deepcopy(as_jsonable(report))

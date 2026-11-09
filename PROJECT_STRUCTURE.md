@@ -1,6 +1,6 @@
 # 实际工程结构
 
-更新：2026-11-02。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新：2026-11-09。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
@@ -51,6 +51,10 @@ ArknightsUnpacker/
 │     ├─ level_native_dialog.py Qt 宿主和 Godot 原生回放进程
 │     ├─ level_native_preview.py 按选择和指标后台准备原生回放，协调播放及取消
 │     ├─ level_tags_dialog.py    作战指标选择与脚本效果
+│     ├─ profile_html.py         资料语义块到 Qt 详情 HTML 的转换
+│     ├─ report_preview.py       资料导出文件预览、换字体与分页
+│     ├─ object_preview.py       对象表格、自动预览与租约
+│     ├─ original_image.py       对象与资料预览共用的原图保存和写入保护
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
 │     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
@@ -88,7 +92,7 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 `ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别。资源浏览选择具体类型后在当前来源全库匹配，关键词与AB条件继续叠加；暂时禁用目录导航／递归且保留原值，切回全部类型恢复原目录范围。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
 
-`library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ObjectsDialog`负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
+`library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ui/object_preview.py` 的 `ObjectsDialog` 负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
 
 0.1.18 的 `jobs.py` 通过 `__main__.py --worker-server` 为对象列表和临时资源预览按需复用单个隔离解码进程，保留逐任务请求、结果、取消和事件；每次重新读取源文件，不缓存 Unity 环境，闲置约60秒／退出回收。正式解包和核心表继续一次性进程。`main_window.py` 提供三种检查方式，默认资料检查结束后再提交全文件扫描，取消不启动后续阶段；核心表缺失保留失败任务并继续默认文件扫描。`application.load_data` 只刷新资料，保留既有文件扫描与 catalog，没有扫描时创建明确空 catalog。`library.scan` 用目录栈携带相对路径和 DirEntry 元数据；`resolver` 每层预计算相对前缀、同次 live 观测共享父目录元数据，snapshot 恢复不访问游戏文件。`ui.explorer` 按 catalog/root 缓存当前资源基础行，在更换数据或目录根时失效，搜索及用途筛选复用这些行。
 
