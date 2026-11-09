@@ -1,19 +1,21 @@
 """Join the original stage schedule and routes with verified enemy data."""
 from math import isfinite
 from random import Random
+from secrets import randbits
 
 from .level_routes import build_level_routes, sample_spawn_route
 from .level_timeline import build_level_timeline
 
 
-def build_level_replay(level, actors, *, cancel=None):
+def build_level_replay(level, actors, *, seed=None, cancel=None):
     """Plan an unopposed wave preview using actual enemy movement speeds."""
     speed_factor = (level.get('options') or {}).get('moveMultiplier', 0.5)
     if not isfinite(speed_factor) or speed_factor <= 0:
         raise ValueError('移动速度倍率必须大于零。')
     routes, unavailable = build_level_routes(level, cancel=cancel)
     errors = []
-    rng = Random(0)
+    seed = randbits(53) if seed is None else seed
+    rng = Random(seed)
     spawn_routes = []
 
     def travel(enemy_id, route_index, extra):
@@ -46,9 +48,9 @@ def build_level_replay(level, actors, *, cancel=None):
         })
     diagnostics = [*timeline['diagnostics'], *errors]
     if any(route is not None and any(route['spawn_range']) for route in spawn_routes):
-        diagnostics.append('随机出生偏移使用固定预览种子。')
+        diagnostics.append('当前回放使用同一个随机种子计算出生偏移。')
     return {
-        **timeline, 'events': events, 'actors': actors,
+        **timeline, 'events': events, 'actors': actors, 'seed': seed,
         'complete': timeline['complete'] and not errors,
         'diagnostics': list(dict.fromkeys(diagnostics)),
     }

@@ -18,6 +18,8 @@ from arknights_unpacker.library.discover import discover_installation, safe_path
 from arknights_unpacker.library.resolver import load_catalog
 from arknights_unpacker.paths import atomic_json, validate_output
 
+from .level_scene_assets import REFLECT_Z, _pose
+
 
 def _float(value):
     return float(format(value, ".7g"))
@@ -93,7 +95,10 @@ def _animator(prefab):
         animator = _pointer(component, animator_ref)
         tree = animator.read_typetree()
         if {"_skeleton", "_animations"} <= tree.keys():
-            return _transform(components), animator, tree
+            shadow_ref = behaviour.get("_shadow", {})
+            shadow = ((component, shadow_ref) if shadow_ref.get("m_PathID")
+                      and not behaviour.get("_hideShadowOnReset") else None)
+            return _transform(components), animator, tree, shadow
     raise ValueError(f"{root.m_Name}: prefab 没有指向 Spine 动画器的敌人组件")
 
 
@@ -118,6 +123,74 @@ def _graphic_transform(skeleton, tree, prefab_transform):
             raise ValueError("Spine 节点不属于目标敌人 prefab")
         node = node.m_Father.read()
     return _float(scale), [_float(offset[0]), _float(offset[1]), _float(-offset[2])]
+
+
+def _shadow_renderers(node, parent_pose):
+    transform = node.read()
+    owner = transform.m_GameObject.read()
+    if not owner.m_IsActive:
+        return
+    pose = parent_pose @ _pose(transform)
+    for component in _components(owner):
+        if component.type.name == "SpriteRenderer":
+            renderer = component.read()
+            if renderer.m_Enabled and renderer.m_Sprite:
+                yield renderer, pose
+    for child in transform.m_Children:
+        yield from _shadow_renderers(child.deref(), pose)
+
+
+def _shadow_sprite(component, prefab_transform):
+    if component is None or component.type.name != "MonoBehaviour":
+        return None
+    data = component.read_typetree()
+    if not data.get("m_Enabled") or any(data.get(key) for key in (
+            "_autoAttachToGround", "_enableAdvanced", "_alwaysUseSpineOffset", "_specialInit")):
+        return None
+    owner = _pointer(component, data["m_GameObject"]).read()
+    node = _transform(_components(owner))
+    # The shadow is authored below the actor root. Include any intermediate pose.
+    ancestors = []
+    parent = node.read().m_Father
+    while parent and (parent.assetsfile, parent.path_id) != (
+            prefab_transform.assets_file, prefab_transform.path_id):
+        transform = parent.read()
+        ancestors.append(transform)
+        parent = transform.m_Father
+    if not parent:
+        return None
+    pose = np.eye(4)
+    for transform in reversed(ancestors):
+        if not transform.m_GameObject.read().m_IsActive:
+            return None
+        pose = pose @ _pose(transform)
+    renderers = list(_shadow_renderers(node, pose))
+    if len(renderers) != 1:
+        return None
+    renderer, pose = renderers[0]
+    sprite = renderer.m_Sprite.read()
+    render = sprite.m_RD
+    # Atlas/packed, tiled and sliced sprites need their own UV/mesh handling.
+    if (renderer.m_DrawMode != 0 or sprite.m_SpriteAtlas or sprite.m_AtlasTags
+            or render.settingsRaw & 1 or render.downscaleMultiplier != 1
+            or not sprite.m_PixelsToUnits or sprite.m_Pivot is None):
+        return None
+    left = render.textureRectOffset.x - sprite.m_Rect.width * sprite.m_Pivot.x
+    bottom = render.textureRectOffset.y - sprite.m_Rect.height * sprite.m_Pivot.y
+    right = left + render.textureRect.width
+    top = bottom + render.textureRect.height
+    vertices = []
+    for x, y in ((left, bottom), (right, bottom), (left, top), (right, top)):
+        x = (-x if renderer.m_FlipX else x) / sprite.m_PixelsToUnits
+        y = (-y if renderer.m_FlipY else y) / sprite.m_PixelsToUnits
+        point = REFLECT_Z @ (pose @ np.array([x, y, 0, 1]))[:3]
+        vertices.append([_float(value) for value in point])
+    png = BytesIO()
+    sprite.image.save(png, format="PNG")
+    color = renderer.m_Color
+    return {"texture": "shadow/sprite.png", "vertices": vertices,
+            "color": [_float(color.r), _float(color.g), _float(color.b)],
+            "opacity": _float(color.a)}, png.getvalue()
 
 
 def _spine_files(skeleton_data, spine):
@@ -156,7 +229,7 @@ def _spine_files(skeleton_data, spine):
 
 
 def _extract_prefab(prefab, logical):
-    prefab_transform, animator, tree = _animator(prefab)
+    prefab_transform, animator, tree, shadow = _animator(prefab)
     skeleton = _pointer(animator, tree["_skeleton"])
     renderer = skeleton.read_typetree()
     skeleton_data = _pointer(skeleton, renderer["skeletonDataAsset"])
@@ -169,14 +242,25 @@ def _extract_prefab(prefab, logical):
     if not move or move["speed"] <= 0 or spine["scale"] <= 0:
         raise ValueError(f"{logical}: 没有可播放的原始 Move 动画")
     scale, offset = _graphic_transform(skeleton, renderer, prefab_transform)
-    return {
+    config = {
         "skeleton": f"actor{suffix}", "atlas": "actor.atlas", "texturePages": pages,
         "skeletonScale": _float(spine["scale"]), "graphicScale": scale,
         "actorOffset": offset, "actorOffsetUnits": "prefab-root-local world units (Unity x,y,-z)",
         "clip": move["clip"], "clipSpeed": move["speed"], "animations": mapped,
         "prefabAsset": logical, "skeletonDataName": spine["m_Name"],
         "skeletonDataPathId": str(skeleton_data.path_id),
-    }, files
+    }
+    if shadow is not None:
+        try:
+            shadow_sprite = _shadow_sprite(_pointer(*shadow), prefab_transform)
+        except (KeyError, OSError, ValueError) as error:
+            # A missing optional shadow asset cannot invalidate a playable actor.
+            config["shadowDiagnostic"] = str(error)
+        else:
+            if shadow_sprite is not None:
+                config["shadow"], payload = shadow_sprite
+                files[config["shadow"]["texture"]] = payload
+    return config, files
 
 
 def extract_actors(root, enemy_ids, resource_version, output_dir, *, enemy_levels=None, cancel=None):
@@ -263,6 +347,8 @@ def extract_actors(root, enemy_ids, resource_version, output_dir, *, enemy_level
         for name in ("skeleton", "atlas"):
             actor[name] = f"{folder}/{actor[name]}"
         actor["texturePages"] = [f"{folder}/{page}" for page in actor["texturePages"]]
+        if "shadow" in actor:
+            actor["shadow"] = {**actor["shadow"], "texture": f"{folder}/{actor['shadow']['texture']}"}
         result[enemy_id] = actor
     return result
 

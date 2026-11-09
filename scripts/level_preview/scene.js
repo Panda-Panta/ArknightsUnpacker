@@ -136,7 +136,35 @@ function applySpineDepth(material, baseline) {
   };
 }
 
-function createActorLayer(scene, layout, footShadow, actors, events) {
+async function loadActorShadows(layout, configs) {
+  const loader = new THREE.TextureLoader();
+  const textures = new Map();
+  const shadows = await Promise.all([...configs].map(async ([id, config]) => {
+    const shadow = config.shadow ?? layout.actorShadow;
+    if (!shadow) return null;
+    if (!textures.has(shadow.texture)) textures.set(shadow.texture, loader.loadAsync(shadow.texture));
+    const map = await textures.get(shadow.texture);
+    map.colorSpace = THREE.SRGBColorSpace;
+    let geometry;
+    if (shadow.vertices) {
+      geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(shadow.vertices.flat(), 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+      geometry.setIndex([0, 1, 2, 2, 1, 3]);
+    } else {
+      geometry = new THREE.PlaneGeometry(...shadow.size).translate(...shadow.offset);
+    }
+    const color = new THREE.Color().setRGB(...(shadow.color ?? [1, 1, 1]), THREE.SRGBColorSpace);
+    const material = new THREE.MeshBasicMaterial({
+      map, color, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: shadow.opacity,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    return [id, {geometry, material}];
+  }));
+  return new Map(shadows.filter(Boolean));
+}
+
+function createActorLayer(scene, layout, shadows, actors, events) {
   if (!events.length) return () => 0;
   const surface = new PIXI.Application({
     width: actorCanvas, height: actorCanvas, autoStart: false,
@@ -149,12 +177,8 @@ function createActorLayer(scene, layout, footShadow, actors, events) {
   const offsets = new Map(Array.from(actors, ([id, {config}]) => [id,
     config.actorOffset ? new THREE.Vector3().fromArray(config.actorOffset) : defaultOffset,
   ]));
-  const shadowOffset = footShadow ? new THREE.Vector3().fromArray(layout.actorShadow.offset) : null;
   const avatarGeometry = new THREE.PlaneGeometry(1, 1);
-  const shadowGeometry = footShadow ? new THREE.PlaneGeometry(...layout.actorShadow.size) : null;
-  const shadowMaterial = footShadow ? new THREE.MeshBasicMaterial({
-    map: footShadow, transparent: true, depthWrite: false, opacity: layout.actorShadow.opacity,
-  }) : null;
+  const firstShadow = shadows.values().next().value;
   const slots = [];
 
   function addSlot() {
@@ -174,7 +198,7 @@ function createActorLayer(scene, layout, footShadow, actors, events) {
     applySpineDepth(material, layout.actorBaseline ?? 0);
     const avatar = new THREE.Mesh(avatarGeometry, material);
     avatar.rotation.x = Math.PI / 6;
-    const shadow = footShadow ? new THREE.Mesh(shadowGeometry, shadowMaterial) : null;
+    const shadow = firstShadow ? new THREE.Mesh(firstShadow.geometry, firstShadow.material) : null;
     if (shadow) {
       shadow.renderOrder = -1;
       scene.add(shadow);
@@ -200,8 +224,13 @@ function createActorLayer(scene, layout, footShadow, actors, events) {
       avatar.visible = true;
       avatar.position.copy(worldOrigin).addScaledVector(columns, col).addScaledVector(rows, row);
       if (shadow) {
-        shadow.visible = true;
-        shadow.position.copy(avatar.position).add(shadowOffset);
+        const shape = shadows.get(event.enemyId);
+        shadow.visible = Boolean(shape);
+        if (shape) {
+          shadow.geometry = shape.geometry;
+          shadow.material = shape.material;
+          shadow.position.copy(avatar.position);
+        }
       }
       avatar.position.add(offsets.get(event.enemyId));
 
@@ -234,15 +263,15 @@ async function main() {
   );
   const {configs, events, defaultSpeedCount} = prepareRun(run);
   const loader = new GLTFLoader();
-  const [map, actors, lighting, footShadow, ...props] = await Promise.all([
+  const [map, actors, lighting, shadows, ...props] = await Promise.all([
     loader.loadAsync(layout.asset),
     loadActors(configs),
     loadBattleLighting(layout),
-    configs.size && layout.actorShadow ? new THREE.TextureLoader().loadAsync(layout.actorShadow.texture) : null,
+    loadActorShadows(layout, configs),
     ...layout.props.map(prop => loader.loadAsync(prop.asset)),
   ]);
   const renderer = new THREE.WebGLRenderer({
-    antialias: true, preserveDrawingBuffer: true,
+    antialias: true, preserveDrawingBuffer: Boolean(capture),
   });
   renderer.setSize(width, height);
   renderer.shadowMap.enabled = true;
@@ -297,7 +326,7 @@ async function main() {
   sun.shadow.needsUpdate = true;
   scene.add(sun);
 
-  const renderActors = createActorLayer(scene, layout, footShadow, actors, events);
+  const renderActors = createActorLayer(scene, layout, shadows, actors, events);
   let maxVisibleActors = 0;
 
   function render(time) {
@@ -337,6 +366,7 @@ async function main() {
   }
 
   const play = document.querySelector('#play');
+  const speed = document.querySelector('#speed');
   const slider = document.querySelector('#time');
   const stamp = document.querySelector('#stamp');
   const lastExit = events.reduce((end, event) => Math.max(end, event.end), 0);
@@ -348,9 +378,14 @@ async function main() {
     render(time);
   }
   let startedAt = null;
+  let startTime = 0;
+  let rate = Number(speed.value);
   let handle;
-  function playFrame() {
-    const time = Math.min((performance.now() - startedAt) / 1000, Number(slider.max));
+  function timeAt(now) {
+    return Math.min(startTime + Math.max(0, now - startedAt) / 1000 * rate, Number(slider.max));
+  }
+  function playFrame(now) {
+    const time = timeAt(now);
     seek(time);
     if (time < Number(slider.max)) {
       handle = requestAnimationFrame(playFrame);
@@ -369,12 +404,25 @@ async function main() {
       return;
     }
     if (Number(slider.value) >= Number(slider.max)) seek(0);
-    startedAt = performance.now() - Number(slider.value) * 1000;
+    startTime = Number(slider.value);
+    startedAt = performance.now();
     play.textContent = '暂停';
     handle = requestAnimationFrame(playFrame);
   });
+  speed.addEventListener('change', () => {
+    if (startedAt !== null) {
+      const now = performance.now();
+      startTime = timeAt(now);
+      startedAt = now;
+    }
+    rate = Number(speed.value);
+  });
   slider.addEventListener('input', () => { pause(); seek(Number(slider.value)); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pause();
+  });
   play.disabled = false;
+  speed.disabled = false;
   slider.disabled = false;
   seek(0);
 }

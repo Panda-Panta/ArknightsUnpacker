@@ -38,9 +38,9 @@ def _gate_positions(level, layout):
     return gates
 
 
-def _export_gate(installation, version, key, output):
+def _export_gate(installation, version, key, output, bundle_cache):
     _environment, objects, asset = _open_scene(installation, f'battle/prefabs/effects/{key}', version,
-                                               extension='.prefab')
+                                               extension='.prefab', bundle_cache=bundle_cache)
     root, objects = _prefab_objects(objects, asset['path'])
     by_game, hierarchy = _hierarchy(objects)
     inverse_root = np.linalg.inv(hierarchy(by_game[root.path_id])[1])
@@ -91,10 +91,11 @@ def configure_scene_tiles(game_root, resource_version, level, output, layout, *,
     output = validate_output_root(output, [installation.root])
     output.mkdir(parents=True, exist_ok=True)
     props = []
+    bundle_cache = {}
     for key, positions in gates.items():
         if cancel is not None:
             cancel.check()
         asset = f'{key}.glb'
-        _export_gate(installation, resource_version, key, output / asset)
+        _export_gate(installation, resource_version, key, output / asset, bundle_cache)
         props.append({'asset': asset, 'positions': positions})
     layout.setdefault('props', []).extend(props)

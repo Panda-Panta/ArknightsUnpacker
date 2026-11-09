@@ -12,7 +12,7 @@ ArknightsUnpacker/
 │  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
 │  ├─ level_preview_cache.py      按安装、资源版本和关卡绑定本地动画
-│  ├─ level_preview_server.py     向本机浏览器提供当前回放的所需资源
+│  ├─ level_preview_server.py     向窗口内播放器提供当前回放所需的本机资源
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
@@ -39,6 +39,7 @@ ArknightsUnpacker/
 │     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
 │     ├─ level_catalog_page.py   分类关卡目录和新增筛选
 │     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
+│     ├─ level_replay_view.py   关卡窗口内的 Qt WebEngine 实时播放器
 │     ├─ level_tags_dialog.py    作战指标选择与脚本效果
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览

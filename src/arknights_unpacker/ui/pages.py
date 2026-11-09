@@ -411,16 +411,14 @@ class LevelCatalogPage(PageController):
             dialog.show_message('请在游戏客户端下载关卡资源，然后重新扫描。')
         dialog.show_detail(status)
         if row['available']:
-            self._load_preview_info(path, dialog, status)
-            self._configure_replay(path, caption, dialog)
+            info_job = self._load_preview_info(path, dialog, status)
+            self._configure_replay(path, caption, dialog, info_job)
 
-    def _configure_replay(self, path, caption, dialog):
+    def _configure_replay(self, path, caption, dialog, info_job):
         load = getattr(self.window.services, 'load_level_replay', None)
         identity = self._identity(self._catalog)
         if identity is None or load is None:
             return
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices
         from ..level_preview_server import LevelPreviewServer, missing_preview_runtime
         from ..paths import resource_root
 
@@ -429,13 +427,9 @@ class LevelCatalogPage(PageController):
         player = resource_root() / 'scripts' / 'level_preview'
         server = None
 
-        def open_player():
-            if not QDesktopServices.openUrl(QUrl(server.url)):
-                dialog.show_replay_status('无法启动默认浏览器，请确认浏览器设置后重试。')
-
         def play():
             if server is not None:
-                open_player()
+                dialog.toggle_replay()
                 return
             if missing_preview_runtime(runtime):
                 dialog.show_replay_status(f'缺少本机播放组件。配置目录为 {runtime}')
@@ -447,6 +441,8 @@ class LevelCatalogPage(PageController):
                 return
             dialog.replay_button.setEnabled(False)
             dialog.show_replay_status('正在准备游戏原场景、角色和波次…')
+            if info_job is not None and info_job.status in ('排队中', '运行中'):
+                info_job.token.cancel()
             tags, archive = self._applied_tags.get(path, (None, None))
 
             def done(result):
@@ -456,10 +452,16 @@ class LevelCatalogPage(PageController):
                     return
                 if result['level_id'] != path or result['resource_version'] != version:
                     raise ValueError('回放来源与当前关卡不匹配。')
-                server = LevelPreviewServer(lease.path, player, runtime)
+                session = LevelPreviewServer(lease.path, player, runtime)
+                try:
+                    dialog.show_replay(session.url)
+                except Exception:
+                    session.close()
+                    raise
+                server = session
                 dialog.show_replay_status(f"无部署出怪预览 · {result['spawns']} 次出怪 · {result['duration']:.1f} 秒")
-                dialog.replay_button.setText('打开浏览器回放')
-                open_player()
+                if 'seed' in result:
+                    dialog.replay_status.setToolTip(f"本次回放的随机种子为 {result['seed']}")
 
             def settled(completed):
                 if completed is not job:
@@ -564,6 +566,7 @@ class LevelCatalogPage(PageController):
         job = self.window.queue.submit('读取关卡脚本', lambda **kw: load(root, path, version, **kw),
                                        done, show_in_tasks=False)
         dialog.finished.connect(lambda *_: job.token.cancel())
+        return job
 
     @staticmethod
     def _with_metadata(row, by_level, chapters):

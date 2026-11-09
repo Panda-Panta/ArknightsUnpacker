@@ -68,7 +68,7 @@ preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
 entrypoint = root / "packaging" / ("preflight.py" if preflight else "entrypoint.py")
 a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, datas=datas,
              hiddenimports=hiddenimports,
-             excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"],
+             excludes=["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"],
              hookspath=[], hooksconfig={}, runtime_hooks=[], noarchive=False, optimize=0)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ArknightsUnpacker",

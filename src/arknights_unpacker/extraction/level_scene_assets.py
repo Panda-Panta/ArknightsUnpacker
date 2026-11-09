@@ -23,7 +23,7 @@ from arknights_unpacker.paths import atomic_json
 REFLECT_Z = np.diag([1., 1., -1.])
 
 
-def _open_scene(installation, logical, version, *, extension='.unity'):
+def _open_scene(installation, logical, version, *, extension='.unity', bundle_cache=None):
     manifests, problems = collect_manifests(installation)
     manifest = manifests.get("hot") or manifests.get("base")
     if not manifest or manifest.get("versionId") != version:
@@ -41,6 +41,9 @@ def _open_scene(installation, logical, version, *, extension='.unity'):
         raise ValueError(f"活动索引未找到唯一 Unity 资源：{logical}{extension}")
     asset = candidates[0]
     bundle = index["bundles"][asset["bundle_index"]]
+    if bundle_cache is not None and bundle['name'] in bundle_cache:
+        env, objects = bundle_cache[bundle['name']]
+        return env, objects, asset
     entries = {key: {row["name"]: row for row in value["abInfos"]}
                for key, value in manifests.items()}
     active = entries.get("hot") or entries["base"]
@@ -63,6 +66,8 @@ def _open_scene(installation, logical, version, *, extension='.unity'):
     for name in dependencies:
         if name != bundle["name"]:
             env.load_file(str(locate(name)))
+    if bundle_cache is not None:
+        bundle_cache[bundle['name']] = env, objects
     return env, objects, asset
 
 

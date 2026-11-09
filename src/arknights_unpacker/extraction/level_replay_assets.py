@@ -9,6 +9,7 @@ from arknights_unpacker.extraction.gameplay import load_level_data
 from arknights_unpacker.extraction.level_replay import build_level_replay
 from arknights_unpacker.extraction.level_tags import load_level_tags
 from arknights_unpacker.extraction.level_variants import apply_level_tags
+from arknights_unpacker.extraction.manifest import share_resource_manifest_reads
 from arknights_unpacker.paths import atomic_json
 
 from .level_actor_assets import extract_actors
@@ -16,7 +17,7 @@ from .level_scenes import level_scene_sources
 
 
 def prepare_replay(game_root, level_id, resource_version, output, *, caption=None, tag_ids=None,
-                   crisis_info=None, emit=null_progress, cancel=None):
+                   crisis_info=None, seed=None, emit=null_progress, cancel=None):
     cancel = cancel or CancelToken()
     output = validate_output_root(output, [Path(game_root).resolve()])
     source, level = load_level_data(game_root, level_id, resource_version, emit=emit, cancel=cancel)
@@ -45,7 +46,7 @@ def prepare_replay(game_root, level_id, resource_version, output, *, caption=Non
     emit({'message': '正在读取游戏原始敌人骨骼和移动动画…'})
     actors = extract_actors(game_root, sorted(enemy_ids), resource_version, output,
                            enemy_levels=enemy_levels, cancel=cancel)
-    replay = build_level_replay(level, actors, cancel=cancel)
+    replay = build_level_replay(level, actors, seed=seed, cancel=cancel)
     if not replay['complete']:
         detail = '；'.join(replay['diagnostics']) or '无法确定完整的波次时间轴。'
         raise ValueError(detail)
@@ -58,8 +59,9 @@ def prepare_replay(game_root, level_id, resource_version, output, *, caption=Non
     return replay, level
 
 
+@share_resource_manifest_reads()
 def prepare_level_playback(game_root, level_id, resource_version, output, *, scene=None,
-                           caption=None, tag_ids=None, crisis_info=None, emit=null_progress, cancel=None):
+                           caption=None, tag_ids=None, crisis_info=None, seed=None, emit=null_progress, cancel=None):
     from .level_replay_tiles import configure_scene_tiles
     from .level_scene_assets import extract_scene
 
@@ -74,7 +76,7 @@ def prepare_level_playback(game_root, level_id, resource_version, output, *, sce
     if scene is not None and not scene['available']:
         raise ValueError('原始地图场景资源未安装，请在游戏客户端下载后重新扫描。')
     replay, level = prepare_replay(game_root, level_id, resource_version, output, caption=caption,
-                                   tag_ids=tag_ids, crisis_info=crisis_info, emit=emit, cancel=cancel)
+                                   tag_ids=tag_ids, crisis_info=crisis_info, seed=seed, emit=emit, cancel=cancel)
     emit({'message': '正在提取游戏原场景、材质和光照…'})
     info = extract_scene(game_root, scene_asset, resource_version, output, cancel=cancel)
     if info['layoutDiagnostics']:
@@ -85,7 +87,7 @@ def prepare_level_playback(game_root, level_id, resource_version, output, *, sce
     cancel.check()
     atomic_json(layout_path, layout)
     return {'level_id': level_id, 'resource_version': resource_version, 'duration': replay['duration'],
-            'spawns': len(replay['events']), 'diagnostics': replay['diagnostics']}
+            'spawns': len(replay['events']), 'diagnostics': replay['diagnostics'], 'seed': replay['seed']}
 
 
 def main():
@@ -97,15 +99,16 @@ def main():
     parser.add_argument('--caption')
     parser.add_argument('--tag', action='append', help='Apply an indicator ID; repeat to select a connected set.')
     parser.add_argument('--crisis-info', type=Path, help='Season JSON for the selected Crisis Contract stage.')
+    parser.add_argument('--seed', type=int, help='Reuse a recorded replay seed.')
     parser.add_argument('--fixture-only', action='store_true', help='Export the time axis and actors only.')
     args = parser.parse_args()
-    options = dict(caption=args.caption, tag_ids=args.tag, crisis_info=args.crisis_info)
+    options = dict(caption=args.caption, tag_ids=args.tag, crisis_info=args.crisis_info, seed=args.seed)
     if args.fixture_only:
         replay, _ = prepare_replay(args.game_root, args.level_id, args.resource_version, args.output, **options)
-        print(f"{len(replay['events'])} spawns, {replay['duration']:.1f} battle seconds")
+        print(f"{len(replay['events'])} spawns, {replay['duration']:.1f} battle seconds, seed {replay['seed']}")
     else:
         info = prepare_level_playback(args.game_root, args.level_id, args.resource_version, args.output, **options)
-        print(f"{info['spawns']} spawns, {info['duration']:.1f} battle seconds")
+        print(f"{info['spawns']} spawns, {info['duration']:.1f} battle seconds, seed {info['seed']}")
 
 
 if __name__ == '__main__':
