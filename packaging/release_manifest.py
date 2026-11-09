@@ -7,7 +7,35 @@ from importlib import metadata
 import json
 from pathlib import Path
 import platform
+import re
 import subprocess
+
+
+_WEBENGINE_ASSETS = (
+    "PySide6/Qt6WebEngineCore.dll", "PySide6/Qt6WebEngineWidgets.dll",
+    "PySide6/QtWebEngineCore.pyd", "PySide6/QtWebEngineWidgets.pyd", "PySide6/QtWebEngineProcess.exe",
+    "PySide6/qt.conf", "PySide6/resources/icudtl.dat", "PySide6/resources/v8_context_snapshot.bin",
+    "PySide6/resources/qtwebengine_resources.pak", "PySide6/resources/qtwebengine_devtools_resources.pak",
+    "PySide6/resources/qtwebengine_resources_100p.pak", "PySide6/resources/qtwebengine_resources_200p.pak",
+    "PySide6/translations/qtwebengine_locales/en-US.pak",
+    "PySide6/translations/qtwebengine_locales/zh-CN.pak",
+)
+
+
+def _forbidden_asset(path: Path) -> bool:
+    names = [part.casefold() for part in path.parts]
+    if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in names):
+        return True
+    if not any("webengine" in part for part in names):
+        return False
+    if path.parts[0] == "_internal" and Path(*path.parts[1:]).as_posix() in _WEBENGINE_ASSETS:
+        return False
+    parent = path.parent.as_posix()
+    if parent == "_internal/PySide6/translations":
+        return not re.fullmatch(r"qtwebengine_[a-z]{2,3}(?:_[A-Za-z0-9]{2,4})?\.qm", path.name)
+    if parent == "_internal/PySide6/translations/qtwebengine_locales":
+        return not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\.pak", path.name)
+    return True
 
 
 def sha256(path: Path) -> str:
@@ -74,13 +102,13 @@ def main():
         "vendor/lz4ak/Block.py", "fmod_toolkit/libfmod/Windows/x64/fmod.dll",
         "PySide6/plugins/platforms/qwindows.dll", "docs/USER_GUIDE.md", "docs/THIRD_PARTY_NOTICES.md",
         "licenses/Ark-Unpacker/Ark-Unpacker-LICENSE", "licenses/LGPL-3.0-only.txt",
+        *_WEBENGINE_ASSETS,
     )
     missing = [name for name in required_assets if not (bundle / "_internal" / name).is_file()]
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
-    forbidden = [p.relative_to(bundle).as_posix() for p in files_under(bundle)
-                 if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in p.relative_to(bundle).parts)
-                 or "webengine" in p.name.lower()]
+    relative_paths = (path.relative_to(bundle) for path in files_under(bundle))
+    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path)]
     if forbidden:
         raise SystemExit("Unexpected development or QtWebEngine files in bundle: " + ", ".join(forbidden[:20]))
     provenance = {

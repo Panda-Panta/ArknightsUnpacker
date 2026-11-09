@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QStackedWidget, QVBoxLayout
 
 from .resource_preview import ResourcePreviewWidget
@@ -41,6 +42,8 @@ class LevelPreviewDialog(QDialog):
         self.content.addWidget(self.viewer)
         layout.addWidget(self.content, 1)
         self.replay_view = None
+        self._has_video = False
+        self._windowed_state = None
 
         self.replay_status = QLabel()
         self.replay_status.setTextFormat(Qt.TextFormat.PlainText)
@@ -52,6 +55,13 @@ class LevelPreviewDialog(QDialog):
         self.replay_button.setToolTip('读取原始场景和出怪脚本，在预览窗口内播放。')
         buttons.addButton(self.replay_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.replay_button.hide()
+        self.fullscreen_button = QPushButton('全屏播放')
+        self.fullscreen_button.clicked.connect(self._toggle_fullscreen)
+        buttons.addButton(self.fullscreen_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.fullscreen_button.hide()
+        self._escape_fullscreen = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self._escape_fullscreen.setEnabled(False)
+        self._escape_fullscreen.activated.connect(self._leave_fullscreen)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText('关闭')
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -85,9 +95,29 @@ class LevelPreviewDialog(QDialog):
         show_player = self.content.currentWidget() is self.viewer
         if show_player:
             self.viewer.player.pause()
+        else:
+            self._leave_fullscreen()
         self.content.setCurrentWidget(view if show_player else self.viewer)
         view.page().setVisible(show_player)
         self.replay_button.setText('返回地图预览' if show_player else '显示出怪回放')
+        self.fullscreen_button.setVisible(show_player or self._has_video)
+
+    def _toggle_fullscreen(self):
+        if self.isFullScreen():
+            self._leave_fullscreen()
+            return
+        self._windowed_state = self.windowState()
+        self.showFullScreen()
+        self.fullscreen_button.setText('退出全屏')
+        self._escape_fullscreen.setEnabled(True)
+
+    def _leave_fullscreen(self):
+        if self._windowed_state is None:
+            return
+        self.setWindowState(self._windowed_state)
+        self._windowed_state = None
+        self.fullscreen_button.setText('全屏播放')
+        self._escape_fullscreen.setEnabled(False)
 
     def _replay_loaded(self, loaded):
         if not loaded and self.replay_view is not None:
@@ -103,6 +133,7 @@ class LevelPreviewDialog(QDialog):
 
     def show_media(self, path):
         suffix = path.suffix.casefold()
+        self._has_video = False
         if suffix not in {'.mp4', '.png'}:
             self.viewer.preview.setPlainText('地图预览需要 PNG 或 MP4 文件。')
         elif suffix == '.mp4' and path.is_file() and not _has_mp4_header(path):
@@ -111,6 +142,8 @@ class LevelPreviewDialog(QDialog):
             self.viewer.preview.setPlainText('地图预览文件不存在或无法读取。请重新生成预览。')
         elif suffix == '.mp4':
             self.viewer.player.setPlaybackRate(2.0)
+            self._has_video = True
+        self.fullscreen_button.setVisible(self._has_video or self.content.currentWidget() is self.replay_view)
 
     def done(self, result):
         if self.replay_view is not None:
