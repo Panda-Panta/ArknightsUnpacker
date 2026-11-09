@@ -80,6 +80,8 @@ class MainWindow(QMainWindow):
         self.resize(1450, 930)
         self.setMinimumSize(1050, 700)
         self.queue = JobQueue(self, history_root=Path(services.data_root) / 'queue', resume_handler=self.prepare_recovery)
+        self.native_replay_queue = JobQueue(self)
+        self.native_replay_queue.changed.connect(self._finish_closing)
         removed_previews = {Path(path) for path in self.preview_cache.last_cleanup['removed']}
         self.queue.forget_finished([job.job_id for job in self.queue.jobs
             if job.status == '成功' and (job.request or {}).get('output') and
@@ -371,7 +373,10 @@ class MainWindow(QMainWindow):
         self.scan_priority.setEnabled(not self.queue.busy)
         self.pages.queue_changed()
         self._refresh_history_actions()
-        if self._closing and not self.queue.busy:
+        self._finish_closing()
+
+    def _finish_closing(self):
+        if self._closing and not (self.queue.busy or self.native_replay_queue.busy):
             QTimer.singleShot(0, self.close)
 
     def choose_root(self):
@@ -998,8 +1003,9 @@ class MainWindow(QMainWindow):
         for dialog in list(self._dialogs):
             dialog.close()
         self.monitor_timer.stop()
+        self.native_replay_queue.shutdown()
         self.queue.shutdown()
-        if self.queue.busy:
+        if self.queue.busy or self.native_replay_queue.busy:
             self.show_status('正在取消任务并等待工作进程退出，完成后将自动关闭。')
             event.ignore()
             return

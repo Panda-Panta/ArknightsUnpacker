@@ -78,6 +78,7 @@ def worker_entry(request_file: str) -> int:
                 value = load_level_preview_info(**args, emit=emit, cancel=cancel)
             elif operation == "level_replay":
                 native_runtime = args.pop('native_runtime', None)
+                prewarm = args.pop('native_prewarm', False)
                 if native_runtime is None:
                     from .extraction.level_replay_assets import prepare_level_playback
 
@@ -85,7 +86,8 @@ def worker_entry(request_file: str) -> int:
                 else:
                     from .level_native_cache import prepare_cached_native_replay
 
-                    value = prepare_cached_native_replay(Path(native_runtime), args, emit=emit, cancel=cancel)
+                    value = prepare_cached_native_replay(Path(native_runtime), args, emit=emit, cancel=cancel,
+                                                         prewarm=prewarm)
             elif operation == "level_tag_options":
                 from .extraction.gameplay import load_level_data
                 from .extraction.level_tags import load_level_tags
@@ -198,9 +200,12 @@ class WorkerRunner:
             with self._lock:
                 if self._closed:
                     raise RuntimeError("工作进程管理器已关闭")
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if operation == "level_replay" and args.get("native_prewarm"):
+                    flags |= getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
                 proc = subprocess.Popen(cmd, cwd=task, stdout=log, stderr=log,
                                         text=True, encoding="utf-8", errors="replace", env=env,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                        creationflags=flags)
                 self._active.add(proc)
 
             try:

@@ -267,7 +267,8 @@ class AppServices:
         return cached_native_replay(self.data_root, options)
 
     def load_level_replay(self, root, logical_path, resource_version, output_dir, *, caption,
-                          tag_ids=None, crisis_info_path=None, native=False, emit=null_progress, cancel=None):
+                          tag_ids=None, crisis_info_path=None, native=False, prewarm=False,
+                          emit=null_progress, cancel=None):
         args = self._level_replay_options(root, logical_path, resource_version, caption, tag_ids, crisis_info_path)
         directory = Path(output_dir).resolve()
         if directory.parent != self.data_root / 'preview' or not directory.is_dir():
@@ -275,6 +276,8 @@ class AppServices:
         args['output'] = str(directory)
         if native:
             args['native_runtime'] = str(self.data_root / 'level-preview-runtime')
+            if prewarm:
+                args['native_prewarm'] = True
         return self.runner.run('level_replay', args, emit, cancel)
 
     def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None,

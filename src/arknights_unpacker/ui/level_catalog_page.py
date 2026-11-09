@@ -59,6 +59,7 @@ def _chapter_order(key):
 class LevelCatalogView(QWidget):
     preview_requested = Signal(str)
     tags_requested = Signal(str, str)
+    replay_selection_changed = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -296,6 +297,7 @@ class LevelCatalogView(QWidget):
         self.tags_button.setVisible(bool(row and row['category'] in _INDICATOR_CATEGORIES))
         self.tags_button.setEnabled(bool(row and row['available']))
         self.tags_button.setText('导入赛季指标…' if row and row['category'] == '危机合约' else '配置作战指标…')
+        self.replay_selection_changed.emit(row['id'] if row and row['available'] else None)
 
     def _request_tags(self):
         row = self._selected_row()

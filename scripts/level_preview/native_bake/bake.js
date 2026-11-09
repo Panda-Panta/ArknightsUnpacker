@@ -39,16 +39,27 @@ async function bake() {
     if (config.initialSkin) sprite.skeleton.setSkinByName(config.initialSkin);
     const clips = [clip('move', config.clip, config.clipSpeed, config.clipLoop)];
     if (config.idleClip) clips.push(clip('idle', config.idleClip, config.idleClipSpeed, config.idleClipLoop));
+    const attack = config.periodicAttack;
+    if (attack?.phases?.length) {
+      attack.phases.forEach((phase, index) => {
+        clips.push(clip(`attack-${index}`, phase.clip, phase.clipSpeed, phase.loop ?? false));
+      });
+    } else if (attack) {
+      clips.push(clip('attack', attack.clip, attack.clipSpeed, attack.loop ?? false));
+    }
 
     function clip(mode, animation, speed, loop) {
       speed ??= 1;
+      loop ??= true;
       const source = data.findAnimation(animation);
       if (!source || !Number.isFinite(speed) || speed <= 0) {
         throw new Error(`${name}: 原版 Spine 动作不可用 ${animation}`);
       }
       const duration = source.duration / speed || 1 / 24;
-      const frames = Math.max(1, Math.min(120, Math.ceil(duration * 24)));
-      return {mode, animation, speed, loop: loop ?? true, duration, frames, fps: frames / duration};
+      // A finite action must hold its actual final pose after the clip ends.
+      const frames = Math.max(1, Math.min(120, Math.ceil(duration * 24) + (loop ? 0 : 1)));
+      const intervals = loop ? frames : Math.max(1, frames - 1);
+      return {mode, animation, speed, loop, duration, frames, fps: intervals / duration};
     }
 
     function applyClip({animation, loop, speed, fps, frames}, each) {

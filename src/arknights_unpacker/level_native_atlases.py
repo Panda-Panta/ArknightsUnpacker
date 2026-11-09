@@ -47,7 +47,14 @@ def _actor_inputs(assets, configs):
             if not relative.startswith('actors/'):
                 raise ValueError(f'原生角色资源不在本次回放目录：{relative}')
             files[relative] = _input_file(assets, relative)
-        modes = ('move', 'idle') if config.get('idleClip') else ('move',)
+        modes = ['move']
+        if config.get('idleClip'):
+            modes.append('idle')
+        if attack := config.get('periodicAttack'):
+            if phases := attack.get('phases'):
+                modes.extend(f'attack-{index}' for index in range(len(phases)))
+            else:
+                modes.append('attack')
         expected[actor_id] = {mode: f'{actor_id}-{mode}.png' for mode in modes}
     return files, expected
 

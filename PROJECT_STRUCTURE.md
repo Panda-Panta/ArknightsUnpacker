@@ -47,6 +47,7 @@ ArknightsUnpacker/
 │     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
 │     ├─ level_replay_view.py   关卡窗口内的 Qt WebEngine 实时播放器
 │     ├─ level_native_dialog.py Qt 宿主和 Godot 原生回放进程
+│     ├─ level_native_preview.py 按选择和指标后台准备原生回放，协调播放及取消
 │     ├─ level_tags_dialog.py    作战指标选择与脚本效果
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览

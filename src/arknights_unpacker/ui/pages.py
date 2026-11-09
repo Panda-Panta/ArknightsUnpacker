@@ -311,6 +311,7 @@ class LevelCatalogPage(PageController):
         self._applied_tags = {}
         self._preview_dialog = None
         self._map_job = None
+        self._native_preloader = None
         super().__init__(window)
 
     def connect(self):
@@ -319,6 +320,13 @@ class LevelCatalogPage(PageController):
         self.window.queue.settled.connect(self._tags_settled)
         self.view.tags_requested.connect(self._load_tags)
         self.view.preview_requested.connect(self._open_preview)
+        from ..paths import resource_root
+
+        project = resource_root() / 'scripts/level_preview/native_player'
+        if (project / 'Godot.exe').is_file() and hasattr(self.window.services, 'cached_native_level_replay'):
+            from .level_native_preview import NativeReplayPreloader
+
+            self._native_preloader = NativeReplayPreloader(self.window, self.view, self._native_request, project)
 
     def set_root(self, root):
         root = Path(root).resolve()
@@ -342,6 +350,8 @@ class LevelCatalogPage(PageController):
             return
         if self._identity(catalog) != self._identity(self._catalog):
             self._applied_tags.clear()
+            if self._native_preloader is not None:
+                self._native_preloader.cancel()
             if self._metadata_job is not None:
                 self._metadata_job.token.cancel()
                 self._metadata_job = None
@@ -414,6 +424,24 @@ class LevelCatalogPage(PageController):
             info_job = self._load_preview_info(path, dialog, status)
             self._configure_replay(path, caption, dialog, info_job)
 
+    def _native_request(self, path, caption=None):
+        identity = self._identity(self._catalog)
+        if identity is None:
+            return None
+        row = next((item for item in self._catalog['levels'] if item['id'] == path), None)
+        if row is None or not row['available']:
+            return None
+        from .level_native_preview import NativeReplayRequest
+
+        tags, archive = self._applied_tags.get(path, (None, None))
+        return NativeReplayRequest(*identity, path, tuple(tags) if tags is not None else None,
+                                   archive, caption or row['name'])
+
+    def _apply_tags(self, path, ids, archive):
+        self._applied_tags[path] = (ids, archive)
+        if self._native_preloader is not None:
+            self._native_preloader.timer.start()
+
     def _configure_replay(self, path, caption, dialog, info_job):
         load = getattr(self.window.services, 'load_level_replay', None)
         identity = self._identity(self._catalog)
@@ -425,83 +453,51 @@ class LevelCatalogPage(PageController):
         root, version = identity
         runtime = self.window.services.data_root / 'level-preview-runtime'
         player = resource_root() / 'scripts' / 'level_preview'
-        native_project = player / 'native_player'
-        native_engine = native_project / 'Godot.exe'
-        native_button = None
-        if path == 'gamedata/levels/obt/campaign/level_camp_r_16' and native_engine.is_file():
-            from PySide6.QtWidgets import QDialogButtonBox, QPushButton
-
-            native_button = QPushButton('原生回放（试验）…', dialog)
-            dialog.buttons.addButton(native_button, QDialogButtonBox.ButtonRole.ActionRole)
+        native = self._native_preloader
+        if native is not None and (request := self._native_request(path, caption)) is not None:
+            native.attach(request, dialog, info_job)
         server = None
 
-        def set_ready(ready):
-            dialog.replay_button.setEnabled(ready)
-            if native_button is not None:
-                native_button.setEnabled(ready)
-
-        def play(*, native=False):
-            if not native and server is not None:
+        def play():
+            if server is not None:
                 dialog.toggle_replay()
                 return
-            if not native and missing_preview_runtime(runtime):
+            if missing_preview_runtime(runtime):
                 dialog.show_replay_status(f'缺少本机播放组件。配置目录为 {runtime}')
                 return
             tags, archive = self._applied_tags.get(path, (None, None))
             try:
-                cached = self.window.services.cached_native_level_replay(
-                    root, path, version, caption=caption, tag_ids=tags, crisis_info_path=archive) if native else None
                 lease = self.window.preview_cache.allocate('objects')
             except (OSError, ValueError) as error:
                 dialog.show_replay_status(str(error))
                 return
-            set_ready(False)
-            dialog.show_replay_status('正在准备游戏原场景、角色和波次…' if not native
-                                      else '正在准备原生场景、角色动画和波次…')
+            if native is not None:
+                native.suspend(dialog)
+            dialog.replay_button.setEnabled(False)
+            dialog.show_replay_status('正在准备游戏原场景、角色和波次…')
             if info_job is not None and info_job.status in ('排队中', '运行中'):
                 info_job.token.cancel()
             shown = False
-            native_session = None
-            job = None
-
-            def native_closed(*_):
-                nonlocal native_session
-                native_session = None
-                lease.release()
 
             def done(result):
-                nonlocal server, shown, native_session
-                if ((job is not None and job.token.cancelled) or self._preview_dialog is not dialog or
+                nonlocal server, shown
+                if (job.token.cancelled or self._preview_dialog is not dialog or
                         self._identity(self._catalog) != identity):
                     return
                 if result['level_id'] != path or result['resource_version'] != version:
                     raise ValueError('回放来源与当前关卡不匹配。')
-                if native:
-                    from PySide6.QtCore import Qt
-                    from .level_native_dialog import NativeLevelReplayDialog
-
-                    native_session = NativeLevelReplayDialog(dialog, caption, engine=native_engine,
-                                                              project=native_project, assets=result['native_assets'],
-                                                              log_dir=lease.path)
-                    native_session.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-                    self.window._track_dialog(native_session)
-                    native_session.finished.connect(native_closed)
-                    native_session.open()
-                else:
-                    session = LevelPreviewServer(lease.path, player, runtime)
-                    try:
-                        dialog.show_replay(session.url)
-                    except Exception:
-                        session.close()
-                        raise
-                    server = session
+                session = LevelPreviewServer(lease.path, player, runtime)
+                try:
+                    dialog.show_replay(session.url)
+                except Exception:
+                    session.close()
+                    raise
+                server = session
                 shown = True
                 dialog.show_replay_status(f"无部署出怪预览 · {result['spawns']} 次出怪 · {result['duration']:.1f} 秒")
                 details = list(result.get('diagnostics') or ())
                 if 'seed' in result:
                     details.insert(0, f"本次回放的随机种子为 {result['seed']}")
-                if result.get('native_cache_hit'):
-                    details.insert(0, '已复用本机准备的原版关卡和动画。')
                 dialog.replay_status.setToolTip('\n'.join(details))
 
             def settled(completed):
@@ -512,7 +508,7 @@ class LevelCatalogPage(PageController):
                 if not shown:
                     lease.release()
                 if self._preview_dialog is dialog:
-                    set_ready(True)
+                    dialog.replay_button.setEnabled(True)
                     if not shown:
                         reason = [line for line in job.last_error.strip().splitlines()
                                   if line and not line.startswith('诊断日志：')]
@@ -522,39 +518,20 @@ class LevelCatalogPage(PageController):
 
             def close(*_):
                 nonlocal server
-                if job is not None:
-                    job.token.cancel()
-                if native_session is not None:
-                    native_session.close()
-                if not native and server is not None:
+                job.token.cancel()
+                if server is not None:
                     server.close()
                     server = None
                 lease.release()
 
-            if cached is not None:
-                try:
-                    done(cached)
-                except (OSError, ValueError, RuntimeError) as error:
-                    dialog.show_replay_status(str(error))
-                finally:
-                    lease.finish()
-                    set_ready(True)
-                    if not shown:
-                        close()
-                dialog.finished.connect(close)
-                return
-
-            backend = {'native': True} if native else {}
             job = self.window.queue.submit('准备关卡出怪预览', lambda **kw: load(
-                root, path, version, lease.path, caption=caption, tag_ids=tags, crisis_info_path=archive, **backend, **kw),
+                root, path, version, lease.path, caption=caption, tag_ids=tags, crisis_info_path=archive, **kw),
                 done, show_in_tasks=False)
             self.window.queue.settled.connect(settled)
             dialog.finished.connect(close)
 
         dialog.replay_button.clicked.connect(play)
         dialog.replay_button.show()
-        if native_button is not None:
-            native_button.clicked.connect(lambda: play(native=True))
 
     def _show_preview(self, path, caption):
         from PySide6.QtCore import Qt
@@ -699,7 +676,7 @@ class LevelCatalogPage(PageController):
             dialog = LevelTagsDialog(result, caption, self.view)
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self._tags_dialog = dialog
-            dialog.variant_applied.connect(lambda ids: self._applied_tags.__setitem__(path, (ids, archive)))
+            dialog.variant_applied.connect(lambda ids: self._apply_tags(path, ids, archive))
             dialog.finished.connect(lambda *_: setattr(self, '_tags_dialog', None))
             dialog.open()
 
