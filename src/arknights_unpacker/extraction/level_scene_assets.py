@@ -321,6 +321,11 @@ def _meshes(objects, by_game, hierarchy):
             mesh = asset.read()
             geometry = MeshHandler(mesh)
             geometry.process()
+            # Static batches can share one large vertex buffer across many
+            # submeshes. Convert that buffer once before indexing each part.
+            for channel in ("m_Vertices", "m_Normals", "m_Tangents", "m_UV0", "m_UV1"):
+                if (values := getattr(geometry, channel)) is not None:
+                    setattr(geometry, channel, np.asarray(values))
             cached[key] = mesh, geometry, geometry.get_triangles()
         mesh, geometry, triangles = cached[key]
         batch = renderer.m_StaticBatchInfo
@@ -343,20 +348,20 @@ def _primitive(glb, renderer, pose, source, sub, material, *, prefab_lightmap=No
     linear = REFLECT_Z @ pose[:3, :3]
     if np.linalg.det(linear) < 0:
         faces = faces[:, [0, 2, 1]]
-    points = np.asarray(geometry.m_Vertices)[vertices, :3] @ linear.T + REFLECT_Z @ pose[:3, 3]
-    normals = np.asarray(geometry.m_Normals)[vertices, :3] @ np.linalg.inv(linear)
+    points = geometry.m_Vertices[vertices, :3] @ linear.T + REFLECT_Z @ pose[:3, 3]
+    normals = geometry.m_Normals[vertices, :3] @ np.linalg.inv(linear)
     normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1.e-8)
     attrs = {"POSITION": glb.accessor(points, "VEC3", bounds=True),
              "NORMAL": glb.accessor(normals, "VEC3")}
     if geometry.m_Tangents is not None:
-        tangents = np.asarray(geometry.m_Tangents)[vertices, :4].copy()
+        tangents = geometry.m_Tangents[vertices, :4].copy()
         tangent = tangents[:, :3] @ linear.T
         tangent -= (tangent * normals).sum(axis=1, keepdims=True) * normals
         tangents[:, :3] = tangent / np.maximum(np.linalg.norm(tangent, axis=1, keepdims=True), 1.e-8)
         tangents[:, 3] *= np.sign(np.linalg.det(linear))
         attrs["TANGENT"] = glb.accessor(tangents, "VEC4")
     if geometry.m_UV0 is not None:
-        uv0 = np.asarray(geometry.m_UV0)[vertices, :2].copy()
+        uv0 = geometry.m_UV0[vertices, :2].copy()
         uv0[:, 1] = 1 - uv0[:, 1]
         attrs["TEXCOORD_0"] = glb.accessor(uv0, "VEC2")
     lightmap_index, tiling = prefab_lightmap or (renderer.m_LightmapIndex, None)
@@ -364,7 +369,7 @@ def _primitive(glb, renderer, pose, source, sub, material, *, prefab_lightmap=No
     if prefab_lightmap and lightmap_uv is None:
         lightmap_uv = geometry.m_UV0
     if lightmap_index < 65534 and lightmap_uv is not None:
-        uv1 = np.asarray(lightmap_uv)[vertices, :2].copy()
+        uv1 = lightmap_uv[vertices, :2].copy()
         # A Unity static batch already has atlas UVs. Ordinary meshes keep local UVs.
         if not renderer.m_StaticBatchInfo.subMeshCount:
             sx, sy, ox, oy = tiling if tiling is not None else _vector(renderer.m_LightmapTilingOffset, "xyzw")

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 from importlib import metadata
 import json
+import os
 from pathlib import Path
 import platform
 import re
@@ -19,6 +20,15 @@ _WEBENGINE_ASSETS = (
     "PySide6/resources/qtwebengine_resources_100p.pak", "PySide6/resources/qtwebengine_resources_200p.pak",
     "PySide6/translations/qtwebengine_locales/en-US.pak",
     "PySide6/translations/qtwebengine_locales/zh-CN.pak",
+)
+
+_GODOT_EXE = "scripts/level_preview/native_player/Godot.exe"
+_GODOT_ASSETS = (
+    _GODOT_EXE,
+    "scripts/level_preview/native_player/project.godot", "scripts/level_preview/native_player/replay.tscn",
+    "scripts/level_preview/native_player/replay.gd", "scripts/level_preview/native_player/battle_static.gdshader",
+    "scripts/level_preview/native_bake/bake.html", "scripts/level_preview/native_bake/bake.js",
+    "licenses/Godot/LICENSE.txt", "licenses/Godot/COPYRIGHT.txt", "licenses/Godot/source.json",
 )
 
 
@@ -104,6 +114,14 @@ def main():
         "licenses/Ark-Unpacker/Ark-Unpacker-LICENSE", "licenses/LGPL-3.0-only.txt",
         *_WEBENGINE_ASSETS,
     )
+    godot = bundle / "_internal" / _GODOT_EXE
+    include_godot = bool(os.environ.get("ARKNIGHTS_GODOT_RUNTIME"))
+    if include_godot:
+        if not re.search(r"(?:^|[-._])test(?:$|[-._])", args.version, re.IGNORECASE):
+            raise SystemExit("ARKNIGHTS_GODOT_RUNTIME is only supported for a test build")
+        required_assets += _GODOT_ASSETS
+    elif godot.exists():
+        raise SystemExit("Unexpected Godot runtime without ARKNIGHTS_GODOT_RUNTIME")
     missing = [name for name in required_assets if not (bundle / "_internal" / name).is_file()]
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
@@ -117,7 +135,7 @@ def main():
         **source_provenance(root), "python": platform.python_version(),
         "source_consistency_checked": bool(args.source_snapshot),
         "platform": platform.platform(),
-        "preflight": __import__("os").environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
+        "preflight": os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
         "acceptance": "Build succeeded; consult docs/ACCEPTANCE.md for runtime acceptance boundaries.",
         "upstreams": {
             "Ark-Unpacker": "4a4b9efc6be4690b68b70b4a16578950baa066d3",
@@ -126,6 +144,14 @@ def main():
         "dependencies": {d.metadata["Name"]: d.version for d in metadata.distributions() if d.metadata.get("Name")},
         "source_files": current_sources,
     }
+    if include_godot:
+        source = json.loads((root / "packaging/godot/source.json").read_text(encoding="utf-8"))
+        if sha256(godot) != source["executable_sha256"]:
+            raise SystemExit("Godot executable in the bundle does not match the pinned source")
+        for name, notice in source["notices"].items():
+            if sha256(bundle / "_internal" / "licenses" / "Godot" / name) != notice["sha256"]:
+                raise SystemExit(f"Godot notice in the bundle does not match the pinned source: {name}")
+        provenance["godot_runtime"] = {**source, "path": f"_internal/{_GODOT_EXE}"}
     (bundle / "build-info.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     entries = [{"path": p.relative_to(bundle).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in files_under(bundle) if p.name not in ("file-manifest.json", "SHA256SUMS.txt")]
     (bundle / "file-manifest.json").write_text(json.dumps({"version": args.version, "files": entries, "excludes": ["file-manifest.json", "SHA256SUMS.txt"]}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

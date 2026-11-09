@@ -248,20 +248,34 @@ class AppServices:
                                                   'resource_version': resource_version,
                                                   'output_dir': str(directory)}, emit, cancel)
 
-    def load_level_replay(self, root, logical_path, resource_version, output_dir, *, caption,
-                          tag_ids=None, crisis_info_path=None, emit=null_progress, cancel=None):
+    def _level_replay_options(self, root, logical_path, resource_version, caption, tag_ids, crisis_info_path):
         catalog = self._level_catalog_for_version(root, resource_version)
         row = next((item for item in catalog['levels'] if item['id'] == logical_path), None)
         if row is None or not row['available']:
             raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        return {
+            'game_root': str(root), 'level_id': logical_path, 'resource_version': resource_version,
+            'caption': caption, 'scene': row.get('scene'), 'tag_ids': tag_ids,
+            'crisis_info': str(crisis_info_path) if crisis_info_path else None,
+        }
+
+    def cached_native_level_replay(self, root, logical_path, resource_version, *, caption,
+                                   tag_ids=None, crisis_info_path=None):
+        from .level_native_cache import cached_native_replay
+
+        options = self._level_replay_options(root, logical_path, resource_version, caption, tag_ids, crisis_info_path)
+        return cached_native_replay(self.data_root, options)
+
+    def load_level_replay(self, root, logical_path, resource_version, output_dir, *, caption,
+                          tag_ids=None, crisis_info_path=None, native=False, emit=null_progress, cancel=None):
+        args = self._level_replay_options(root, logical_path, resource_version, caption, tag_ids, crisis_info_path)
         directory = Path(output_dir).resolve()
         if directory.parent != self.data_root / 'preview' or not directory.is_dir():
             raise ValueError('出怪预览输出目录不属于当前会话缓存。')
-        return self.runner.run('level_replay', {
-            'game_root': str(root), 'level_id': logical_path, 'resource_version': resource_version,
-            'output': str(directory), 'caption': caption, 'scene': row.get('scene'), 'tag_ids': tag_ids,
-            'crisis_info': str(crisis_info_path) if crisis_info_path else None,
-        }, emit, cancel)
+        args['output'] = str(directory)
+        if native:
+            args['native_runtime'] = str(self.data_root / 'level-preview-runtime')
+        return self.runner.run('level_replay', args, emit, cancel)
 
     def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None,
                                *, crisis_info_path=None):

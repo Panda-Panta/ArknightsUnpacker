@@ -2,6 +2,8 @@
 """Directory-only Windows build; include runtime assets, never the project tree."""
 from importlib import metadata
 from importlib.util import find_spec
+import hashlib
+import json
 from pathlib import Path
 import os
 import sys
@@ -25,6 +27,23 @@ for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"):
     datas.append((str(root / "docs" / name), "docs"))
 for name in ("scene.html", "scene.js", "battle_lighting.js"):
     datas.append((str(root / "scripts" / "level_preview" / name), "scripts/level_preview"))
+
+godot_runtime = os.environ.get("ARKNIGHTS_GODOT_RUNTIME")
+if godot_runtime:
+    godot = Path(godot_runtime).resolve(strict=True)
+    godot_source = root / "packaging" / "godot"
+    expected = json.loads((godot_source / "source.json").read_text(encoding="utf-8"))
+    with godot.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != expected["executable_sha256"]:
+            raise SystemExit("ARKNIGHTS_GODOT_RUNTIME must point to the pinned official Godot 4.7.2 x64 executable")
+    add_tree(godot_source, "licenses/Godot")
+    for folder, names in (
+        ("native_player", ("project.godot", "replay.tscn", "replay.gd", "battle_static.gdshader")),
+        ("native_bake", ("bake.html", "bake.js")),
+    ):
+        destination = f"scripts/level_preview/{folder}"
+        for name in names:
+            datas.append((str(root / destination / name), destination))
 
 # Data-driven class imports and embedded typetrees are essential to UnityPy.
 datas += collect_data_files("UnityPy")
@@ -70,6 +89,9 @@ a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, d
              hiddenimports=hiddenimports,
              excludes=["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"],
              hookspath=[], hooksconfig={}, runtime_hooks=[], noarchive=False, optimize=0)
+if godot_runtime:
+    # It is launched as a separate process. Preserve the vendor executable byte for byte.
+    a.datas.append(("scripts/level_preview/native_player/Godot.exe", str(godot), "DATA"))
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ArknightsUnpacker",
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,

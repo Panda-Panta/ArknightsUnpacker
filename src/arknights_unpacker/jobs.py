@@ -77,8 +77,15 @@ def worker_entry(request_file: str) -> int:
                 from .extraction.gameplay import load_level_preview_info
                 value = load_level_preview_info(**args, emit=emit, cancel=cancel)
             elif operation == "level_replay":
-                from .extraction.level_replay_assets import prepare_level_playback
-                value = prepare_level_playback(**args, emit=emit, cancel=cancel)
+                native_runtime = args.pop('native_runtime', None)
+                if native_runtime is None:
+                    from .extraction.level_replay_assets import prepare_level_playback
+
+                    value = prepare_level_playback(**args, emit=emit, cancel=cancel)
+                else:
+                    from .level_native_cache import prepare_cached_native_replay
+
+                    value = prepare_cached_native_replay(Path(native_runtime), args, emit=emit, cancel=cancel)
             elif operation == "level_tag_options":
                 from .extraction.gameplay import load_level_data
                 from .extraction.level_tags import load_level_tags
