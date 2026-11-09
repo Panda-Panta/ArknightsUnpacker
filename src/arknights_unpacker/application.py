@@ -8,7 +8,7 @@ import sqlite3
 import time
 import uuid
 
-from .contracts import (BuildSpec, CancelToken, DecodedTable, EntityChangeSet,
+from .contracts import (BuildSpec, CancelToken, CancelledError, DecodedTable, EntityChangeSet,
                         ExportFormat, ExtractionRequest, ExtractionResult,
                         GameDataSnapshot, ReportOptions, ReportSelection, ResourceCatalog,
                         ScanOptions, SourceRef, TableSourceSet, as_jsonable,
@@ -166,9 +166,14 @@ class AppServices:
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
         catalog.installation = installation
-        gameplay = discover_gameplay(snapshot, catalog, cancel)
-        cancel.check()
-        snapshot.manifest_versions['gameplay'] = gameplay
+        try:
+            gameplay = discover_gameplay(snapshot, catalog, cancel)
+            cancel.check()
+        except CancelledError:
+            # The scan result still needs to be saved when discovery is cancelled.
+            gameplay = None
+        else:
+            snapshot.manifest_versions['gameplay'] = gameplay
         self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
         self.gameplay_catalog = gameplay
