@@ -8,29 +8,16 @@ import json
 import os
 from pathlib import Path
 import platform
-import re
 import subprocess
 
 
-_GODOT_EXE = "scripts/level_preview/native_player/Godot.exe"
-_GODOT_ASSETS = (
-    _GODOT_EXE,
-    "scripts/level_preview/native_player/project.godot", "scripts/level_preview/native_player/replay.tscn",
-    "scripts/level_preview/native_player/replay.gd", "scripts/level_preview/native_player/battle_static.gdshader",
-    "scripts/level_preview/native_bake/bake.html", "scripts/level_preview/native_bake/bake.js",
-    "licenses/Godot/LICENSE.txt", "licenses/Godot/COPYRIGHT.txt", "licenses/Godot/source.json",
-)
-
-
-def _forbidden_asset(path: Path, preview_only: bool) -> bool:
+def _forbidden_asset(path: Path) -> bool:
     names = [part.casefold() for part in path.parts]
     if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in names):
         return True
     if any("webengine" in part or "webchannel" in part for part in names):
         return True
-    return not preview_only and (
-        "level_preview" in names or "godot" in names or "godot.exe" in names
-    )
+    return any(part in {"level_preview", "godot", "godot.exe"} for part in names)
 
 
 def sha256(path: Path) -> str:
@@ -47,7 +34,7 @@ def source_records(root: Path):
     for name in ("src", "resources", "vendor", "packaging", "scripts"):
         source_inputs.extend(files_under(root / name))
     source_inputs.extend(root / "docs" / name for name in
-                         ("USER_GUIDE.md", "LEVEL_PREVIEW_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
+                         ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
     return [{"path": p.relative_to(root).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in sorted(set(source_inputs))]
 
 
@@ -89,42 +76,30 @@ def main():
             changed = [path for path in sorted(old.keys() | new.keys()) if old.get(path) != new.get(path)]
             raise SystemExit("Source changed during build; retain intermediate files and rebuild a fixed candidate: " + ", ".join(changed))
     bundle = args.bundle.resolve()
-    preview_only = os.environ.get("ARKNIGHTS_LEVEL_PREVIEW_ONLY") == "1"
-    bundle_name = "ArknightsMapViewer" if preview_only else "ArknightsUnpacker"
-    guide = "LEVEL_PREVIEW_GUIDE.md" if preview_only else "USER_GUIDE.md"
-    if not (bundle / (bundle_name + ".exe")).is_file():
+    if not (bundle / "ArknightsUnpacker.exe").is_file():
         raise SystemExit("Missing executable")
     required_assets = (
         "resources/folder_rules.json", "resources/report_styles.json", "resources/html/operator.html", "resources/html/report.css",
         "resources/ui/app-icon.png", "resources/ui/app-icon.ico",
         "vendor/ark_fbs/__init__.py", "vendor/ark_fbs/CN/__init__.py", "vendor/ark_fbs/CN/character_table.py",
         "vendor/lz4ak/Block.py", "fmod_toolkit/libfmod/Windows/x64/fmod.dll",
-        "PySide6/plugins/platforms/qwindows.dll", f"docs/{guide}", "docs/THIRD_PARTY_NOTICES.md",
+        "PySide6/plugins/platforms/qwindows.dll", "docs/USER_GUIDE.md", "docs/THIRD_PARTY_NOTICES.md",
         "licenses/Ark-Unpacker/Ark-Unpacker-LICENSE", "licenses/LGPL-3.0-only.txt",
     )
-    godot = bundle / "_internal" / _GODOT_EXE
-    if preview_only and not os.environ.get("ARKNIGHTS_GODOT_RUNTIME"):
-        raise SystemExit("The level preview bundle requires ARKNIGHTS_GODOT_RUNTIME")
-    if preview_only:
-        if not re.search(r"(?:^|[-._])test(?:$|[-._])", args.version, re.IGNORECASE):
-            raise SystemExit("ARKNIGHTS_GODOT_RUNTIME is only supported for a test build")
-        required_assets += _GODOT_ASSETS
-    elif godot.exists():
-        raise SystemExit("Unexpected Godot runtime in the unpacker bundle")
     missing = [name for name in required_assets if not (bundle / "_internal" / name).is_file()]
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
     relative_paths = (path.relative_to(bundle) for path in files_under(bundle))
-    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path, preview_only)]
+    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path)]
     if forbidden:
-        raise SystemExit("Unexpected files for the selected bundle: " + ", ".join(forbidden[:20]))
+        raise SystemExit("Unexpected files in the unpacker bundle: " + ", ".join(forbidden[:20]))
     provenance = {
         "version": args.version, "task_id": args.task_id,
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         **source_provenance(root), "python": platform.python_version(),
         "source_consistency_checked": bool(args.source_snapshot),
         "platform": platform.platform(),
-        "application": bundle_name,
+        "application": "ArknightsUnpacker",
         "preflight": os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
         "acceptance": "Build succeeded; consult docs/ACCEPTANCE.md for runtime acceptance boundaries.",
         "upstreams": {
@@ -134,14 +109,6 @@ def main():
         "dependencies": {d.metadata["Name"]: d.version for d in metadata.distributions() if d.metadata.get("Name")},
         "source_files": current_sources,
     }
-    if preview_only:
-        source = json.loads((root / "packaging/godot/source.json").read_text(encoding="utf-8"))
-        if sha256(godot) != source["executable_sha256"]:
-            raise SystemExit("Godot executable in the bundle does not match the pinned source")
-        for name, notice in source["notices"].items():
-            if sha256(bundle / "_internal" / "licenses" / "Godot" / name) != notice["sha256"]:
-                raise SystemExit(f"Godot notice in the bundle does not match the pinned source: {name}")
-        provenance["godot_runtime"] = {**source, "path": f"_internal/{_GODOT_EXE}"}
     (bundle / "build-info.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     entries = [{"path": p.relative_to(bundle).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in files_under(bundle) if p.name not in ("file-manifest.json", "SHA256SUMS.txt")]
     (bundle / "file-manifest.json").write_text(json.dumps({"version": args.version, "files": entries, "excludes": ["file-manifest.json", "SHA256SUMS.txt"]}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

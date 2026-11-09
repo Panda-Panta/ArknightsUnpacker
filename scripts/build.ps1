@@ -2,13 +2,10 @@
 param(
     [ValidatePattern('^[0-9A-Za-z][0-9A-Za-z._-]*$')][string] $Version = '',
     [string] $OutputRoot = 'dist',
-    [switch] $SkipVerify,
-    [switch] $LevelPreview
+    [switch] $SkipVerify
 )
 . (Join-Path $PSScriptRoot '../packaging/common.ps1')
-$previousProfile = $env:ARKNIGHTS_LEVEL_PREVIEW_ONLY
-$env:ARKNIGHTS_LEVEL_PREVIEW_ONLY = if ($LevelPreview) { '1' } else { '0' }
-$bundleName = if ($LevelPreview) { 'ArknightsMapViewer' } else { 'ArknightsUnpacker' }
+$bundleName = 'ArknightsUnpacker'
 try {
     if (-not $IsWindows) { throw 'The Windows portable bundle must be built on Windows x64.' }
     $taskId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
@@ -18,7 +15,6 @@ try {
         if (-not $Version) {
             $Version = (& $script:Uv run --locked --no-sync python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])').Trim()
             if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') { throw 'Cannot read project version.' }
-            if ($LevelPreview) { $Version += '-test-level-preview' }
         }
         $output = [IO.Path]::GetFullPath((Join-Path $script:ProjectRoot $OutputRoot))
         $versionRoot = Join-Path $output $Version
@@ -34,13 +30,8 @@ try {
         Invoke-Uv @('run', '--locked', '--no-sync', 'python', '-X', 'utf8', '-m', 'PyInstaller', '--noconfirm', '--distpath', (Join-Path $work 'dist'), '--workpath', (Join-Path $work 'pyinstaller'), 'packaging/ArknightsUnpacker.spec')
         $bundle = Join-Path $work "dist/$bundleName"
         if (-not (Test-Path -LiteralPath (Join-Path $bundle "$bundleName.exe") -PathType Leaf)) { throw 'PyInstaller did not produce the expected executable.' }
-        $guide = 'docs/USER_GUIDE.md'
-        if ($LevelPreview) {
-            $guide = 'docs/LEVEL_PREVIEW_GUIDE.md'
-        } else {
-            Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'packaging/PORTABLE_README.txt') -Destination (Join-Path $bundle '开始使用.txt')
-        }
-        Copy-Item -LiteralPath (Join-Path $script:ProjectRoot $guide) -Destination (Join-Path $bundle '使用指南.md')
+        Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'packaging/PORTABLE_README.txt') -Destination (Join-Path $bundle '开始使用.txt')
+        Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/USER_GUIDE.md') -Destination (Join-Path $bundle '使用指南.md')
         Copy-Item -LiteralPath (Join-Path $script:ProjectRoot 'docs/THIRD_PARTY_NOTICES.md') -Destination (Join-Path $bundle '第三方说明.md')
         Invoke-Uv @('run', '--locked', '--no-sync', 'python', '-X', 'utf8', 'packaging/release_manifest.py', '--bundle', $bundle, '--version', $Version, '--task-id', $taskId, '--source-snapshot', $sourceSnapshot)
         New-Item -ItemType Directory -Path $versionRoot | Out-Null
@@ -48,4 +39,3 @@ try {
         Write-Host "Built bundle (runtime acceptance remains required): $versionRoot/$bundleName"
     } finally { Pop-Location }
 } catch { Write-Error $_ -ErrorAction Continue; exit 1 }
-finally { $env:ARKNIGHTS_LEVEL_PREVIEW_ONLY = $previousProfile }

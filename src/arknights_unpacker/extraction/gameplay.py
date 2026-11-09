@@ -64,54 +64,6 @@ def _read_checked_index(path, observed):
     return index
 
 
-def _level_directory(root, version, index, catalog, previous, cancel):
-    from .level_catalog import build_level_catalog
-    from .level_map_image import find_level_map_images
-    from .level_scenes import find_level_scenes
-
-    levels = build_level_catalog(root, version, index, catalog, previous, cancel)
-    ids = [row['id'] for row in levels['levels']]
-    images = find_level_map_images(index, catalog.resources, ids, cancel)
-    scenes = find_level_scenes(index, catalog.resources, ids, cancel)
-    levels['scene_bindings_checked'] = True
-    for row in levels['levels']:
-        if row['id'] in images:
-            row['map_image'] = images[row['id']]
-        if row['id'] in scenes:
-            row['scene'] = scenes[row['id']]
-    return levels
-
-
-def discover_live_level_catalog(installation, previous, cancel):
-    """Observe the installed game index without inventorying unrelated files."""
-    from ..library import load_catalog
-    from ..library.manifests import read_manifest
-
-    cancel.check()
-    catalog = load_catalog(installation)
-    manifest = catalog.manifest
-    name, source = manifest.get('manifestName'), manifest.get('_source')
-    if not name or not source:
-        raise ValueError('资源清单没有可用于识别关卡的索引。')
-    for layer in ('hot', 'base'):
-        folder = installation.source_roots.get(layer)
-        if folder is not None and (path := safe_path(folder, name)).is_file():
-            break
-    else:
-        raise FileNotFoundError('活动资源索引未安装。')
-    observed = path.stat()
-    index = _read_checked_index(path, (observed.st_size, observed.st_mtime_ns))
-    result = _level_directory(str(installation.root), str(manifest.get('versionId', 'unknown')),
-                              index, catalog, previous, cancel)
-    # A new hot layer can activate while the index is being read.
-    active = next((safe_path(installation.source_roots[layer], 'hot_update_list.json')
-                  for layer in ('hot', 'base') if layer in installation.source_roots
-                  and (installation.source_roots[layer] / 'hot_update_list.json').is_file()), None)
-    if active is None or read_manifest(active)['_source'] != source:
-        raise OSError('资源清单在识别关卡期间发生变化，请重新扫描。')
-    return result
-
-
 def _identify(result, index, catalog, cancel):
     tables = {mode: {} for mode in _MODE_TABLES}
     levels = set()
@@ -182,12 +134,12 @@ def load_autochess(root, logical_path, resource_version, *, emit=null_progress, 
 def load_gameplay_level(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
     if not _AUTOCHESS_LEVEL.fullmatch(logical_path):
         raise ValueError('关卡路径不属于卫戍协议。')
-    return load_level_preview_info(root, logical_path, resource_version, emit=emit, cancel=cancel)
-
-
-def load_level_preview_info(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
-    result, data = load_level_data(root, logical_path, resource_version, emit=emit, cancel=cancel)
     name = logical_path.rsplit('/', 1)[-1]
+
+    def decode(raw, _name):
+        return decode_table_bytes(raw, 'prts___levels')
+
+    result, data = _load_source(root, logical_path, name, decode, resource_version, emit, cancel)
     grid = (data.get('mapData') or {}).get('map') or {}
     enemy_refs = data.get('enemyDbRefs') or []
     return {'level_id': data.get('levelId') or name,
@@ -197,16 +149,3 @@ def load_level_preview_info(root, logical_path, resource_version, *, emit=null_p
             'enemy_ids': list(dict.fromkeys(row['id'] for row in enemy_refs if row.get('id'))),
             'resource_version': result.resource_version,
             'diagnostics': result.diagnostics}
-
-
-def load_level_data(root, logical_path, resource_version, *, emit=null_progress, cancel=None):
-    from .level_catalog import is_level_path
-
-    if not is_level_path(logical_path):
-        raise ValueError('无效的关卡数据路径。')
-    name = logical_path.rsplit('/', 1)[-1]
-
-    def decode(raw, _name):
-        return decode_table_bytes(raw, 'prts___levels')
-
-    return _load_source(root, logical_path, name, decode, resource_version, emit, cancel)
