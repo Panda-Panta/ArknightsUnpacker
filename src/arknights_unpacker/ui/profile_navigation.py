@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QSize
 
 from ..contracts import ModuleProfile, OperatorProfile, ReportDocument
 from ..reports.model import semantic_blocks
-from .report_preview import PROFILE_ANCHOR_PREFIX, profile_html
+from .profile_html import PROFILE_ANCHOR_PREFIX, profile_html
 
 
 class ProfileNavigation(QWidget):

@@ -9,7 +9,7 @@ from arknights_unpacker.contracts import DecodedTable, EntityChangeSet, TableSou
 from arknights_unpacker.gamedata import build_module, build_operator, load_gamedata
 from arknights_unpacker.reports.model import present
 from arknights_unpacker.ui.entity_view import EntityView
-from arknights_unpacker.ui.report_preview import profile_html
+from arknights_unpacker.ui.profile_html import profile_html
 
 
 def reference_data():

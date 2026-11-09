@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QTextBrowser, QVBoxLayout, QWidget
 
 from arknights_unpacker.contracts import OperatorProfile, ReportDocument, as_jsonable
 from arknights_unpacker.reports.model import semantic_blocks
-from arknights_unpacker.ui.report_preview import profile_html
+from arknights_unpacker.ui.profile_html import profile_html
 
 
 class Anchors(HTMLParser):

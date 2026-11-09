@@ -12,7 +12,8 @@ from arknights_unpacker.contracts import BuildSpec, ExportFormat, ReportOptions,
 from .models import value
 from .jobs import JobQueue
 from .pages import PageComposition
-from .report_preview import ObjectsDialog, ReportArtifactsDialog
+from .object_preview import ObjectsDialog
+from .report_preview import ReportArtifactsDialog
 from .styles import apply_theme
 from .job_history import remaining_extraction
 from .preview_cache import PreviewCache, legacy_preview_paths

@@ -1192,3 +1192,7 @@ character_workbench_ui负责character_workbench.py、character_smoke.py及窗口
 旧程序无在用实例，不关闭用户窗口；完整备份并核验557旧0.1.25程序项，再更新D:/Tools/ArknightsUnpacker至0.1.26：替换7、550保持，无新增／删除。安装后557程序项一致，2207目标用户文件和85旧数据共2292项SHA保持，用户原数据库未用于烟测。备份.work/auto-character-preview-20261102/backup-0.1.25；收据sync-result.json、final-user-data-verification.json。
 
 ZIP 86,270,964字节，SHA256 771b58e924223b33eab8ffd0c5c6a7f73cb20e846fefd020992990a85ac96f50；EXE SHA256 697e45e411c193e1bb281edb5d25276a90f7a1e958ba88f02a9de7f64067bb61。仅清理本构建17文件／4目录共31,493,533字节，保留源／安装／回退1671管理项和ZIP／sidecar再核；旧版、用户数据和原始红绿／原生证据保留。原有工作流／工具入口足够，无领域skill或个人记忆写入。后补仅README／主计划／验收，不改变169输入，不重建程序；最终远端核验另记。
+
+### 解包器预览模块整理
+
+将包内对象窗口、资料导出预览和详情 HTML 分开，两类窗口共享原图保存和写入保护。正式候选基于当前 `main`，只移入在 Test 候选验证过的预览重构，沿用正式版的功能范围。复用现有定向测试和 Windows 构建入口，按程序清单更新 Tools 正式目录与 Test 目录。结构见 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)，累计 5 次实质更新或下一里程碑复查。

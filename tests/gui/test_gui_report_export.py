@@ -110,7 +110,7 @@ def test_real_reference_detail_uses_readable_report_blocks_and_keeps_evidence(qt
     from PySide6.QtWidgets import QTextBrowser
     from arknights_unpacker.contracts import DecodedTable, TableSourceSet, as_jsonable
     from arknights_unpacker.gamedata import load_gamedata, build_operator
-    from arknights_unpacker.ui.report_preview import profile_html
+    from arknights_unpacker.ui.profile_html import profile_html
     fixture = json.loads((Path(__file__).parents[1] / 'gamedata/fixtures/fixed_reference.json').read_text(encoding='utf-8'))
     data = load_gamedata(TableSourceSet(tables={name: DecodedTable(name, raw) for name, raw in fixture['tables'].items()},
                                       version=fixture['version'], resource_version=fixture['resource_version']))

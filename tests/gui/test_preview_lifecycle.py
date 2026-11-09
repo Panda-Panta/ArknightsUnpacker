@@ -10,8 +10,9 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from arknights_unpacker.contracts import ExtractionResult, ReportArtifact
+from arknights_unpacker.ui.object_preview import ObjectsDialog
 from arknights_unpacker.ui.preview_cache import PreviewCache, legacy_preview_paths
-from arknights_unpacker.ui.report_preview import ObjectsDialog, ReportArtifactsDialog
+from arknights_unpacker.ui.report_preview import ReportArtifactsDialog
 from test_explorer import make_window, wait_idle
 
 
