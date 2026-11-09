@@ -82,6 +82,8 @@ class AppServices:
         self.scan_snapshot = None
         self.file_changes = None
         self.catalog = None
+        self.gameplay_catalog = None
+        self.level_catalog = None
         self.gamedata = None
         self.entity_changes = None
         self.baseline = None
@@ -98,6 +100,8 @@ class AppServices:
             self.scan_snapshot = None
             self.file_changes = None
             self.catalog = None
+            self.gameplay_catalog = None
+            self.level_catalog = None
             self.gamedata = None
             self.entity_changes = None
             self.baseline = None
@@ -148,12 +152,14 @@ class AppServices:
         cancel.check()
         self._select_installation(installation)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, changes, catalog
+        self.gameplay_catalog = snapshot.manifest_versions.get('gameplay') if snapshot is not None else None
         self.gamedata, self.entity_changes, self.baseline = data, entity_changes, baseline
         emit({"type": "progress", "message": "已恢复保存结果；重新扫描时将与完整基线比较。"})
         return {"snapshot": snapshot, "changes": changes, "catalog": catalog,
                 "gamedata": data, "entity_changes": entity_changes}
 
     def scan(self, root, hours=24.0, strict=False, emit=null_progress, cancel=None):
+        from .extraction.gameplay import discover_gameplay
         from .library import scan_installation, compare_files, resolve_resources
         cancel = cancel or CancelToken()
         installation = self._installation(root)
@@ -161,11 +167,159 @@ class AppServices:
         snapshot = scan_installation(installation, ScanOptions(float(hours), bool(strict)), emit, cancel, baseline=previous)
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
+        catalog.installation = installation
+        gameplay = discover_gameplay(snapshot, catalog, cancel)
+        cancel.check()
+        snapshot.manifest_versions['gameplay'] = gameplay
         self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
+        self.gameplay_catalog = gameplay
         self.config["hours"] = float(hours)
         self.save_config()
         return {"snapshot": snapshot, "changes": change_set, "catalog": catalog}
+
+    def _saved_level_catalog(self, installation):
+        path = self.data_root / 'level-catalogs' / f'{installation.profile_id}.json'
+        try:
+            saved = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            saved = None
+        if saved is not None and (not isinstance(saved, dict) or saved.get('root') != str(installation.root)
+                                  or not isinstance(saved.get('levels'), list)):
+            raise ValueError('保存的关卡目录与当前游戏安装不匹配。')
+        return path, saved
+
+    def restore_level_catalog(self, root, emit=null_progress, cancel=None):
+        from .library import discover_installation
+
+        cancel = cancel or CancelToken()
+        installation = self.store.get_installation(root) or discover_installation(root)
+        _, saved = self._saved_level_catalog(installation)
+        cancel.check()
+        self._select_installation(installation)
+        self.level_catalog = saved
+        return {}
+
+    def scan_level_catalog(self, root, emit=null_progress, cancel=None):
+        from .extraction.gameplay import discover_live_level_catalog
+
+        cancel = cancel or CancelToken()
+        installation = self._installation(root)
+        path, previous = self._saved_level_catalog(installation)
+        emit({'message': '正在读取当前资源清单和关卡索引…'})
+        result = discover_live_level_catalog(installation, previous, cancel)
+        cancel.check()
+        if result['levels']:
+            atomic_json(path, result)
+        self.level_catalog = result
+        return {}
+
+    def _gameplay_mode(self, root, mode_id, resource_version):
+        catalog = self.gameplay_catalog
+        if (catalog is None or catalog['resource_version'] != resource_version
+                or Path(catalog['root']) != Path(root).resolve()):
+            raise ValueError('当前玩法清单与游戏目录或资源版本不一致，请重新扫描。')
+        mode = next((entry for entry in catalog['modes'] if entry['id'] == mode_id), None)
+        if mode_id != 'autochess' or mode is None or not mode['supported']:
+            raise ValueError('当前玩法详情待适配。')
+        return mode
+
+    def load_gameplay(self, root, mode_id, resource_version, emit=null_progress, cancel=None):
+        mode = self._gameplay_mode(root, mode_id, resource_version)
+        if not mode['available']:
+            raise ValueError('玩法数据表未安装，请下载游戏资源后重新扫描。')
+        logical_path = mode.get('detail_resource') or mode['resources'][0]
+        return self.runner.run('gameplay', {'root': str(root), 'logical_path': logical_path,
+                                            'resource_version': resource_version}, emit, cancel)
+
+    def load_gameplay_level(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
+        mode = self._gameplay_mode(root, 'autochess', resource_version)
+        if logical_path not in mode['level_paths']:
+            raise ValueError('关卡不在当前扫描的卫戍协议资源中，请重新扫描。')
+        return self.runner.run('gameplay_level', {'root': str(root), 'logical_path': logical_path,
+                                                  'resource_version': resource_version}, emit, cancel)
+
+    def _level_catalog_for_version(self, root, resource_version):
+        catalog = self.level_catalog
+        if (catalog is None or catalog['resource_version'] != resource_version
+                or Path(catalog['root']) != Path(root).resolve()):
+            raise ValueError('关卡清单与游戏目录或资源版本不一致，请重新扫描。')
+        return catalog
+
+    def load_level_metadata(self, root, resource_version, emit=null_progress, cancel=None):
+        self._level_catalog_for_version(root, resource_version)
+        return self.runner.run('level_metadata', {'root': str(root), 'resource_version': resource_version},
+                               emit, cancel)
+
+    def level_preview_clips(self, root, resource_version):
+        from .level_preview_cache import cached_previews
+
+        catalog = self._level_catalog_for_version(root, resource_version)
+        return cached_previews(self.data_root, catalog)
+
+    def load_level_preview_info(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        if not any(row['id'] == logical_path and row['available'] for row in catalog['levels']):
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        return self.runner.run('level_preview_info', {'root': str(root), 'logical_path': logical_path,
+                                                     'resource_version': resource_version}, emit, cancel)
+
+    def load_level_map_preview(self, root, logical_path, resource_version, output_dir,
+                               emit=null_progress, cancel=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        row = next((item for item in catalog['levels'] if item['id'] == logical_path), None)
+        if row is None or not row.get('map_image'):
+            raise ValueError('当前资源索引里没有这张原版地图图像。')
+        directory = Path(output_dir).resolve()
+        if directory.parent != self.data_root / 'preview' or not directory.is_dir():
+            raise ValueError('地图预览输出目录不属于当前会话缓存。')
+        return self.runner.run('level_map_image', {'root': str(root), 'logical_asset': row['map_image'],
+                                                  'resource_version': resource_version,
+                                                  'output_dir': str(directory)}, emit, cancel)
+
+    def _level_replay_options(self, root, logical_path, resource_version, caption, tag_ids, crisis_info_path):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        row = next((item for item in catalog['levels'] if item['id'] == logical_path), None)
+        if row is None or not row['available']:
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        return {
+            'game_root': str(root), 'level_id': logical_path, 'resource_version': resource_version,
+            'caption': caption, 'scene': row.get('scene'), 'tag_ids': tag_ids,
+            'crisis_info': str(crisis_info_path) if crisis_info_path else None,
+        }
+
+    def cached_native_level_replay(self, root, logical_path, resource_version, *, caption,
+                                   tag_ids=None, crisis_info_path=None):
+        from .level_native_cache import cached_native_replay
+
+        options = self._level_replay_options(root, logical_path, resource_version, caption, tag_ids, crisis_info_path)
+        return cached_native_replay(self.data_root, options)
+
+    def load_level_replay(self, root, logical_path, resource_version, output_dir, *, caption,
+                          tag_ids=None, crisis_info_path=None, native=False, prewarm=False,
+                          emit=null_progress, cancel=None):
+        args = self._level_replay_options(root, logical_path, resource_version, caption, tag_ids, crisis_info_path)
+        directory = Path(output_dir).resolve()
+        if directory.parent != self.data_root / 'preview' or not directory.is_dir():
+            raise ValueError('出怪预览输出目录不属于当前会话缓存。')
+        args['output'] = str(directory)
+        if native:
+            runtime = self.config.get('level_preview_runtime')
+            args['native_runtime'] = str(Path(runtime).expanduser().resolve() if runtime
+                                         else self.data_root / 'level-preview-runtime')
+            if prewarm:
+                args['native_prewarm'] = True
+        return self.runner.run('level_replay', args, emit, cancel)
+
+    def load_level_tag_options(self, root, logical_path, resource_version, emit=null_progress, cancel=None,
+                               *, crisis_info_path=None):
+        catalog = self._level_catalog_for_version(root, resource_version)
+        if not any(row['id'] == logical_path and row['available'] for row in catalog['levels']):
+            raise ValueError('关卡数据未安装或已变化，请重新扫描。')
+        args = {'root': str(root), 'logical_path': logical_path, 'resource_version': resource_version}
+        if crisis_info_path is not None:
+            args['crisis_info_path'] = str(crisis_info_path)
+        return self.runner.run('level_tag_options', args, emit, cancel)
 
     def load_data(self, root, emit=null_progress, cancel=None):
         from .gamedata import load_gamedata, compare_entities

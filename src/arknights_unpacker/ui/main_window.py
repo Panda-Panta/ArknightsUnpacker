@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QCloseEvent, QFontDatabase, QFont
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
+from PySide6.QtWidgets import (QApplication, QDialog, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox, QCheckBox, QTabWidget,
     QComboBox, QSizePolicy)
 from arknights_unpacker.contracts import BuildSpec, ExportFormat, ReportOptions, ExtractionResult, as_jsonable
@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         self._load_job = None
         self._monitor_stamp = None
         self._dialogs = []
+        self._task_history = None
         self._dialog_jobs = {}
         self._preview_jobs = {}
         self._object_preview_jobs = {}
@@ -229,6 +230,9 @@ class MainWindow(QMainWindow):
         open_output = QPushButton('打开输出')
         open_output.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.settings.output.text())))
         footer.addWidget(open_output)
+        task_history = QPushButton('任务记录…')
+        task_history.clicked.connect(self.show_task_history)
+        footer.addWidget(task_history)
         self.cancel_button = QPushButton('取消当前任务')
         self.cancel_button.clicked.connect(self.queue.cancel)
         self.cancel_button.setEnabled(False)
@@ -252,13 +256,29 @@ class MainWindow(QMainWindow):
             'updates': ('更新记录', '按时间和历史扫描定位变化，批量导出资源图片。'),
             'operators': ('干员资料', '检索干员，查看培养面板与技能，生成完整资料。'),
             'modules': ('模组更新', '对照模组各级效果，勾选资料并合并导出。'),
-            'jobs': ('导出任务', '查看处理进度与结果，重试失败任务或打开产物。'),
+            'gameplay': ('玩法资料', '按玩法查看已识别的资源和赛季资料。'),
             'settings': ('工作台设置', '调整输出位置、资料排版与历史记录选项。'),
         }
         current = self.pages.current_id()
         title, description = descriptions.get(current, (self.tabs.tabText(self.tabs.currentIndex()), ''))
         self.page_title.setText(title)
         self.page_description.setText(description)
+
+    def show_task_history(self):
+        if self._task_history is None:
+            from .jobs import JobsView
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle('任务记录')
+            dialog.resize(960, 640)
+            layout = QVBoxLayout(dialog)
+            self.jobs = JobsView(self.queue, dialog)
+            self.jobs.artifacts_requested.connect(self.show_report_artifacts)
+            layout.addWidget(self.jobs)
+            self._task_history = dialog
+        self._task_history.show()
+        self._task_history.raise_()
+        return self.jobs
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -350,6 +370,9 @@ class MainWindow(QMainWindow):
         self.scan_priority.setEnabled(not self.queue.busy)
         self.pages.queue_changed()
         self._refresh_history_actions()
+        self._finish_closing()
+
+    def _finish_closing(self):
         if self._closing and not self.queue.busy:
             QTimer.singleShot(0, self.close)
 
@@ -972,6 +995,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent):
         self._closing = True
+        if self._task_history is not None:
+            self._task_history.close()
         for dialog in list(self._dialogs):
             dialog.close()
         self.monitor_timer.stop()

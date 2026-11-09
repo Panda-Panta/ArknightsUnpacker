@@ -73,7 +73,7 @@ def test_empty_queue_does_not_look_like_a_completed_job(qtbot, tmp_path):
     window = MainWindow(MockServices(tmp_path))
     qtbot.addWidget(window)
     window.show()
-    window.pages.select('jobs')
+    window.show_task_history()
     assert window.jobs.empty_hint.isVisible()
     assert window.jobs.progress.value() == 0
     assert window.jobs.progress.format() == '等待任务'

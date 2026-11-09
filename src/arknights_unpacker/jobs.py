@@ -16,6 +16,14 @@ from .contracts import CancelToken, CancelledError, ExtractionRequest, as_jsonab
 from .paths import atomic_json
 
 
+def worker_command(args):
+    if "--worker-server" in args:
+        return worker_server_entry(args[args.index("--worker-server") + 1])
+    if "--worker" in args:
+        return worker_entry(args[args.index("--worker") + 1])
+    return None
+
+
 class FileCancelToken(CancelToken):
     def __init__(self, marker: Path):
         super().__init__()
@@ -63,6 +71,40 @@ def worker_entry(request_file: str) -> int:
                 from .extraction.unity import load_bundle
                 from .extraction.characters import character_catalog
                 value = character_catalog(load_bundle(args['path']), check=cancel.check)
+            elif operation in {"gameplay", "gameplay_level"}:
+                from .extraction.gameplay import load_autochess, load_gameplay_level
+                load = load_autochess if operation == "gameplay" else load_gameplay_level
+                value = load(**args, emit=emit, cancel=cancel)
+            elif operation == "level_metadata":
+                from .extraction.level_metadata import load_level_metadata
+                value = load_level_metadata(**args, emit=emit, cancel=cancel)
+            elif operation == "level_map_image":
+                from .extraction.level_map_image import load_level_map_image
+                value = load_level_map_image(**args, emit=emit, cancel=cancel)
+            elif operation == "level_preview_info":
+                from .extraction.gameplay import load_level_preview_info
+                value = load_level_preview_info(**args, emit=emit, cancel=cancel)
+            elif operation == "level_replay":
+                native_runtime = args.pop('native_runtime', None)
+                prewarm = args.pop('native_prewarm', False)
+                if native_runtime is None:
+                    from .extraction.level_replay_assets import prepare_level_playback
+
+                    value = prepare_level_playback(**args, emit=emit, cancel=cancel)
+                else:
+                    from .level_native_cache import prepare_cached_native_replay
+
+                    value = prepare_cached_native_replay(Path(native_runtime), args, emit=emit, cancel=cancel,
+                                                         prewarm=prewarm)
+            elif operation == "level_tag_options":
+                from .extraction.gameplay import load_level_data
+                from .extraction.level_tags import load_level_tags
+                crisis_info_path = args.pop("crisis_info_path", None)
+                value = load_level_tags(**args, emit=emit, cancel=cancel, crisis_info_path=crisis_info_path)
+                if value["tags"]:
+                    level_source, level = load_level_data(**args, emit=emit, cancel=cancel)
+                    value["level"] = level
+                    value["diagnostics"].extend(level_source.diagnostics)
             else:
                 raise ValueError(f"未知工作进程操作: {operation}")
         cancel.check()
@@ -166,9 +208,12 @@ class WorkerRunner:
             with self._lock:
                 if self._closed:
                     raise RuntimeError("工作进程管理器已关闭")
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if operation == "level_replay" and args.get("native_prewarm"):
+                    flags |= getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
                 proc = subprocess.Popen(cmd, cwd=task, stdout=log, stderr=log,
                                         text=True, encoding="utf-8", errors="replace", env=env,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                        creationflags=flags)
                 self._active.add(proc)
 
             try:

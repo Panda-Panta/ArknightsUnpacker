@@ -117,8 +117,8 @@ def test_manual_tasks_page_keeps_active_reports_and_hides_internal_reads(qtbot, 
     preview = window._dialogs[-1]
     qtbot.mouseClick(preview.export_button, Qt.MouseButton.LeftButton)
     wait_idle(qtbot, window)
-    window.pages.select('jobs')
-    assert window.tabs.currentWidget() is window.jobs
+    window.show_task_history()
+    assert window.tabs.indexOf(window.jobs) == -1
     titles = [window.jobs.table.item(row, 0).text() for row in range(window.jobs.table.rowCount())]
     assert any(title.startswith('预览选中资料') for title in titles)
     assert any(title.startswith('导出选中资料') for title in titles)
