@@ -434,14 +434,21 @@ async function main() {
     loadActorShadows(layout, configs),
     ...layout.props.map(prop => loader.loadAsync(prop.asset)),
   ]);
+  const canvas = document.createElement('canvas');
+  // The visible canvas keeps the last complete frame while WebGL prepares the next one.
+  const drawingCanvas = capture ? canvas : new OffscreenCanvas(width, height);
+  const presenter = capture ? null : canvas.getContext('bitmaprenderer');
+  if (!capture && !presenter) throw new Error('无法初始化回放画面。');
+  // Spine only draws textures. Pixi's interaction plugin requires a DOM canvas.
+  if (presenter) PIXI.extensions.remove(PIXI.InteractionManager);
   const renderer = new THREE.WebGLRenderer({
-    antialias: true, preserveDrawingBuffer: Boolean(capture),
+    canvas: drawingCanvas, antialias: true, preserveDrawingBuffer: Boolean(capture),
   });
   renderer.setSize(width, height, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   const stage = document.querySelector('#stage');
-  stage.appendChild(renderer.domElement);
+  stage.appendChild(canvas);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(layout.background || '#201b18');
   const camera = new THREE.PerspectiveCamera(layout.camera.fov, width / height, 0.3, 1000);
@@ -516,6 +523,12 @@ async function main() {
       sun.shadow.needsUpdate = true;
     }
     renderer.render(scene, camera);
+    if (presenter) {
+      const frame = drawingCanvas.transferToImageBitmap();
+      if (canvas.width !== frame.width) canvas.width = frame.width;
+      if (canvas.height !== frame.height) canvas.height = frame.height;
+      presenter.transferFromImageBitmap(frame);
+    }
   }
 
   if (capture) {
