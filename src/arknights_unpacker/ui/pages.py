@@ -460,8 +460,10 @@ class LevelCatalogPage(PageController):
                     raise
                 server = session
                 dialog.show_replay_status(f"无部署出怪预览 · {result['spawns']} 次出怪 · {result['duration']:.1f} 秒")
+                details = list(result.get('diagnostics') or ())
                 if 'seed' in result:
-                    dialog.replay_status.setToolTip(f"本次回放的随机种子为 {result['seed']}")
+                    details.insert(0, f"本次回放的随机种子为 {result['seed']}")
+                dialog.replay_status.setToolTip('\n'.join(details))
 
             def settled(completed):
                 if completed is not job:

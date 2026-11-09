@@ -103,3 +103,43 @@ def test_cancellation_is_checked_before_scheduling():
 
     with pytest.raises(CancelledError):
         build_level_timeline({'waves': []}, lambda *_: 1, cancel=cancel)
+
+
+def test_spawn_clock_includes_starts_before_each_pre_delay():
+    first = wave(fragment(spawn('a', 2), delay=3), before=5, after=7)
+    second = wave(fragment(spawn('b', 3), delay=2), before=4)
+    clocks = []
+
+    def finish(_enemy, _route, _extra, now, fragment_start, wave_start):
+        clocks.append((now, fragment_start, wave_start))
+        return 1
+
+    timeline = build_level_timeline({'waves': [first, second]}, finish, spawn_clock=True)
+
+    assert timeline['complete']
+    assert clocks == [(10, 5, 0), (27, 22, 18)]
+
+
+def test_activation_participates_in_queue_and_unharmful_enemy_cannot_extend_duration():
+    actions = [spawn('decoration', 1, isUnharmfulAndAlwaysCountAsKilled=True),
+               dict(actionType=6, key='hidden_token', preDelay=2, blockFragment=True),
+               dict(actionType=6, key='unused_token', preDelay=20, hiddenGroup='challenge')]
+    level = {'waves': [wave(fragment(*actions), fragment(spawn('later', 3)))]}
+    timeline = build_level_timeline(level, lambda enemy, *_: None if enemy == 'decoration' else 4)
+
+    assert timeline['complete']
+    assert timeline['duration'] == 9
+    assert timeline['predefinedActivations'] == [dict(key='hidden_token', time=2, waveIndex=0, fragmentIndex=0)]
+    assert [(event['enemyId'], event['time']) for event in timeline['events']] == [('decoration', 1), ('later', 5)]
+def test_verified_battle_deadline_limits_persistent_patrol_and_future_spawns():
+    level = {'waves': [{'fragments': [{'actions': [
+        {'key': 'patrol', 'count': 3, 'interval': 5},
+    ]}]}]}
+
+    bounded = build_level_timeline(level, lambda *_: float('inf'), battle_deadline=8)
+    unbounded = build_level_timeline(level, lambda *_: float('inf'))
+
+    assert bounded['complete'] and bounded['duration'] == 8
+    assert [event['time'] for event in bounded['events']] == [0, 5]
+    assert all(event['exitTime'] is None for event in bounded['events'])
+    assert not unbounded['complete']

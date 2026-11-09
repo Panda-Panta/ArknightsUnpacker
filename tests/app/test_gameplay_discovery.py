@@ -165,3 +165,22 @@ def test_level_animation_cache_follows_the_scanned_resource_version(gameplay_ins
         assert services.level_preview_clips(game, 'resource-2') == {}
     finally:
         services.shutdown()
+
+
+def test_level_replay_can_resolve_scene_after_catalog_scan(gameplay_installation, tmp_path, monkeypatch):
+    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
+    game = gameplay_installation.resolve()
+    services.level_catalog = {'root': str(game), 'resource_version': 'resource-1',
+                              'scene_bindings_checked': True,
+                              'levels': [{'id': LEVEL, 'available': True}]}
+    output = services.data_root / 'preview' / 'session'
+    output.mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(services.runner, 'run', lambda operation, args, *_: calls.append((operation, args)))
+    try:
+        services.load_level_replay(game, LEVEL, 'resource-1', output, caption='关卡')
+        operation, args = calls[0]
+        assert operation == 'level_replay'
+        assert args['level_id'] == LEVEL and args['scene'] is None
+    finally:
+        services.shutdown()

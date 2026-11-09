@@ -21,6 +21,27 @@ from arknights_unpacker.paths import atomic_json
 
 
 REFLECT_Z = np.diag([1., 1., -1.])
+_UNITY_BUILTINS = ('unity default resources', 'unity_builtin_extra')
+_SHADOWS_ONLY = 3  # UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly
+# The PC client's Torappu.Battle.Consts.CAMERA_VIEWS stores these local
+# positions in CameraViewLevel order. Rotation and FOV come from the prefab.
+_BATTLE_CAMERA_VIEWS = (
+    (0., -4.81, -7.76), (0., -5.60, -8.92), (0., -5.08, -8.04),
+    (0., -6.10, -9.78), (0., -7.96, -12.58),
+)
+
+
+def _load_unity_builtins(env, game_root):
+    referenced = {
+        external.path.replace('\\', '/').rsplit('/', 1)[-1].lower()
+        for file in env.cabs.values() for external in getattr(file, 'externals', ())
+    }
+    for name in _UNITY_BUILTINS:
+        if name not in referenced or env.get_cab(name) is not None:
+            continue
+        path = safe_path(game_root, f'Arknights_Data/Resources/{name}')
+        if path.is_file():
+            env.load_file(str(path), is_dependency=True)
 
 
 def _open_scene(installation, logical, version, *, extension='.unity', bundle_cache=None):
@@ -66,6 +87,7 @@ def _open_scene(installation, logical, version, *, extension='.unity', bundle_ca
     for name in dependencies:
         if name != bundle["name"]:
             env.load_file(str(locate(name)))
+    _load_unity_builtins(env, installation.root)
     if bundle_cache is not None:
         bundle_cache[bundle['name']] = env, objects
     return env, objects, asset
@@ -206,6 +228,12 @@ def _material(glb, reader, cache, materials):
               if np.isfinite(_vector(value, "rgba")).all()}
     textures = {name: value for name, value in saved.m_TexEnvs if value.m_Texture}
     tint = colors.get("_Color", [1, 1, 1, 1])
+    water_overlay = shader_name == "Torappu/Scene/DynamicWaterTile"
+    if water_overlay:
+        # The original pixel shader discards the overlay until the tile is highlighted.
+        red, green, blue, alpha = colors.get("_TintColor", [.5, .5, .5, .5])
+        enabled = "_EMISSION" in (material.m_ValidKeywords or ())
+        tint = [2 * red * alpha, 2 * green * alpha, 2 * blue * alpha, 2 * alpha**2 if enabled else 0.]
     pbr = {"baseColorFactor": [*map(_srgb_to_linear, tint[:3]), min(1., max(0., tint[3]))],
            "metallicFactor": min(1., max(0., floats.get("_Metallic", 0.))),
            "roughnessFactor": 1. - min(1., max(0., floats.get("_Glossiness", .1)))}
@@ -234,11 +262,13 @@ def _material(glb, reader, cache, materials):
             else:
                 item["normalTexture"] = {**texture_info, "scale": floats.get("_BumpScale", 1.)}
     mode = floats.get("_Mode", 0)
-    if mode == 1:
+    if water_overlay:
+        item.update(alphaMode="BLEND", doubleSided=True)
+    elif mode == 1:
         item.update(alphaMode="MASK", alphaCutoff=floats.get("_Cutoff", .5))
     elif mode >= 2 or "AlphaBlend" in shader_name:
         item.update(alphaMode="BLEND", doubleSided=True)
-    if shader_name.startswith(("Unlit/", "Torappu/Particles/")):
+    if water_overlay or shader_name.startswith(("Unlit/", "Torappu/Particles/")):
         if "KHR_materials_unlit" not in glb.doc.setdefault("extensionsUsed", []):
             glb.doc["extensionsUsed"].append("KHR_materials_unlit")
         item["extensions"] = {"KHR_materials_unlit": {}}
@@ -286,7 +316,7 @@ def _meshes(objects, by_game, hierarchy):
         yield name, renderer, pose, (mesh, geometry, triangles), indices
 
 
-def _primitive(glb, renderer, pose, source, sub, material):
+def _primitive(glb, renderer, pose, source, sub, material, *, prefab_lightmap=None):
     mesh, geometry, triangles = source
     faces = np.asarray(triangles[sub]) + (mesh.m_SubMeshes[sub].baseVertex or 0)
     vertices, indices = np.unique(faces, return_inverse=True)
@@ -310,11 +340,15 @@ def _primitive(glb, renderer, pose, source, sub, material):
         uv0 = np.asarray(geometry.m_UV0)[vertices, :2].copy()
         uv0[:, 1] = 1 - uv0[:, 1]
         attrs["TEXCOORD_0"] = glb.accessor(uv0, "VEC2")
-    if renderer.m_LightmapIndex < 65534 and geometry.m_UV1 is not None:
-        uv1 = np.asarray(geometry.m_UV1)[vertices, :2].copy()
+    lightmap_index, tiling = prefab_lightmap or (renderer.m_LightmapIndex, None)
+    lightmap_uv = geometry.m_UV1
+    if prefab_lightmap and lightmap_uv is None:
+        lightmap_uv = geometry.m_UV0
+    if lightmap_index < 65534 and lightmap_uv is not None:
+        uv1 = np.asarray(lightmap_uv)[vertices, :2].copy()
         # A Unity static batch already has atlas UVs. Ordinary meshes keep local UVs.
         if not renderer.m_StaticBatchInfo.subMeshCount:
-            sx, sy, ox, oy = _vector(renderer.m_LightmapTilingOffset, "xyzw")
+            sx, sy, ox, oy = tiling if tiling is not None else _vector(renderer.m_LightmapTilingOffset, "xyzw")
             uv1 = uv1 * [sx, sy] + [ox, oy]
         uv1[:, 1] = 1 - uv1[:, 1]
         attrs["TEXCOORD_1"] = glb.accessor(uv1, "VEC2")
@@ -329,7 +363,7 @@ def _camera_record(name, pose, data):
             'fov': data['field of view'], 'orthographic': data['orthographic']}
 
 
-def _default_battle_camera(installation, version):
+def _default_battle_camera(installation, version, view=0):
     logical = 'battle/[pack]common/prefabs/cameracontroller'
     _environment, objects, asset = _open_scene(installation, logical, version, extension='.prefab')
     _, objects = _prefab_objects(objects, asset['path'])
@@ -343,19 +377,58 @@ def _default_battle_camera(installation, version):
             continue
         name, pose, active = hierarchy(path_id)
         if active and data['m_Enabled'] and not data['orthographic'] and name.endswith('/Offset/Camera'):
-            return _camera_record(name, pose, data)
+            if view:
+                parent = reader.assets_file.objects[path_id].read().m_Father.path_id
+                _, parent_pose, _ = hierarchy(parent)
+                pose = pose.copy()
+                pose[:3, 3] = (parent_pose @ (*_BATTLE_CAMERA_VIEWS[view], 1.))[:3]
+            return {**_camera_record(name, pose, data), 'source': 'runtimePreset', 'view': view}
     raise ValueError('共享相机预制体没有可用的默认战斗镜头。')
+
+
+def _map_camera_view(view, data, hierarchy):
+    focus = next((item['value'] for item in data.get('_objects') or ()
+                  if item['key'] == 'camera_focus' and item['value']['m_PathID']), None)
+    if focus is None:
+        return view
+    if focus['m_FileID']:
+        return None
+    offset = next((item['value'] for item in data.get('_values') or () if item['key'] == 'camera_offset'), None)
+    try:
+        offset = tuple(float(component) for component in offset.split(',')) if offset is not None else (0., 0., 0.)
+        if len(offset) != 3 or not np.isfinite(offset).all():
+            return None
+        _, focus_pose, _ = hierarchy(focus['m_PathID'])
+    except (AttributeError, KeyError, ValueError):
+        return None
+    return tuple((REFLECT_Z @ (focus_pose[:3, 3] + offset)).tolist())
+
+
+def _runtime_battle_camera(installation, version, views):
+    if len(views) != 1:
+        return None
+    view, = views
+    if isinstance(view, int) and 0 <= view < len(_BATTLE_CAMERA_VIEWS):
+        return _default_battle_camera(installation, version, view)
+    if not isinstance(view, tuple):
+        return None
+    camera = _default_battle_camera(installation, version)
+    ray = np.asarray(camera['target']) - camera['position']
+    return {**camera, 'position': list(view), 'target': (ray + view).tolist(),
+            'source': 'runtimeFocus', 'view': None}
 
 
 def _scene_settings(objects, by_game, hierarchy, output):
     cameras, lights, atlases, anchors = [], [], [], []
     map_effects = None
-    default_views = []
+    map_views, stored_values = [], {}
+    map_themes, highland_heights = set(), set()
     for reader in objects:
         kind = reader.type.name
         if kind in ("Camera", "Light", "MonoBehaviour"):
             data = reader.read_typetree()
-            name, pose, active = hierarchy(by_game[data["m_GameObject"]["m_PathID"]])
+            game_id = data["m_GameObject"]["m_PathID"]
+            name, pose, active = hierarchy(by_game[game_id])
             if kind == "Camera" and active and data["m_Enabled"]:
                 cameras.append(_camera_record(name, pose, data))
             elif kind == "Light" and active and data["m_Enabled"]:
@@ -372,20 +445,59 @@ def _scene_settings(objects, by_game, hierarchy, output):
                     map_effects = data["_effectSettings"]
                 settings = data.get('_mapSettings') or {}
                 if active and 'cameraView' in settings:
-                    has_focus = any(item['key'] == 'camera_focus' and item['value']['m_PathID']
-                                    for item in data.get('_objects') or ())
-                    default_views.append(None if has_focus else settings['cameraView'])
+                    map_views.append((game_id, settings['cameraView']))
+                    if isinstance(settings.get('theme'), str):
+                        map_themes.add(settings['theme'])
+                    if isinstance(settings.get('highlandHeight'), (int, float)):
+                        highland_heights.add(settings['highlandHeight'])
+                if '_objects' in data and '_values' in data:
+                    stored_values[game_id] = data
         if kind == "LightmapSettings":
             for index, atlas in enumerate(reader.read_typetree()["m_Lightmaps"]):
-                entry = {}
-                for field, ref in atlas.items():
-                    if ref["m_PathID"]:
-                        texture = PPtr(**ref, assetsfile=reader.assets_file).read()
-                        name = f"atlas-{index}-{field}.png"
-                        texture.image.save(output / name)
-                        entry[field] = {"image": name, "format": texture.m_LightmapFormat}
-                atlases.append(entry)
-    return cameras, lights, atlases, anchors, map_effects, default_views
+                atlases.append(_save_atlas(reader, atlas, output, index))
+    # MapGraphic reads its camera overrides from the sibling StoreValueComponent.
+    default_views = [_map_camera_view(view, stored_values.get(game_id, {}), hierarchy)
+                     for game_id, view in map_views]
+    map_theme = next(iter(map_themes)) if len(map_themes) == 1 else None
+    highland_height = next(iter(highland_heights)) if len(highland_heights) == 1 else None
+    return cameras, lights, atlases, anchors, map_effects, default_views, map_theme, highland_height
+
+
+def _save_atlas(reader, atlas, output, index):
+    entry = {}
+    for field, ref in atlas.items():
+        if ref["m_PathID"]:
+            texture = PPtr(**ref, assetsfile=reader.assets_file).read()
+            name = f"atlas-{index}-{field}.png"
+            texture.image.save(output / name)
+            entry[field] = {"image": name, "format": texture.m_LightmapFormat}
+    return entry
+
+
+def _prefab_lightmaps(root, output):
+    for component in root.read().m_Component:
+        reader = component.component.deref()
+        if reader.type.name != "MonoBehaviour":
+            continue
+        data = reader.read_typetree()
+        if "m_RendererInfo" not in data or not data["m_Enabled"]:
+            continue
+        # PrefabLightmapData applies these atlas slots and UV transforms at runtime.
+        renderers = {
+            info["renderer"]["m_PathID"]: (
+                info["lightmapIndex"], tuple(info["lightmapOffsetScale"][axis] for axis in "xyzw"),
+            ) for info in data["m_RendererInfo"]
+            if not info["renderer"]["m_FileID"] and info["renderer"]["m_PathID"]
+        }
+        atlases = []
+        for index, lightmap in enumerate(data["m_Lightmaps"]):
+            atlas = {"m_Lightmap": lightmap}
+            for src, dst in (("m_LightmapsDir", "m_DirLightmap"), ("m_ShadowMasks", "m_ShadowMask")):
+                if index < len(data[src]):
+                    atlas[dst] = data[src][index]
+            atlases.append(_save_atlas(reader, atlas, output, index))
+        return renderers, atlases
+    return {}, []
 
 
 def _grid_axes(anchors):
@@ -399,12 +511,16 @@ def _grid_axes(anchors):
     return [np.append(np.round(axis, decimals=3), 0.).tolist() for axis in result]
 
 
-def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=None):
+def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=None, extension='.unity', map_size=None):
     installation = discover_installation(game_root)
     output = validate_output_root(output, [installation.root])
-    env, objects, asset = _open_scene(installation, scene_asset, resource_version)
-    by_game, hierarchy = _hierarchy(objects)
+    env, objects, asset = _open_scene(installation, scene_asset, resource_version, extension=extension)
     output.mkdir(parents=True, exist_ok=True)
+    prefab_atlases, prefab_lightmaps = [], {}
+    if extension == '.prefab':
+        root, objects = _prefab_objects(objects, asset['path'])
+        prefab_lightmaps, prefab_atlases = _prefab_lightmaps(root, output)
+    by_game, hierarchy = _hierarchy(objects)
     glb = _Glb()
     counts = Counter()
     materials, material_cache = {}, {}
@@ -415,32 +531,48 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
         if renderer is None:
             runtime_meshes.append(name)
             continue
+        lightmap = prefab_lightmaps.get(renderer.object_reader.path_id)
         primitives = []
         for slot, sub in enumerate(indices):
             if not source[2][sub]:
                 continue
             material = _material(glb, renderer.m_Materials[slot].deref(), material_cache, materials)
-            primitive, vertices, triangles = _primitive(glb, renderer, pose, source, sub, material)
+            primitive, vertices, triangles = _primitive(glb, renderer, pose, source, sub, material,
+                                                        prefab_lightmap=lightmap)
             primitives.append(primitive)
             counts.update(vertices=vertices, triangles=triangles)
         if primitives:
             local_name = name.rsplit("/", 1)[-1]
-            mesh_id = glb.add("meshes", {"name": local_name, "primitives": primitives})
+            mesh = {"name": local_name, "primitives": primitives}
+            if renderer.m_CastShadows == _SHADOWS_ONLY:
+                mesh["extras"] = {"unityShadowOnly": True}
+            mesh_id = glb.add("meshes", mesh)
             node = glb.add("nodes", {"name": local_name, "mesh": mesh_id, "extras": {
-                "unityHierarchy": name, "unityLightmapIndex": renderer.m_LightmapIndex,
+                "unityHierarchy": name, "unityLightmapIndex": lightmap[0] if lightmap else renderer.m_LightmapIndex,
             }})
             glb.doc["scenes"][0]["nodes"].append(node)
             counts.update(meshes=1, static_batches=int(bool(renderer.m_StaticBatchInfo.subMeshCount)))
     if not counts["meshes"]:
         raise ValueError(f"场景没有可导出的静态网格：{scene_asset}")
     model = f"{asset['name']}.glb"
-    cameras, lights, atlases, anchors, map_effects, default_views = _scene_settings(objects, by_game, hierarchy, output)
+    cameras, lights, atlases, anchors, map_effects, default_views, map_theme, highland_height = _scene_settings(
+        objects, by_game, hierarchy, output)
+    atlases.extend(prefab_atlases)
     glb.finish(output / model)
     camera = next((item for item in cameras if item["name"].endswith("/Camera") and not item["orthographic"]), None)
-    if camera is None and default_views == [0]:
-        # With no camera focus, cameraView 0 selects the shared 16:9 battle view.
-        camera = _default_battle_camera(installation, resource_version)
-        cameras.append(camera)
+    if camera is None:
+        camera = _runtime_battle_camera(installation, resource_version, default_views)
+        if camera is not None:
+            if extension == '.prefab' and camera['source'] == 'runtimePreset':
+                if not map_size or len(map_size) != 2 or not all(isinstance(size, int) and size > 0 for size in map_size):
+                    raise ValueError('地图预制体缺少确定镜头位置所需的格点尺寸。')
+                # Map.ImportData centers the original map Anchor before attaching the prefab.
+                # Express the world camera in the unshifted prefab coordinates used by this export.
+                width, height = map_size
+                offset = (.5 * (width - 1), .5 * (height - 1), 0.)
+                camera = {**camera, 'position': (np.asarray(camera['position']) + offset).tolist(),
+                          'target': (np.asarray(camera['target']) + offset).tolist()}
+            cameras.append(camera)
     sun = next((item for item in lights if item["type"] == 1 and item["baking"] != 2), None)
     grid = _grid_axes(anchors)
     layout_diagnostics = []
@@ -462,8 +594,17 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
                   "origin": grid[0], "columns": grid[1], "rows": grid[2], "props": [],
                   "lightMap": atlases[0]["m_Lightmap"]["image"],
                   "battleLighting": {"shadowMask": atlases[0]["m_ShadowMask"]["image"]}}
+        if map_theme is not None:
+            layout['mapTheme'] = map_theme
+        if highland_height is not None:
+            layout['highlandHeight'] = highland_height
         atomic_json(output / "scene-layout.json", layout)
     return receipt
+
+
+def extract_prefab_scene(game_root, scene_asset, resource_version, output, *, map_size, cancel=None):
+    return extract_scene(game_root, scene_asset, resource_version, output, cancel=cancel, extension='.prefab',
+                         map_size=map_size)
 
 
 def main():

@@ -257,8 +257,6 @@ class AppServices:
         directory = Path(output_dir).resolve()
         if directory.parent != self.data_root / 'preview' or not directory.is_dir():
             raise ValueError('出怪预览输出目录不属于当前会话缓存。')
-        if 'scene' not in row and catalog.get('scene_bindings_checked'):
-            raise ValueError('未能从当前资源索引绑定原场景，需要适配场景别名或组装规则。')
         return self.runner.run('level_replay', {
             'game_root': str(root), 'level_id': logical_path, 'resource_version': resource_version,
             'output': str(directory), 'caption': caption, 'scene': row.get('scene'), 'tag_ids': tag_ids,

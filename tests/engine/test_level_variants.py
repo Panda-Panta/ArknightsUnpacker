@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from arknights_unpacker.extraction.level_variants import apply_level_tags
+from arknights_unpacker.extraction.level_variants import apply_level_tags, apply_replay_move_speeds
 
 
 def _tag(tag_id, *effects, group=None, required=False, sort=0):
@@ -121,3 +121,57 @@ def test_crisis_indicators_need_one_connected_path_and_respect_exclusions():
         apply_level_tags({}, tags, ["goal"], graph=graph)
     with pytest.raises(ValueError, match="互斥"):
         apply_level_tags({}, tags, ["left", "right"], graph=graph)
+
+
+def _runtime_effect(effect_key, **values):
+    return {"key": effect_key, "statically_applicable": False, "blackboard": [
+        {"key": field, "value": 0.0 if isinstance(value, str) else value,
+         "valueStr": value if isinstance(value, str) else None}
+        for field, value in values.items()
+    ]}
+
+
+def test_no_deployment_replay_applies_targeted_move_speed_and_preserves_other_effects():
+    tag = _tag("combat")
+    tag["effects"] = [
+        _runtime_effect("enemy_attribute_mul", enemy="enemy_kodo|enemy_scout", move_speed=1.8),
+        _runtime_effect("enemy_attribute_additive_mul", max_hp=0.2),
+        _runtime_effect("env_gbuff_new_with_verify", key="enemy_damage_scale[phy][additive]", damage_scale=-0.25),
+    ]
+    original = {"enemy_kodo": {"moveSpeed": 0.5, "clip": "Walk"}, "enemy_other": {"moveSpeed": 1.0}}
+    assert len(apply_level_tags({}, [tag], ["combat"])["unapplied"]) == 3
+
+    result = apply_level_tags({}, [tag], ["combat"], no_deployment=True)
+    assert result["unapplied"] == []
+    assert result["selected_ids"] == ["combat"]
+    assert len(result["not_simulated"]) == 2
+    assert apply_replay_move_speeds(original, result["move_speed_modifiers"]) == {
+        "enemy_kodo": {"moveSpeed": pytest.approx(0.9), "clip": "Walk"},
+        "enemy_other": {"moveSpeed": 1.0},
+    }
+    assert original["enemy_kodo"]["moveSpeed"] == 0.5
+
+
+def test_no_deployment_does_not_accept_unknown_buffs_or_movement_effects():
+    tag = _tag("unknown")
+    tag["effects"] = [
+        _runtime_effect("enemy_attribute_additive_mul", enemy="enemy_test", move_speed=0.2),
+        _runtime_effect("env_gbuff_new_with_verify", key="environment_unknown", damage_scale=1),
+        _runtime_effect("enemy_skill_blackb_mul", enemy="enemy_test", skill="Unknown", atk=2),
+    ]
+    result = apply_level_tags({}, [tag], ["unknown"], no_deployment=True)
+    assert len(result["unapplied"]) == 3
+    assert result["move_speed_modifiers"] == result["not_simulated"] == []
+
+
+def test_no_deployment_accepts_alternate_deployment_and_combat_choices():
+    tag = _tag("alternative")
+    tag["effects"] = [
+        _runtime_effect("char_respawntime_add", value=200),
+        _runtime_effect("char_cost_add", value=25),
+        _runtime_effect("char_attribute_mul", char="trap_086_larva", max_hp=3),
+        _runtime_effect("env_gbuff_new_with_verify", key="enemy_damage_scale[mag][additive]", damage_scale=-0.25),
+    ]
+    result = apply_level_tags({}, [tag], ["alternative"], no_deployment=True)
+    assert result["unapplied"] == result["move_speed_modifiers"] == []
+    assert len(result["not_simulated"]) == 4

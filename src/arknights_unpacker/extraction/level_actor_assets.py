@@ -18,6 +18,7 @@ from arknights_unpacker.library.discover import discover_installation, safe_path
 from arknights_unpacker.library.resolver import load_catalog
 from arknights_unpacker.paths import atomic_json, validate_output
 
+from .level_actor_attacks import periodic_attack, read_single_skill, spine_animation_durations
 from .level_scene_assets import REFLECT_Z, _pose
 
 
@@ -48,6 +49,8 @@ def _enemy_database(root, levels, version):
                 if row is None:
                     continue
                 attrs = row.Attributes()
+                if not row.SkillsIsNone():
+                    info["singleSkill"] = read_single_skill(row)
                 values = {"name": row.Name(), "prefabKey": row.PrefabKey(),
                           "moveSpeed": attrs.MoveSpeed() if attrs is not None else None}
                 for field, value in values.items():
@@ -98,8 +101,36 @@ def _animator(prefab):
             shadow_ref = behaviour.get("_shadow", {})
             shadow = ((component, shadow_ref) if shadow_ref.get("m_PathID")
                       and not behaviour.get("_hideShadowOnReset") else None)
-            return _transform(components), animator, tree, shadow
+            return _transform(components), animator, tree, shadow, component, behaviour
     raise ValueError(f"{root.m_Name}: prefab 没有指向 Spine 动画器的敌人组件")
+
+
+def _initial_mode_hook(enemy, behaviour):
+    # Enemy::_GetDefaultModeIndex starts at zero. Runtime talent overrides and
+    # subsequent phase transitions depend on combat state.
+    modes = behaviour.get("_modes") or ()
+    if not modes or not modes[0].get("m_PathID"):
+        return {}
+    mode = _pointer(enemy, modes[0])
+    hook_ref = mode.read_typetree().get("_animatorHooker") or {}
+    if not hook_ref.get("m_PathID"):
+        return {}
+    hook = _pointer(mode, hook_ref)
+    data = hook.read_typetree()
+    script = _pointer(hook, data["m_Script"]).read()
+    return data if script.m_ClassName == "SimpleUnitAnimatorHooker" else {}
+
+
+def _resolve_animation(mapped, hook, key):
+    # SimpleUnitAnimatorHooker excludes a key before looking for a replacement.
+    if key in hook.get("_excludeAnimKeys", ()):
+        return None
+    for pair in hook.get("_replaceAnimPairs", ()):
+        if pair["fromAnimKey"] == key:
+            key = pair["toAnimKey"]
+            break
+    animation = mapped.get(key)
+    return animation if animation and animation["speed"] > 0 else None
 
 
 def _graphic_transform(skeleton, tree, prefab_transform):
@@ -194,13 +225,10 @@ def _shadow_sprite(component, prefab_transform):
 
 
 def _spine_files(skeleton_data, spine):
-    from spine_asset.v38 import SkeletonBinary, SkeletonJson
-
     skeleton = _pointer(skeleton_data, spine["skeletonJSON"]).read()
     payload = raw_text(skeleton)
     is_json = payload.lstrip().startswith(b"{")
-    parsed = (SkeletonJson().read_skeleton_data(payload.decode("utf-8"))
-              if is_json else SkeletonBinary().read_skeleton_data(payload))
+    durations = spine_animation_durations(payload, is_json)
     if len(spine["atlasAssets"]) != 1:
         raise ValueError(f"{skeleton.m_Name}: 预览需要一个 Atlas 资源，可包含多页贴图")
     atlas_data = _pointer(skeleton_data, spine["atlasAssets"][0])
@@ -225,31 +253,39 @@ def _spine_files(skeleton_data, spine):
         output = BytesIO()
         image.save(output, format="PNG")
         files[page] = output.getvalue()
-    return suffix, files, pages, {animation.name for animation in parsed.animations}
+    return suffix, files, pages, durations
 
 
-def _extract_prefab(prefab, logical):
-    prefab_transform, animator, tree, shadow = _animator(prefab)
+def _extract_prefab(prefab, logical, skill_timings):
+    prefab_transform, animator, tree, shadow, enemy, behaviour = _animator(prefab)
     skeleton = _pointer(animator, tree["_skeleton"])
     renderer = skeleton.read_typetree()
     skeleton_data = _pointer(skeleton, renderer["skeletonDataAsset"])
     spine = skeleton_data.read_typetree()
-    suffix, files, pages, names = _spine_files(skeleton_data, spine)
+    suffix, files, pages, durations = _spine_files(skeleton_data, spine)
     mapped = {a["animKey"]: {"clip": a["animName"], "speed": _float(a["speed"]),
                             "loop": bool(a["loop"])}
-              for a in tree["_animations"] if a["animName"] in names}
-    move = mapped.get("Move")
-    if not move or move["speed"] <= 0 or spine["scale"] <= 0:
-        raise ValueError(f"{logical}: 没有可播放的原始 Move 动画")
+              for a in tree["_animations"] if a["animName"] in durations}
+    hook = _initial_mode_hook(enemy, behaviour)
+    idle = _resolve_animation(mapped, hook, "Idle")
+    attack = _resolve_animation(mapped, hook, "Attack")
+    # Enemy::PlayMoveAnim plays Idle when Unit::ContainsAnimation reports no Move.
+    move = _resolve_animation(mapped, hook, "Move") or idle
+    if not move or spine["scale"] <= 0:
+        raise ValueError(f"{logical}: 没有可播放的原始 Move 或 Idle 动画")
     scale, offset = _graphic_transform(skeleton, renderer, prefab_transform)
     config = {
         "skeleton": f"actor{suffix}", "atlas": "actor.atlas", "texturePages": pages,
         "skeletonScale": _float(spine["scale"]), "graphicScale": scale,
         "actorOffset": offset, "actorOffsetUnits": "prefab-root-local world units (Unity x,y,-z)",
-        "clip": move["clip"], "clipSpeed": move["speed"], "animations": mapped,
+        "clip": move["clip"], "clipSpeed": move["speed"], "clipLoop": move["loop"], "animations": mapped,
         "prefabAsset": logical, "skeletonDataName": spine["m_Name"],
         "skeletonDataPathId": str(skeleton_data.path_id),
     }
+    if idle:
+        config.update(idleClip=idle["clip"], idleClipSpeed=idle["speed"], idleClipLoop=idle["loop"])
+    if attack:
+        config.update(attackClip=attack["clip"], attackClipSpeed=attack["speed"])
     if shadow is not None:
         try:
             shadow_sprite = _shadow_sprite(_pointer(*shadow), prefab_transform)
@@ -260,7 +296,15 @@ def _extract_prefab(prefab, logical):
             if shadow_sprite is not None:
                 config["shadow"], payload = shadow_sprite
                 files[config["shadow"]["texture"]] = payload
-    return config, files
+    def resolve_animation(key):
+        return _resolve_animation(mapped, hook, key)
+
+    attacks = {
+        timing: periodic_attack(timing, enemy, behaviour, prefab_transform, resolve_animation,
+                                durations, _pointer, _components)
+        for timing in skill_timings if timing is not None
+    }
+    return config, files, attacks
 
 
 def extract_actors(root, enemy_ids, resource_version, output_dir, *, enemy_levels=None, cancel=None):
@@ -326,12 +370,15 @@ def extract_actors(root, enemy_ids, resource_version, output_dir, *, enemy_level
         for logical, path in assets.items():
             prefab = container[path]
             try:
-                config, files = _extract_prefab(prefab, logical)
+                skill_timings = {enemy_db[enemy_id].get("singleSkill") for enemy_id in requested[logical]}
+                config, files, attacks = _extract_prefab(prefab, logical, skill_timings)
             except (KeyError, FileNotFoundError, ValueError) as error:
                 raise ValueError(f"{logical}: {error}") from error
             for enemy_id in requested[logical]:
                 info = enemy_db[enemy_id]
                 actor = {**config, "enemyLevel": levels[enemy_id], "name": info.get("name")}
+                if (profile := attacks.get(info.get("singleSkill"))) is not None:
+                    actor["periodicAttack"] = profile
                 if (speed := info.get("moveSpeed")) is not None and speed > 0:
                     actor["moveSpeed"] = speed
                 prepared[enemy_id] = actor, files

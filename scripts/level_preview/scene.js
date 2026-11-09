@@ -32,17 +32,30 @@ function prepareRun(run) {
   const configs = new Map();
   let defaultSpeedCount = 0;
   const events = entries.map((event, index) => {
-    const {enemyId, time, path, waits = {}, hiddenWaits = {}, jumps: jumpIndices = []} = event ?? {};
+    const {enemyId, time, path, waits = {}, hiddenWaits = {}, jumps: jumpIndices = [], patrolStart = null} = event ?? {};
     if (typeof enemyId !== 'string' || !Object.hasOwn(source, enemyId) || !source[enemyId]) {
       throw new Error(`Spawn ${index + 1}: missing original actor resources for ${enemyId}`);
     }
     const config = source[enemyId];
     if (!configs.has(enemyId)) {
+      const attack = config.periodicAttack;
       if (typeof config.skeleton !== 'string' || !config.skeleton ||
           typeof config.clip !== 'string' || !config.clip ||
           !positive(config.skeletonScale) || !positive(config.graphicScale) ||
           !positive(config.clipSpeed ?? 1)) {
         throw new Error(`${enemyId}: missing or invalid original Spine resources`);
+      }
+      if (attack && (typeof attack.clip !== 'string' || !attack.clip || !positive(attack.clipSpeed) ||
+          !Number.isFinite(attack.firstAt) || attack.firstAt < 0 || !positive(attack.duration) ||
+          !positive(attack.interval) || attack.interval <= attack.duration)) {
+        throw new Error(`${enemyId}: invalid original periodic cast timing`);
+      }
+      const phases = attack?.phases;
+      if (phases && (!Array.isArray(phases) || phases[0]?.start !== 0 || phases.some((phase, i) =>
+          typeof phase.clip !== 'string' || !phase.clip || !positive(phase.clipSpeed) ||
+          !Number.isFinite(phase.start) || phase.start >= attack.duration ||
+          (i > 0 && phase.start <= phases[i - 1].start)))) {
+        throw new Error(`${enemyId}: invalid original channeling phases`);
       }
       configs.set(enemyId, config);
     }
@@ -66,11 +79,27 @@ function prepareRun(run) {
     if (speed === undefined || speed === null) defaultSpeedCount++;
     const moveSpeed = speed ?? 1;
     const waitTime = [...Object.values(waits), ...Object.values(hiddenWaits)].reduce((sum, seconds) => sum + seconds, 0);
-    const end = time + length / moveSpeed + waitTime;
-    if (!positive(moveSpeed) || !Number.isFinite(end) || end <= time) {
+    const routeTime = length / moveSpeed + waitTime;
+    if (!positive(moveSpeed) || !positive(routeTime)) {
       throw new Error(`Spawn ${index + 1} (${enemyId}): invalid speed or empty route`);
     }
-    return {enemyId, time, path, waits, hiddenWaits, jumps, moveSpeed, end};
+    let patrol = null;
+    if (patrolStart !== null) {
+      const last = path.at(-1);
+      if (!Number.isInteger(patrolStart) || patrolStart < 0 || patrolStart >= path.length - 1 ||
+          !last.every((value, axis) => value === path[patrolStart][axis])) {
+        throw new Error(`Spawn ${index + 1} (${enemyId}): invalid patrol loop`);
+      }
+      const intro = path.slice(0, patrolStart).reduce((sum, [x, y], i) => sum +
+        (waits[i] ?? 0) + (hiddenWaits[i] ?? 0) +
+        (jumps.has(i) ? 0 : Math.hypot(path[i + 1][0] - x, path[i + 1][1] - y) / moveSpeed), 0);
+      const cycle = routeTime - intro;
+      if (!positive(cycle)) throw new Error(`Spawn ${index + 1} (${enemyId}): empty patrol loop`);
+      patrol = {intro, cycle};
+    }
+    const end = patrol ? Infinity : event.exitTime ?? time + routeTime;
+    return {enemyId, time, path, waits, hiddenWaits, jumps, moveSpeed, end, patrol,
+      attack: config.periodicAttack};
   });
   events.sort((a, b) => a.time - b.time);
   return {configs, events, defaultSpeedCount};
@@ -99,22 +128,29 @@ async function loadActors(configs) {
   return new Map(Array.from(configs, ([id, config]) => {
     const data = resources[actorNames.get(id)]?.spineData;
     if (!data) throw new Error(`${id}: Spine data or atlas missing (${config.skeleton})`);
-    if (!data.findAnimation(config.clip)) throw new Error(`${id}: Spine animation ${config.clip} missing`);
+    const phases = config.periodicAttack?.phases ?? [];
+    for (const clip of [config.clip, config.idleClip, config.periodicAttack?.clip, ...phases.map(phase => phase.clip)]) {
+      if (clip && !data.findAnimation(clip)) throw new Error(`${id}: Spine animation ${clip} missing`);
+    }
     const sprite = new PIXI.spine.Spine(data);
     sprite.autoUpdate = false;
     sprite.position.set(origin, origin);
-    const track = sprite.state.setAnimation(0, config.clip, true);
+    if (config.initialSkin) sprite.skeleton.setSkinByName(config.initialSkin);
+    const track = sprite.state.setAnimation(0, config.clip, config.clipLoop ?? true);
     return [id, {config, sprite, track, version: data.version}];
   }));
 }
 
-function routeAt({path, waits, hiddenWaits, jumps, moveSpeed}, elapsed) {
+function routeAt({path, waits, hiddenWaits, jumps, moveSpeed, patrol}, elapsed) {
+  if (patrol && elapsed >= patrol.intro) {
+    elapsed = patrol.intro + (elapsed - patrol.intro) % patrol.cycle;
+  }
   let direction = -1;
   let motionTime = 0;
   for (let i = 0; i < path.length; i++) {
     const [x, y] = path[i];
     const wait = waits[i] ?? 0;
-    if (elapsed < wait) return [x, y, direction, motionTime];
+    if (elapsed < wait) return [x, y, direction, motionTime, elapsed];
     elapsed -= wait;
     const hiddenWait = hiddenWaits[i] ?? 0;
     if (elapsed < hiddenWait) return null;
@@ -132,6 +168,36 @@ function routeAt({path, waits, hiddenWaits, jumps, moveSpeed}, elapsed) {
     motionTime += step;
   }
   return null;
+}
+
+function actorClocks(battleAge, attack) {
+  if (!attack || battleAge < attack.firstAt) return {routeAge: battleAge};
+  const elapsed = battleAge - attack.firstAt;
+  const cycles = Math.floor(elapsed / attack.interval);
+  const within = elapsed % attack.interval;
+  return {
+    routeAge: battleAge - cycles * attack.duration - Math.min(within, attack.duration),
+    attackTime: within < attack.duration ? within : undefined,
+  };
+}
+
+function updateActorPose(actor, motionTime, idleTime, attackTime) {
+  const {sprite, config} = actor;
+  const idle = idleTime !== undefined && config.idleClip;
+  const attack = attackTime === undefined ? null : config.periodicAttack;
+  const phase = attack?.phases?.findLast(item => item.start <= attackTime) ?? attack;
+  const clip = phase?.clip ?? (idle || config.clip);
+  const loop = phase ? (phase.loop ?? false) : (idle ? config.idleClipLoop : config.clipLoop) ?? true;
+  const seconds = phase ? attackTime - (phase.start ?? 0) : (idle ? idleTime : motionTime);
+  const speed = (phase?.clipSpeed ?? (idle ? config.idleClipSpeed : config.clipSpeed)) ?? 1;
+  // One sprite is reused across instances and may be evaluated after seeking backwards.
+  if (actor.track.animation.name !== clip || actor.track.loop !== loop) {
+    sprite.state.clearTrack(0);
+    actor.track = sprite.state.setAnimation(0, clip, loop);
+  }
+  sprite.skeleton.setToSetupPose();
+  actor.track.trackTime = seconds * speed;
+  sprite.update(0);
 }
 
 function applySpineDepth(material, baseline) {
@@ -155,7 +221,7 @@ async function loadActorShadows(layout, configs) {
   const loader = new THREE.TextureLoader();
   const textures = new Map();
   const shadows = await Promise.all([...configs].map(async ([id, config]) => {
-    const shadow = config.shadow ?? layout.actorShadow;
+    const shadow = config.shadow ?? (config.actorPlane ? null : layout.actorShadow);
     if (!shadow) return null;
     if (!textures.has(shadow.texture)) textures.set(shadow.texture, loader.loadAsync(shadow.texture));
     const map = await textures.get(shadow.texture);
@@ -179,8 +245,8 @@ async function loadActorShadows(layout, configs) {
   return new Map(shadows.filter(Boolean));
 }
 
-function createActorLayer(scene, layout, shadows, actors, events) {
-  if (!events.length) return () => 0;
+function createActorLayer(scene, layout, shadows, actors, events, stationary) {
+  if (!events.length && !stationary.length) return () => 0;
   const surface = new PIXI.Application({
     width: actorCanvas, height: actorCanvas, autoStart: false,
     antialias: true, backgroundAlpha: 0, preserveDrawingBuffer: true,
@@ -192,6 +258,12 @@ function createActorLayer(scene, layout, shadows, actors, events) {
   const offsets = new Map(Array.from(actors, ([id, {config}]) => [id,
     config.actorOffset ? new THREE.Vector3().fromArray(config.actorOffset) : defaultOffset,
   ]));
+  const planes = new Map();
+  for (const [id, {config}] of actors) {
+    if (!config.actorPlane) continue;
+    const [x, y] = config.actorPlane.map(axis => new THREE.Vector3().fromArray(axis));
+    planes.set(id, new THREE.Matrix4().makeBasis(x, y, new THREE.Vector3().crossVectors(x, y).normalize()));
+  }
   const avatarGeometry = new THREE.PlaneGeometry(1, 1);
   const firstShadow = shadows.values().next().value;
   const slots = [];
@@ -224,22 +296,36 @@ function createActorLayer(scene, layout, shadows, actors, events) {
     return slot;
   }
 
-  return time => {
-    let visible = 0;
+  function* visiblePoses(time) {
+    for (const event of stationary) {
+      if (event.time > time) break;
+      yield {actorId: event.actorId, position: event.position, direction: event.direction,
+        motionTime: time - event.time, predefined: true};
+    }
     for (const event of events) {
       if (event.time > time) break;
       if (event.end <= time) continue;
-      const position = routeAt(event, time - event.time);
+      const {routeAge, attackTime} = actorClocks(time - event.time, event.attack);
+      const position = routeAt(event, routeAge);
       if (!position) continue;
-      const [col, row, direction, motionTime] = position;
+      const [col, row, direction, motionTime, idleTime] = position;
+      yield {actorId: event.enemyId, position: [col, row], direction, motionTime, idleTime, attackTime};
+    }
+  }
+
+  const planeScale = new THREE.Vector3();
+  return time => {
+    let visible = 0;
+    for (const {actorId, position, direction, motionTime, idleTime, attackTime, predefined} of visiblePoses(time)) {
       const slot = slots[visible++] ?? addSlot();
-      const actor = actors.get(event.enemyId);
-      const {sprite, track, config} = actor;
+      const actor = actors.get(actorId);
+      const {sprite, config} = actor;
       const {avatar, shadow, context, texture} = slot;
       avatar.visible = true;
-      avatar.position.copy(worldOrigin).addScaledVector(columns, col).addScaledVector(rows, row);
+      if (predefined) avatar.position.fromArray(position);
+      else avatar.position.copy(worldOrigin).addScaledVector(columns, position[0]).addScaledVector(rows, position[1]);
       if (shadow) {
-        const shape = shadows.get(event.enemyId);
+        const shape = shadows.get(actorId);
         shadow.visible = Boolean(shape);
         if (shape) {
           shadow.geometry = shape.geometry;
@@ -247,19 +333,23 @@ function createActorLayer(scene, layout, shadows, actors, events) {
           shadow.position.copy(avatar.position);
         }
       }
-      avatar.position.add(offsets.get(event.enemyId));
+      avatar.position.add(offsets.get(actorId));
 
-      // Evaluate a pose from its own spawn time even after a backward seek or
-      // when two instances of this skeleton are drawn in the same frame.
-      sprite.skeleton.setToSetupPose();
-      track.trackTime = motionTime * (config.clipSpeed ?? 1);
-      sprite.update(0);
+      updateActorPose(actor, motionTime, idleTime, attackTime);
       const bounds = sprite.getLocalBounds();
       const extent = Math.max(Math.abs(bounds.x), Math.abs(bounds.right),
         Math.abs(bounds.y), Math.abs(bounds.bottom));
       const pixelsPerUnit = Math.min(resolution, (origin - 2) / extent);
       sprite.scale.set(pixelsPerUnit * direction, pixelsPerUnit);
-      avatar.scale.setScalar(actorCanvas / pixelsPerUnit * config.graphicScale * (layout.actorScale ?? 1));
+      const plane = planes.get(actorId);
+      avatar.matrixAutoUpdate = !plane;
+      if (plane) {
+        planeScale.setScalar(actorCanvas / pixelsPerUnit);
+        avatar.matrix.copy(plane).scale(planeScale).setPosition(avatar.position);
+        avatar.matrixWorldNeedsUpdate = true;
+      } else {
+        avatar.scale.setScalar(actorCanvas / pixelsPerUnit * config.graphicScale * (layout.actorScale ?? 1));
+      }
       surface.renderer.render(sprite);
       context.drawImage(surface.view, 0, 0);
       texture.needsUpdate = true;
@@ -277,6 +367,8 @@ async function main() {
     ['fixture.json', 'scene-layout.json'].map(path => fetch(path).then(r => r.json())),
   );
   const {configs, events, defaultSpeedCount} = prepareRun(run);
+  const stationary = layout.predefinedActors?.events ?? [];
+  for (const [id, config] of Object.entries(layout.predefinedActors?.configs ?? {})) configs.set(id, config);
   const loader = new GLTFLoader();
   const [map, actors, lighting, shadows, ...props] = await Promise.all([
     loader.loadAsync(layout.asset),
@@ -298,7 +390,16 @@ async function main() {
   camera.position.fromArray(layout.camera.position);
   camera.lookAt(new THREE.Vector3().fromArray(layout.camera.target));
   const lightingStats = applyBattleLighting(map.scene, lighting);
+  map.scene.traverse(node => {
+    if (!node.isMesh || !node.userData.unityShadowOnly) return;
+    // The shadow pass uses its own depth material.
+    node.material = node.material.clone();
+    node.material.colorWrite = false;
+    node.material.depthWrite = false;
+    node.castShadow = true;
+  });
   scene.add(map.scene);
+  const timedProps = [];
   props.forEach(({scene: model}, index) => {
     const prop = layout.props[index];
     model.traverse(node => {
@@ -319,9 +420,11 @@ async function main() {
       node.castShadow = !node.material.transparent;
       node.receiveShadow = !node.material.transparent;
     });
-    for (const xyz of prop.positions) {
+    for (const [index, xyz] of prop.positions.entries()) {
       const copy = model.clone();
       copy.position.fromArray(xyz);
+      const time = prop.activationTimes?.[index];
+      if (time !== undefined) timedProps.push({copy, time});
       scene.add(copy);
     }
   });
@@ -341,11 +444,17 @@ async function main() {
   sun.shadow.needsUpdate = true;
   scene.add(sun);
 
-  const renderActors = createActorLayer(scene, layout, shadows, actors, events);
+  const renderActors = createActorLayer(scene, layout, shadows, actors, events, stationary);
   let maxVisibleActors = 0;
 
   function render(time) {
     maxVisibleActors = Math.max(maxVisibleActors, renderActors(time));
+    for (const prop of timedProps) {
+      const visible = time >= prop.time;
+      if (visible === prop.copy.visible) continue;
+      prop.copy.visible = visible;
+      sun.shadow.needsUpdate = true;
+    }
     renderer.render(scene, camera);
   }
 
@@ -384,13 +493,15 @@ async function main() {
   const speed = document.querySelector('#speed');
   const slider = document.querySelector('#time');
   const stamp = document.querySelector('#stamp');
-  const lastExit = events.reduce((end, event) => Math.max(end, event.end), 0);
-  slider.max = String(Math.max(lastExit, run.duration ?? 0) + 1);
+  const lastExit = events.reduce((end, event) => Math.max(end, event.patrol ? event.time : event.end), 0);
+  const duration = run.complete === true && Number.isFinite(run.duration)
+    ? run.duration : Math.max(lastExit, run.duration ?? 0);
+  slider.max = String(duration + 1);
   document.querySelector('footer span').textContent = run.caption ?? layout.asset;
   function seek(time) {
     slider.value = time;
     stamp.value = time.toFixed(2) + ' 秒';
-    render(time);
+    render(Number.isFinite(run.battleDeadline) ? Math.min(time, run.battleDeadline) : time);
   }
   let startedAt = null;
   let startTime = 0;

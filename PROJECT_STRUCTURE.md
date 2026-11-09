@@ -20,11 +20,15 @@ ArknightsUnpacker/
 │  │  ├─ level_catalog.py       关卡发现、分类和新增判定
 │  │  ├─ level_metadata.py      真实关卡编号、标题、章节和活动名
 │  │  ├─ level_map_image.py     游戏原版地图原图的绑定和提取
-│  │  ├─ level_scenes.py        活动索引内的原始场景和地图预制体绑定
+│  │  ├─ level_scenes.py        活动索引及赛季表中的原场景和地图预制体绑定
 │  │  ├─ level_tags.py          全息矩阵指标和危机合约赛季指标导入
 │  │  ├─ level_variants.py      指标对关卡脚本和禁部署格的变更
-│  │  ├─ level_replay_assets.py 组合原始场景、门、骨骼和波次的 worker 入口
+│  │  ├─ level_replay_assets.py 组合原场景、预置物、角色与波次的 worker 入口
 │  │  ├─ level_replay.py        路线与时间轴的衔接
+│  │  ├─ level_spawn_choices.py 种子选取敌群及验证无部署条件分支
+│  │  ├─ level_sandbox_replay.py 生息演算 V3 限时关卡绑定
+│  │  ├─ level_predefined_assets.py 原版预置干员与机关资源和出场时间
+│  │  ├─ level_actor_attacks.py 从原版敌人技能与骨骼读取定时动作
 │  │  └─ autochess.py           PC 卫戍协议的赛季结构及策略、盟约、调度解码
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器

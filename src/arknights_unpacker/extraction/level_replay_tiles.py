@@ -15,6 +15,11 @@ _GATES = {'tile_start', 'tile_end'}
 _HEIGHTS = {0: 0., 1: .4}
 
 
+def _tile_height(layout, tile):
+    height_type = tile['heightType']
+    return layout.get('highlandHeight', _HEIGHTS[1]) if height_type == 1 else _HEIGHTS[height_type]
+
+
 def _gate_positions(level, layout):
     data = level['mapData']
     grid = data['map']
@@ -33,17 +38,16 @@ def _gate_positions(level, layout):
             row_from_top, col = divmod(index, columns)
             row = rows - 1 - row_from_top
             position = origin + col * col_axis + row * row_axis
-            position[2] += _HEIGHTS[tile['heightType']]
+            position[2] += _tile_height(layout, tile)
             gates[key].append(position.tolist())
     return gates
 
 
-def _export_gate(installation, version, key, output, bundle_cache):
-    _environment, objects, asset = _open_scene(installation, f'battle/prefabs/effects/{key}', version,
-                                               extension='.prefab', bundle_cache=bundle_cache)
-    root, objects = _prefab_objects(objects, asset['path'])
+def _export_mesh_prop(root, objects, output, *, mount=None):
     by_game, hierarchy = _hierarchy(objects)
     inverse_root = np.linalg.inv(hierarchy(by_game[root.path_id])[1])
+    if mount is not None:
+        inverse_root = mount @ inverse_root
     tints = {}
     for reader in objects:
         if reader.type.name == 'MonoBehaviour':
@@ -78,7 +82,7 @@ def _export_gate(installation, version, key, output, bundle_cache):
             node = glb.add('nodes', {'name': local_name, 'mesh': mesh_id})
             glb.doc['scenes'][0]['nodes'].append(node)
     if not glb.doc['scenes'][0]['nodes']:
-        raise ValueError(f'原版入口物件没有可导出的网格：{key}')
+        raise ValueError(f'原版预制体没有可导出的网格：{root.read().m_Name}')
     glb.finish(output)
 
 
@@ -96,6 +100,9 @@ def configure_scene_tiles(game_root, resource_version, level, output, layout, *,
         if cancel is not None:
             cancel.check()
         asset = f'{key}.glb'
-        _export_gate(installation, resource_version, key, output / asset, bundle_cache)
+        _, objects, source = _open_scene(installation, f'battle/prefabs/effects/{key}', resource_version,
+                                        extension='.prefab', bundle_cache=bundle_cache)
+        root, objects = _prefab_objects(objects, source['path'])
+        _export_mesh_prop(root, objects, output / asset)
         props.append({'asset': asset, 'positions': positions})
     layout.setdefault('props', []).extend(props)

@@ -3,7 +3,7 @@ from math import dist
 import pytest
 
 from arknights_unpacker.extraction import level_replay
-from arknights_unpacker.extraction.level_replay import build_level_replay
+from arknights_unpacker.extraction.level_replay import _battle_clock, _resolve_clock_waits, _route_clock, build_level_replay
 
 
 def test_random_spawn_offsets_have_stable_individual_paths_and_delay_wave_clear(monkeypatch):
@@ -72,3 +72,30 @@ def test_fixed_waypoint_and_hidden_wait_before_teleport_are_used_for_clear_time(
     assert event['hiddenWaits'] == {2: 10}
     assert event['jumps'] == [2]
     assert event['exitTime'] == replay['duration'] == 16
+
+
+def test_ordered_checkpoint_waits_use_battle_fragment_and_wave_clocks():
+    route = {'path': [(0, 0), (2, 0), (9, 0), (10, 0)], 'jumps': [1], 'waits': {1: 1},
+             'hidden_waits': {}, 'clock_waits': {1: [(1, 1, False), (3, 8, False), (4, 20, True),
+                                                    (2, 20, True)]}}
+
+    timed = _resolve_clock_waits(route, speed=1, spawn_time=10, fragment_start=6, wave_start=5)
+
+    assert timed['waits'] == {1: 2}
+    assert timed['hidden_waits'] == {1: 11}
+    assert timed['wait_seconds'] == 13
+    assert route['waits'] == {1: 1}
+
+
+def test_periodic_cast_pauses_route_progress_without_pausing_battle_clock():
+    attack = {'firstAt': 4, 'interval': 8, 'duration': 2}
+
+    assert [_route_clock(age, attack) for age in (3, 4, 5, 6, 7, 12, 13, 15)] == [3, 4, 4, 4, 5, 10, 10, 11]
+    assert [_battle_clock(age, attack) for age in (3, 4, 5, 10, 11)] == [3, 4, 7, 12, 15]
+    route = {'path': [(0, 0), (2, 0), (3, 0)], 'jumps': [], 'waits': {}, 'hidden_waits': {},
+             'clock_waits': {1: [(2, 5, False)]}}
+
+    resolved = _resolve_clock_waits(route, 1, 0, 0, 0, attack)
+
+    assert resolved['waits'] == {1: 2}
+    assert _battle_clock(3 + resolved['wait_seconds'], attack) == 7

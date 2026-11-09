@@ -286,7 +286,10 @@ class LevelCatalogView(QWidget):
             preview = _preview_status(row)
             category = f"{row['category']} · 新增" if row['is_new'] else row['category']
             scene = row.get('scene')
-            scene_status = ('原始场景主包已安装' if scene['available'] else '原始场景主包未安装') if scene else '原始场景未匹配'
+            if scene is None:
+                scene_status = '播放时查找原始场景'
+            else:
+                scene_status = '原始场景主包已安装' if scene['available'] else '原始场景主包未安装'
             self.details.setText(f'{category}\n{_chapter_label(row)}\n\n{state}\n{scene_status}\n{preview}')
             self.selected_path.setText(row['id'])
         self.preview_button.setEnabled(row is not None)
