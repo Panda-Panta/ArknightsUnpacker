@@ -23,6 +23,7 @@ from arknights_unpacker.paths import atomic_json
 REFLECT_Z = np.diag([1., 1., -1.])
 _UNITY_BUILTINS = ('unity default resources', 'unity_builtin_extra')
 _SHADOWS_ONLY = 3  # UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly
+_STANDARD_SHADERS = {'Standard', 'Torappu/Scene/StandardRealtimeShadow'}
 # The PC client's Torappu.Battle.Consts.CAMERA_VIEWS stores these local
 # positions in CameraViewLevel order. Rotation and FOV come from the prefab.
 _BATTLE_CAMERA_VIEWS = (
@@ -215,13 +216,16 @@ class _Glb:
             stream.write(self.bin)
 
 
-def _material(glb, reader, cache, materials):
+def _material(glb, reader, cache, materials, *, metallic_maps=None):
     identity = reader.assets_file.name, reader.path_id
     if identity in cache:
         return cache[identity]
     material = reader.read()
     shader = material.m_Shader.read()
     shader_name = getattr(getattr(shader, "m_ParsedForm", None), "m_Name", None) or shader.m_Name
+    keywords = material.m_ValidKeywords or ()
+    emission = shader_name in _STANDARD_SHADERS and "_EMISSION" in keywords
+    metallic = shader_name in _STANDARD_SHADERS and "_METALLICGLOSSMAP" in keywords
     saved = material.m_SavedProperties
     floats = {name: value for name, value in saved.m_Floats if np.isfinite(value)}
     colors = {name: _vector(value, "rgba").tolist() for name, value in saved.m_Colors
@@ -232,7 +236,7 @@ def _material(glb, reader, cache, materials):
     if water_overlay:
         # The original pixel shader discards the overlay until the tile is highlighted.
         red, green, blue, alpha = colors.get("_TintColor", [.5, .5, .5, .5])
-        enabled = "_EMISSION" in (material.m_ValidKeywords or ())
+        enabled = "_EMISSION" in keywords
         tint = [2 * red * alpha, 2 * green * alpha, 2 * blue * alpha, 2 * alpha**2 if enabled else 0.]
     pbr = {"baseColorFactor": [*map(_srgb_to_linear, tint[:3]), min(1., max(0., tint[3]))],
            "metallicFactor": min(1., max(0., floats.get("_Metallic", 0.))),
@@ -240,16 +244,29 @@ def _material(glb, reader, cache, materials):
     item = {"name": material.m_Name, "pbrMetallicRoughness": pbr,
             "extras": {"unityShader": shader_name, "unityKeywords": material.m_ValidKeywords,
                        "unityFloats": floats, "unityColors": colors, "unityTextures": {}}}
+    if emission:
+        item['emissiveFactor'] = [min(1., max(0., _srgb_to_linear(channel)))
+                                  for channel in colors.get('_EmissionColor', (0., 0., 0.))[:3]]
     for slot, value in textures.items():
         target = value.m_Texture.deref()
         texture = target.read()
         sx, sy = _vector(value.m_Scale, "xy")
         ox, oy = _vector(value.m_Offset, "xy")
-        item["extras"]["unityTextures"][slot] = {
+        texture_data = item["extras"]["unityTextures"][slot] = {
             "name": texture.m_Name, "colorSpace": texture.m_ColorSpace,
             "scale": [sx, sy], "offset": [ox, oy],
         }
-        if slot in ("_MainTex", "_BumpMap"):
+        if slot == "_MetallicGlossMap" and metallic and metallic_maps is not None:
+            key = target.assets_file.name, target.path_id
+            if key not in metallic_maps:
+                metallic_maps[key] = (f'atlas-metallic-{len(metallic_maps)}.png', texture)
+            texture_data['lightingAsset'] = metallic_maps[key][0]
+        if slot in ("_MainTex", "_BumpMap") or slot == "_EmissionMap" and emission:
+            if slot == "_EmissionMap" and "_MainTex" in textures:
+                # The forward pass samples emission in the same UVs as albedo.
+                main_tex = textures["_MainTex"]
+                sx, sy = _vector(main_tex.m_Scale, "xy")
+                ox, oy = _vector(main_tex.m_Offset, "xy")
             texture_info = {"index": glb.texture(target, slot == "_BumpMap")}
             if (sx, sy, ox, oy) != (1., 1., 0., 0.):
                 texture_info["extensions"] = {"KHR_texture_transform": {
@@ -259,6 +276,8 @@ def _material(glb, reader, cache, materials):
                     glb.doc["extensionsUsed"].append("KHR_texture_transform")
             if slot == "_MainTex":
                 pbr["baseColorTexture"] = texture_info
+            elif slot == "_EmissionMap":
+                item['emissiveTexture'] = texture_info
             else:
                 item["normalTexture"] = {**texture_info, "scale": floats.get("_BumpScale", 1.)}
     mode = floats.get("_Mode", 0)
@@ -268,7 +287,7 @@ def _material(glb, reader, cache, materials):
         item.update(alphaMode="MASK", alphaCutoff=floats.get("_Cutoff", .5))
     elif mode >= 2 or "AlphaBlend" in shader_name:
         item.update(alphaMode="BLEND", doubleSided=True)
-    if water_overlay or shader_name.startswith(("Unlit/", "Torappu/Particles/")):
+    if water_overlay or shader_name == "Torappu/Unlit/Texture" or shader_name.startswith(("Unlit/", "Torappu/Particles/")):
         if "KHR_materials_unlit" not in glb.doc.setdefault("extensionsUsed", []):
             glb.doc["extensionsUsed"].append("KHR_materials_unlit")
         item["extensions"] = {"KHR_materials_unlit": {}}
@@ -524,6 +543,7 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
     glb = _Glb()
     counts = Counter()
     materials, material_cache = {}, {}
+    metallic_maps = {}
     runtime_meshes = []
     for name, renderer, pose, source, indices in _meshes(objects, by_game, hierarchy):
         if cancel is not None:
@@ -536,7 +556,8 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
         for slot, sub in enumerate(indices):
             if not source[2][sub]:
                 continue
-            material = _material(glb, renderer.m_Materials[slot].deref(), material_cache, materials)
+            material = _material(glb, renderer.m_Materials[slot].deref(), material_cache, materials,
+                                 metallic_maps=metallic_maps)
             primitive, vertices, triangles = _primitive(glb, renderer, pose, source, sub, material,
                                                         prefab_lightmap=lightmap)
             primitives.append(primitive)
@@ -598,6 +619,13 @@ def extract_scene(game_root, scene_asset, resource_version, output, *, cancel=No
             layout['mapTheme'] = map_theme
         if highland_height is not None:
             layout['highlandHeight'] = highland_height
+        if metallic_maps:
+            urls = {}
+            for name, texture in metallic_maps.values():
+                # Unity's metallic/gloss channels are numeric inputs, not display colors.
+                texture.image.save(output / name)
+                urls[name] = name
+            layout['battleLighting']['metallicGlossMaps'] = urls
         atomic_json(output / "scene-layout.json", layout)
     return receipt
 

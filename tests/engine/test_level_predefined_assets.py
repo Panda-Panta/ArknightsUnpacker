@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from arknights_unpacker.extraction import level_predefined_assets as predefined
@@ -55,3 +56,29 @@ def test_predefined_distinguishes_native_mesh_and_empty_animators(monkeypatch, c
     monkeypatch.setattr(predefined, '_pointer', lambda *_: script)
 
     assert predefined._animator_kind(None, {'m_Script': {}, **fields}) == expected
+
+
+@pytest.mark.parametrize('direction, expected', [(0, [2, 4, 0, 1]), (1, [3, 3, 0, 1]),
+                                                 (2, [2, 2, 0, 1]), (3, [1, 3, 0, 1])])
+def test_predefined_mesh_faces_using_its_authored_pivot(monkeypatch, direction, expected):
+    asset = object()
+    root = SimpleNamespace(assets_file=asset, path_id=10)
+    pivot = SimpleNamespace(assets_file=asset, path_id=20)
+    rotation = SimpleNamespace(x=0, y=0, z=0, w=1)
+    scale = SimpleNamespace(x=1, y=1, z=1)
+    root.read = lambda: SimpleNamespace(object_reader=root, m_LocalPosition=SimpleNamespace(x=0, y=0, z=0),
+                                        m_LocalRotation=rotation, m_LocalScale=scale)
+    child = SimpleNamespace(m_GameObject=SimpleNamespace(path_id=201), m_Children=[])
+    pivot.read = lambda: SimpleNamespace(
+        object_reader=pivot, m_GameObject=SimpleNamespace(path_id=200), m_Father=root,
+        m_LocalPosition=SimpleNamespace(x=2, y=3, z=0), m_LocalRotation=rotation, m_LocalScale=scale,
+        m_Children=[SimpleNamespace(read=lambda: child)],
+    )
+    monkeypatch.setattr(predefined, '_pointer', lambda *_: pivot)
+
+    body_tree = {'_isFixedRotation': True, '_directionTransform': {'m_PathID': 20}}
+    affected = predefined._mesh_direction_adjustments(None, body_tree, root, direction)
+
+    assert set(affected) == {200, 201}
+    np.testing.assert_allclose(affected[201] @ [2, 4, 0, 1], expected)
+    assert predefined._mesh_direction_adjustments(None, {'_isFixedRotation': True}, root, direction) is None

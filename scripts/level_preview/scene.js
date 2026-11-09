@@ -5,8 +5,8 @@ import { applyBattleLighting, loadBattleLighting } from './battle_lighting.js';
 const query = new URLSearchParams(location.search);
 const capture = query.get('capture');
 const post = (path, body) => fetch(path, {method:'POST', body});
-const width = 960;
-const height = 540;
+const width = capture ? 960 : 1920;
+const height = capture ? 540 : 1080;
 const resolution = 100;
 const actorCanvas = 512;
 const origin = 256;
@@ -245,12 +245,20 @@ async function loadActorShadows(layout, configs) {
   return new Map(shadows.filter(Boolean));
 }
 
-function createActorLayer(scene, layout, shadows, actors, events, stationary) {
+function createActorLayer(renderer, scene, layout, shadows, actors, events, stationary) {
   if (!events.length && !stationary.length) return () => 0;
-  const surface = new PIXI.Application({
-    width: actorCanvas, height: actorCanvas, autoStart: false,
-    antialias: true, backgroundAlpha: 0, preserveDrawingBuffer: true,
+  // Pixi and Three share the same context. The 3D scene samples the Spine
+  // poses directly from GPU textures.
+  const surface = new PIXI.Renderer({
+    context: renderer.getContext(), view: renderer.domElement,
+    width, height, backgroundAlpha: 0,
   });
+  const scratch = PIXI.RenderTexture.create({
+    width: actorCanvas, height: actorCanvas, multisample: PIXI.MSAA_QUALITY.HIGH,
+  });
+  const sourceFrame = new PIXI.Rectangle();
+  const destinationFrame = new PIXI.Rectangle();
+  renderer.resetState();
   const worldOrigin = new THREE.Vector3().fromArray(layout.origin);
   const columns = new THREE.Vector3().fromArray(layout.columns);
   const rows = new THREE.Vector3().fromArray(layout.rows);
@@ -267,22 +275,35 @@ function createActorLayer(scene, layout, shadows, actors, events, stationary) {
   const avatarGeometry = new THREE.PlaneGeometry(1, 1);
   const firstShadow = shadows.values().next().value;
   const slots = [];
+  const frameRasters = new Map();
+
+  function cropAxis(low, high, scale) {
+    const begin = origin + Math.min(low * scale, high * scale);
+    const end = origin + Math.max(low * scale, high * scale);
+    const size = Math.min(actorCanvas, Math.max(32, 2 ** Math.ceil(Math.log2(end - begin + 6))));
+    return [Math.max(0, Math.min(actorCanvas - size, Math.floor((begin + end - size) / 2))), size];
+  }
 
   function addSlot() {
-    // The shared Pixi canvas is overwritten for each pose. Give each visible
-    // Three mesh its own snapshot and reuse these slots across spawn events.
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = actorCanvas;
-    const context = canvas.getContext('2d');
-    context.globalCompositeOperation = 'copy';
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
+    const target = PIXI.RenderTexture.create({width: 32, height: 32});
+    const external = new THREE.WebGLRenderTarget(actorCanvas, actorCanvas, {
+      depthTexture: new THREE.DepthTexture(actorCanvas, actorCanvas),
+    });
+    const {texture} = external;
     const material = new THREE.MeshBasicMaterial({
       map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     });
     applySpineDepth(material, layout.actorBaseline ?? 0);
+    const applyDepth = material.onBeforeCompile;
+    material.onBeforeCompile = shader => {
+      applyDepth(shader);
+      // Pixi's render target uses an inverted Y axis and premultiplied sRGB.
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+        vec4 pose = texture2D(map, vec2(vMapUv.x, 1.0 - vMapUv.y));
+        vec3 unmultiplied = pose.a > 0.0 ? min(pose.rgb / pose.a, vec3(1.0)) : vec3(0.0);
+        diffuseColor *= sRGBTransferEOTF(vec4(unmultiplied, pose.a));
+      `);
+    };
     const avatar = new THREE.Mesh(avatarGeometry, material);
     avatar.rotation.x = Math.PI / 6;
     const shadow = firstShadow ? new THREE.Mesh(firstShadow.geometry, firstShadow.material) : null;
@@ -291,9 +312,39 @@ function createActorLayer(scene, layout, shadows, actors, events, stationary) {
       scene.add(shadow);
     }
     scene.add(avatar);
-    const slot = {avatar, shadow, context, texture};
+    const slot = {avatar, shadow, target, external, texture};
     slots.push(slot);
     return slot;
+  }
+
+  function paintPose(slot, actor, direction, motionTime, idleTime, attackTime) {
+    const {sprite} = actor;
+    const {target, external, texture} = slot;
+    updateActorPose(actor, motionTime, idleTime, attackTime);
+    const bounds = sprite.getLocalBounds();
+    const extent = Math.max(Math.abs(bounds.x), Math.abs(bounds.right),
+      Math.abs(bounds.y), Math.abs(bounds.bottom));
+    const pixelsPerUnit = Math.min(resolution, (origin - 2) / extent);
+    const scaleX = pixelsPerUnit * direction;
+    sprite.scale.set(scaleX, pixelsPerUnit);
+    const [left, width] = cropAxis(bounds.x, bounds.right, scaleX);
+    const [top, height] = cropAxis(bounds.y, bounds.bottom, pixelsPerUnit);
+    if (target.width !== width || target.height !== height) target.resize(width, height);
+    // Keep the full depth plane and original raster scale. Only transfer the
+    // occupied part, with a transparent border for linear/clamped sampling.
+    texture.repeat.set(actorCanvas / width, actorCanvas / height);
+    texture.offset.set(-left / width, -(actorCanvas - top - height) / height);
+    surface.render(sprite, {renderTexture: scratch, clear: true});
+    // A multisampled buffer must resolve at full size before cropping.
+    surface.framebuffer.blit();
+    sourceFrame.x = left;
+    sourceFrame.y = top;
+    sourceFrame.width = destinationFrame.width = width;
+    sourceFrame.height = destinationFrame.height = height;
+    surface.framebuffer.blit(target.baseTexture.framebuffer, sourceFrame, destinationFrame);
+    const gpuTexture = target.baseTexture._glTextures[surface.CONTEXT_UID].texture;
+    renderer.setRenderTargetTextures(external, gpuTexture, undefined);
+    return {texture, pixelsPerUnit};
   }
 
   function* visiblePoses(time) {
@@ -315,12 +366,14 @@ function createActorLayer(scene, layout, shadows, actors, events, stationary) {
 
   const planeScale = new THREE.Vector3();
   return time => {
+    frameRasters.clear();
+    surface.reset();
     let visible = 0;
     for (const {actorId, position, direction, motionTime, idleTime, attackTime, predefined} of visiblePoses(time)) {
       const slot = slots[visible++] ?? addSlot();
       const actor = actors.get(actorId);
-      const {sprite, config} = actor;
-      const {avatar, shadow, context, texture} = slot;
+      const {config} = actor;
+      const {avatar, shadow} = slot;
       avatar.visible = true;
       if (predefined) avatar.position.fromArray(position);
       else avatar.position.copy(worldOrigin).addScaledVector(columns, position[0]).addScaledVector(rows, position[1]);
@@ -335,12 +388,18 @@ function createActorLayer(scene, layout, shadows, actors, events, stationary) {
       }
       avatar.position.add(offsets.get(actorId));
 
-      updateActorPose(actor, motionTime, idleTime, attackTime);
-      const bounds = sprite.getLocalBounds();
-      const extent = Math.max(Math.abs(bounds.x), Math.abs(bounds.right),
-        Math.abs(bounds.y), Math.abs(bounds.bottom));
-      const pixelsPerUnit = Math.min(resolution, (origin - 2) / extent);
-      sprite.scale.set(pixelsPerUnit * direction, pixelsPerUnit);
+      // Synchronized instances can share an exact pose without changing their
+      // independent world positions or shadows.
+      const pose = attackTime !== undefined ? `attack:${attackTime}`
+        : idleTime !== undefined && config.idleClip ? `idle:${idleTime}` : `move:${motionTime}`;
+      const key = `${actorId}:${direction}:${pose}`;
+      let raster = frameRasters.get(key);
+      if (!raster) {
+        raster = paintPose(slot, actor, direction, motionTime, idleTime, attackTime);
+        frameRasters.set(key, raster);
+      }
+      avatar.material.map = raster.texture;
+      const {pixelsPerUnit} = raster;
       const plane = planes.get(actorId);
       avatar.matrixAutoUpdate = !plane;
       if (plane) {
@@ -350,14 +409,12 @@ function createActorLayer(scene, layout, shadows, actors, events, stationary) {
       } else {
         avatar.scale.setScalar(actorCanvas / pixelsPerUnit * config.graphicScale * (layout.actorScale ?? 1));
       }
-      surface.renderer.render(sprite);
-      context.drawImage(surface.view, 0, 0);
-      texture.needsUpdate = true;
     }
     for (let i = visible; i < slots.length; i++) {
       slots[i].avatar.visible = false;
       if (slots[i].shadow) slots[i].shadow.visible = false;
     }
+    renderer.resetState();
     return visible;
   };
 }
@@ -380,10 +437,11 @@ async function main() {
   const renderer = new THREE.WebGLRenderer({
     antialias: true, preserveDrawingBuffer: Boolean(capture),
   });
-  renderer.setSize(width, height);
+  renderer.setSize(width, height, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  document.querySelector('#stage').appendChild(renderer.domElement);
+  const stage = document.querySelector('#stage');
+  stage.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(layout.background || '#201b18');
   const camera = new THREE.PerspectiveCamera(layout.camera.fov, width / height, 0.3, 1000);
@@ -444,10 +502,12 @@ async function main() {
   sun.shadow.needsUpdate = true;
   scene.add(sun);
 
-  const renderActors = createActorLayer(scene, layout, shadows, actors, events, stationary);
+  const renderActors = createActorLayer(renderer, scene, layout, shadows, actors, events, stationary);
   let maxVisibleActors = 0;
+  let shownTime = 0;
 
   function render(time) {
+    shownTime = time;
     maxVisibleActors = Math.max(maxVisibleActors, renderActors(time));
     for (const prop of timedProps) {
       const visible = time >= prop.time;
@@ -547,6 +607,21 @@ async function main() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pause();
   });
+  new ResizeObserver(([{contentRect}]) => {
+    if (!contentRect.width || !contentRect.height) return;
+    const full = document.documentElement.classList.contains('replay-fullscreen');
+    const normalAspect = width / height;
+    const aspect = full ? contentRect.width / contentRect.height : normalAspect;
+    if (aspect === camera.aspect) return;
+    // Keep the target height and expand the shorter viewing axis so no map is cropped.
+    renderer.setSize(Math.max(1, Math.round(height * aspect)), height, false);
+    camera.aspect = aspect;
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(
+      Math.tan(THREE.MathUtils.degToRad(layout.camera.fov) / 2) * Math.max(1, normalAspect / aspect),
+    ));
+    camera.updateProjectionMatrix();
+    render(shownTime);
+  }).observe(stage);
   play.disabled = false;
   speed.disabled = false;
   slider.disabled = false;

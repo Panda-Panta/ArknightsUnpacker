@@ -43,7 +43,7 @@ def _gate_positions(level, layout):
     return gates
 
 
-def _export_mesh_prop(root, objects, output, *, mount=None):
+def _export_mesh_prop(root, objects, output, *, mount=None, mesh_pose_adjustments=None):
     by_game, hierarchy = _hierarchy(objects)
     inverse_root = np.linalg.inv(hierarchy(by_game[root.path_id])[1])
     if mount is not None:
@@ -61,6 +61,10 @@ def _export_mesh_prop(root, objects, output, *, mount=None):
     for name, renderer, pose, mesh, indices in _meshes(objects, by_game, hierarchy):
         if renderer is None:
             continue
+        adjustment = (mesh_pose_adjustments or {}).get(renderer.m_GameObject.path_id)
+        if adjustment is not None:
+            pose = adjustment @ pose
+        export_pose = inverse_root @ pose
         primitives = []
         for slot, sub in enumerate(indices):
             if not mesh[2][sub]:
@@ -74,7 +78,7 @@ def _export_mesh_prop(root, objects, output, *, mount=None):
                 tint = tints.get(renderer.m_GameObject.path_id)
                 if tint is not None:
                     material['pbrMetallicRoughness']['baseColorFactor'] = tint
-            primitive, _, _ = _primitive(glb, renderer, inverse_root @ pose, mesh, sub, index)
+            primitive, _, _ = _primitive(glb, renderer, export_pose, mesh, sub, index)
             primitives.append(primitive)
         if primitives:
             local_name = name.rsplit('/', 1)[-1]

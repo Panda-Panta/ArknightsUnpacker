@@ -48,9 +48,20 @@ class LevelReplayView(QWebEngineView):
         self._page = _ReplayPage(self._profile, self._url, self)
         self._page.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, False)
         self.setPage(self._page)
+        self._fullscreen_presentation = False
+        self.loadFinished.connect(self._apply_presentation)
 
     def load_replay(self):
         self.load(self._url)
+
+    def set_fullscreen_presentation(self, enabled):
+        self._fullscreen_presentation = enabled
+        self._apply_presentation()
+
+    def _apply_presentation(self):
+        if self._page is not None:
+            enabled = 'true' if self._fullscreen_presentation else 'false'
+            self._page.runJavaScript(f"document.documentElement.classList.toggle('replay-fullscreen', {enabled})")
 
     def shutdown(self):
         if self._page is not None:

@@ -14,6 +14,7 @@ from .tables import load_local_tables
 
 
 _PREFABS = 'battle/prefabs/'
+_FACING_Z = ((1, 0), (0, -1), (-1, 0), (0, 1))  # UP, RIGHT, DOWN, LEFT.
 
 
 def _active_instances(level, replay):
@@ -112,9 +113,35 @@ def _local_transform(node, root_transform):
             root_transform.assets_file, root_transform.path_id):
         pose = _pose(node) @ pose
         if not node.m_Father:
-            raise ValueError('Spine 节点不属于目标预制体')
+            raise ValueError('变换节点不属于目标预制体')
         node = node.m_Father.read()
     return pose
+
+
+def _mesh_direction_adjustments(body, body_tree, root, direction):
+    ref = body_tree.get('_directionTransform', {})
+    if not ref.get('m_PathID') or direction >= len(_FACING_Z):
+        return None
+    target = _pointer(body, ref)
+    pivot = target.read()
+    local = _pose(pivot)
+    # SetBodyDirection calls FaceTo2d on the authored pivot, independently of actor facing.
+    # FaceTo2d replaces the local rotation with atan2(y, x) - 90° and keeps position and scale.
+    cos_z, sin_z = _FACING_Z[direction]
+    new_local = local.copy()
+    scale = pivot.m_LocalScale
+    new_local[:3, :3] = np.array([[cos_z, -sin_z, 0], [sin_z, cos_z, 0], [0, 0, 1]]) * (
+        scale.x, scale.y, scale.z)
+    world = _pose(root.read()) @ _local_transform(target, root)
+    adjustment = world @ np.linalg.inv(local) @ new_local @ np.linalg.inv(world)
+
+    affected = {}
+    pending = [pivot]
+    while pending:
+        node = pending.pop()
+        affected[node.m_GameObject.path_id] = adjustment
+        pending.extend(child.read() for child in node.m_Children)
+    return affected
 
 
 def _export_visual(open_prefab, logical, skin, direction, map_theme, mesh_path):
@@ -145,7 +172,10 @@ def _export_visual(open_prefab, logical, skin, direction, map_theme, mesh_path):
 
     animator, tree, kind = _animator(animator_owner, animator_ref, graphic_objects)
     if kind == 'mesh':
-        _export_mesh_prop(graphic_prefab, graphic_objects, mesh_path, mount=mount)
+        adjustments = (_mesh_direction_adjustments(body, body_tree, root_transform, direction)
+                       if graphic_prefab is prefab else None)
+        _export_mesh_prop(graphic_prefab, graphic_objects, mesh_path, mount=mount,
+                          mesh_pose_adjustments=adjustments)
         return 'mesh', {'asset': mesh_path.name, 'prefabAsset': skin_logical,
                         'positions': [], 'activationTimes': []}
     if kind == 'empty' and not any(obj.type.name.endswith('Renderer') for obj in graphic_objects):

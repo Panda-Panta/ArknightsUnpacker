@@ -3,6 +3,7 @@ import * as THREE from 'three';
 const STANDARD = 'Torappu/Scene/StandardRealtimeShadow';
 const VERTEX_BLEND = '_HG_VERTEX_COLOR_BLEND_ON';
 const METALLIC_GLOSS = '_METALLICGLOSSMAP';
+const EMISSION = '_EMISSION';
 const DEFAULT_LIGHTMAP_MULTIPLIER = 5;
 
 async function loadRawTexture(loader, url, channel = 0) {
@@ -26,6 +27,7 @@ uniform vec4 battleOcclusion;
 uniform vec3 battleRayDirection;
 uniform vec3 battleMainLight;
 uniform vec3 battleColor;
+uniform vec3 battleEmissionColor;
 uniform vec3 battleBlendColor;
 uniform vec2 battleBlendRange;
 uniform float battleBlendStrength;
@@ -81,17 +83,22 @@ float gameR2 = gameRoughness * gameRoughness;
 float gameD = gameR2 / (max(gameLoH, 0.32) * (1.5 + gameR2)
   * ((gameR2 * gameR2 - 1.0) * gameNoH * gameNoH + 1.00001));
 vec3 gameDirect = (gameDiffuse + gameD * gameSpecular) * gameNoL * battleMainLight * gameOcclusion;
-vec3 gameOutgoing = gameDiffuse * gameBaked + gameDirect;
+vec3 gameEmission = battleEmissionColor;
+#ifdef USE_EMISSIVEMAP
+  vec3 emissionSample = texture2D(emissiveMap, vEmissiveMapUv).rgb;
+  gameEmission *= sRGBTransferOETF(vec4(emissionSample, 1.0)).rgb;
+#endif
+vec3 gameOutgoing = gameDiffuse * gameBaked + gameDirect + gameEmission;
 vec3 outgoingLight = sRGBTransferEOTF(vec4(max(gameOutgoing, vec3(0.0)), 1.0)).rgb;
 `;
 
-function applyStandard(material, lighting, useBlend) {
+function applyStandard(material, lighting, useBlend, metalMap) {
   const data = material.userData;
   const colors = data.unityColors ?? {};
   const floats = data.unityFloats ?? {};
-  const metalName = data.unityTextures?._MetallicGlossMap?.name;
-  const metalMap = data.unityKeywords?.includes(METALLIC_GLOSS)
-    ? lighting.metallicGlossMaps[metalName] : null;
+  // Older exported scenes identify the emission map without embedding it.
+  const emission = data.unityKeywords?.includes(EMISSION) &&
+    (!data.unityTextures?._EmissionMap || material.emissiveMap);
   const vec3 = (value, fallback) => new THREE.Vector3().fromArray(value ?? fallback);
   const isSplit = Boolean(floats._MetallicGlossSplit);
 
@@ -107,6 +114,7 @@ function applyStandard(material, lighting, useBlend) {
       battleRayDirection: { value: lighting.rayDirection },
       battleMainLight: { value: lighting.mainLight },
       battleColor: { value: vec3(colors._Color, [1, 1, 1]) },
+      battleEmissionColor: { value: vec3(emission ? colors._EmissionColor : null, [0, 0, 0]) },
       battleBlendColor: { value: vec3(colors._BlendColor, [1, 1, 1]) },
       battleBlendRange: { value: new THREE.Vector2().fromArray(colors._BlendRangeCtrl ?? [0, 1]) },
       battleBlendStrength: { value: floats._BlendStrength ?? 0 },
@@ -185,13 +193,16 @@ export function applyBattleLighting(scene, lighting) {
     const isUnityStandard = data.unityShader === 'Standard' && !original.transparent;
     if ((!isTorappu && !isUnityStandard) || !node.geometry.attributes.uv1) return;
     const useBlend = Boolean(node.geometry.attributes.color && data.unityKeywords?.includes(VERTEX_BLEND));
+    const metallic = data.unityTextures?._MetallicGlossMap;
+    const metalMap = original.map && data.unityKeywords?.includes(METALLIC_GLOSS)
+      ? lighting.metallicGlossMaps[metallic?.lightingAsset ?? metallic?.name] : null;
     const key = `${original.uuid}:${useBlend}`;
-    if (!cache.has(key)) cache.set(key, applyStandard(original.clone(), lighting, useBlend));
+    if (!cache.has(key)) cache.set(key, applyStandard(original.clone(), lighting, useBlend, metalMap));
     node.material = cache.get(key);
     node.receiveShadow = lighting.dynamicShadow && !node.material.transparent;
     stats[isTorappu ? 'nativeMeshes' : 'unityStandardMeshes'] += 1;
     if (useBlend) stats.vertexBlendMeshes += 1;
-    if (lighting.metallicGlossMaps[data.unityTextures?._MetallicGlossMap?.name]) stats.metallicMaps += 1;
+    if (metalMap) stats.metallicMaps += 1;
   });
   return stats;
 }
