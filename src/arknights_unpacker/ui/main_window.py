@@ -80,8 +80,6 @@ class MainWindow(QMainWindow):
         self.resize(1450, 930)
         self.setMinimumSize(1050, 700)
         self.queue = JobQueue(self, history_root=Path(services.data_root) / 'queue', resume_handler=self.prepare_recovery)
-        self.native_replay_queue = JobQueue(self)
-        self.native_replay_queue.changed.connect(self._finish_closing)
         removed_previews = {Path(path) for path in self.preview_cache.last_cleanup['removed']}
         self.queue.forget_finished([job.job_id for job in self.queue.jobs
             if job.status == '成功' and (job.request or {}).get('output') and
@@ -259,7 +257,6 @@ class MainWindow(QMainWindow):
             'operators': ('干员资料', '检索干员，查看培养面板与技能，生成完整资料。'),
             'modules': ('模组更新', '对照模组各级效果，勾选资料并合并导出。'),
             'gameplay': ('玩法资料', '按玩法查看已识别的资源和赛季资料。'),
-            'levels': ('关卡预览', '按玩法和章节浏览，双击关卡查看预览。'),
             'settings': ('工作台设置', '调整输出位置、资料排版与历史记录选项。'),
         }
         current = self.pages.current_id()
@@ -376,7 +373,7 @@ class MainWindow(QMainWindow):
         self._finish_closing()
 
     def _finish_closing(self):
-        if self._closing and not (self.queue.busy or self.native_replay_queue.busy):
+        if self._closing and not self.queue.busy:
             QTimer.singleShot(0, self.close)
 
     def choose_root(self):
@@ -1003,9 +1000,8 @@ class MainWindow(QMainWindow):
         for dialog in list(self._dialogs):
             dialog.close()
         self.monitor_timer.stop()
-        self.native_replay_queue.shutdown()
         self.queue.shutdown()
-        if self.queue.busy or self.native_replay_queue.busy:
+        if self.queue.busy:
             self.show_status('正在取消任务并等待工作进程退出，完成后将自动关闭。')
             event.ignore()
             return

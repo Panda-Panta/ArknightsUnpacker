@@ -19,8 +19,7 @@
 | --- | --- | --- |
 | Python | 3.12 x64；[Python](https://www.python.org/) | PSF 等组合许可，构建时收集实际解释器 `LICENSE.txt`。 |
 | PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only。随包保留 wheel 提供的 `LicenseRef-Qt-Commercial.txt` 和 Qt 许可补充原文。目录式包保留实际使用的 Qt 动态库及必要插件，支持替换。 |
-| Qt WebEngine | 6.8.3；[Qt WebEngine 许可与 Chromium 第三方清单](https://doc.qt.io/qt-6.8/qtwebengine-licensing.html) | 用于关卡预览窗口内的本机 WebGL 播放。由锁定的 PySide6 wheel 提供 QtWebEngineCore、QtWebEngineWidgets、QtWebEngineProcess 及其资源和语言包。Qt 模块和 Chromium 的许可证分别由上游清单记录。当前纳入本机 Test 验收。 |
-| Godot Engine | [4.7.2-stable Windows x86_64](https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable) | Test 的可选原生回放进程。显式构建时使用 `ARKNIGHTS_GODOT_RUNTIME` 指定官方解压后的主可执行程序。构建校验固定 SHA-256，按原字节纳入 `Godot.exe`，并附 `_internal/licenses/Godot/` 中的官方 MIT `LICENSE.txt`、第三方完整 `COPYRIGHT.txt` 和来源清单。 |
+| Godot Engine | [4.7.2-stable Windows x86_64](https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable) | ArknightsMapViewer 的原生回放进程。显式构建时使用 `ARKNIGHTS_GODOT_RUNTIME` 指定官方解压后的主可执行程序。构建校验固定 SHA-256，按原字节纳入 `Godot.exe`，并附 `_internal/licenses/Godot/` 中的官方 MIT `LICENSE.txt`、第三方完整 `COPYRIGHT.txt` 和来源清单。 |
 | UnityPy | 1.25.3；[上游](https://github.com/K0lb3/UnityPy) | MIT；包含其运行数据及动态类，完整 wheel LICENSE 随包。 |
 | fonttools | 4.68.0；[官方文档](https://fonttools.readthedocs.io/en/stable/ttLib/ttFont.html) | 用于系统字体名称读取和TTC选定字形提取，保留实际wheel的LICENSE／METADATA；不附带系统字体文件。 |
 | flatbuffers / numpy / lz4 | 25.12.19 / 2.2.6 / 4.4.5 | 分别保留 wheel 的 Apache／BSD 等完整声明；numpy LICENSE 包含其本地库的多项声明。 |

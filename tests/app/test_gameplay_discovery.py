@@ -42,9 +42,10 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
     game = gameplay_installation
     services = AppServices(tmp_path / 'data', tmp_path / 'exports')
     monkeypatch.setattr(services.runner, 'run', lambda *a, **kw: pytest.fail('scan decoded gameplay'))
-    services.scan(game)
+    result = services.scan(game)
     catalog = services.gameplay_catalog
-    levels = services.level_catalog
+    assert services.level_catalog is None
+    assert 'level_catalog' not in result['snapshot'].manifest_versions
     assert catalog['resource_version'] == 'resource-1'
     assert [mode['id'] for mode in catalog['modes']] == ['autochess', 'roguelike']
     autochess, roguelike = catalog['modes']
@@ -61,7 +62,7 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
                             lambda *a: pytest.fail('restore read the game index'))
         restored.restore(game)
         assert restored.gameplay_catalog == catalog
-        assert restored.level_catalog == levels
+        assert restored.level_catalog is None
     finally:
         restored.shutdown()
 
@@ -99,19 +100,20 @@ def test_level_catalog_keeps_last_readable_baseline(gameplay_installation, tmp_p
     monkeypatch.setattr(gameplay, 'read_resource_manifest', read_index)
     services = AppServices(tmp_path / 'data', tmp_path / 'exports')
     try:
-        services.scan(game)
+        services.scan_level_catalog(game)
         assert [(row['id'], row['is_new']) for row in services.level_catalog['levels']] == [(LEVEL, False)]
 
         broken = True
         change_version('resource-2')
-        services.scan(game)
-        assert not services.level_catalog['levels']
+        with pytest.raises(ValueError, match='invalid index'):
+            services.scan_level_catalog(game)
+        assert [(row['id'], row['is_new']) for row in services.level_catalog['levels']] == [(LEVEL, False)]
 
         broken = False
         change_version('resource-3')
         index['assets'].append({'assetName': new_level, 'bundle': 'levels.ab'})
         for _ in range(2):
-            services.scan(game)
+            services.scan_level_catalog(game)
             assert [row['id'] for row in services.level_catalog['levels'] if row['is_new']] == [new_level]
     finally:
         services.shutdown()

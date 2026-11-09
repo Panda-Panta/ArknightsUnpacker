@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 
 root = Path(SPECPATH).parent
 preview_only = os.environ.get("ARKNIGHTS_LEVEL_PREVIEW_ONLY") == "1"
-bundle_name = "ArknightsLevelPreview" if preview_only else "ArknightsUnpacker"
+bundle_name = "ArknightsMapViewer" if preview_only else "ArknightsUnpacker"
 datas = []
 binaries = []
 
@@ -28,11 +28,7 @@ datas.append((str(root / "vendor" / "Ark-Unpacker-LICENSE"), "licenses/Ark-Unpac
 guide = "LEVEL_PREVIEW_GUIDE.md" if preview_only else "USER_GUIDE.md"
 for name in (guide, "THIRD_PARTY_NOTICES.md"):
     datas.append((str(root / "docs" / name), "docs"))
-if not preview_only:
-    for name in ("scene.html", "scene.js", "battle_lighting.js"):
-        datas.append((str(root / "scripts" / "level_preview" / name), "scripts/level_preview"))
-
-godot_runtime = os.environ.get("ARKNIGHTS_GODOT_RUNTIME")
+godot_runtime = os.environ.get("ARKNIGHTS_GODOT_RUNTIME") if preview_only else None
 if preview_only and not godot_runtime:
     raise SystemExit("The level preview bundle requires ARKNIGHTS_GODOT_RUNTIME")
 if godot_runtime:
@@ -86,8 +82,9 @@ fmod_root = Path(next(iter(find_spec("fmod_toolkit").submodule_search_locations)
 os.environ.setdefault("PYFMODEX_DLL_PATH", str(fmod_root / "libfmod/Windows/x64/fmod.dll"))
 hiddenimports = collect_submodules("UnityPy") + collect_submodules("pyfmodex")
 # Page factories import optional views by name so the shell can omit them.
-hiddenimports += (["arknights_unpacker.ui.level_catalog_page"] if preview_only
-                  else collect_submodules("arknights_unpacker.ui"))
+if not preview_only:
+    hiddenimports += collect_submodules(
+        "arknights_unpacker.ui", filter=lambda name: not name.startswith("arknights_unpacker.ui.level_"))
 hiddenimports += collect_submodules("fontTools.ttLib.tables")
 hiddenimports += ["PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.BmpImagePlugin", "PIL.TgaImagePlugin", "Crypto.Cipher.AES", "bson", "flatbuffers", "numpy", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets"]
 preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
@@ -95,9 +92,8 @@ if preflight and preview_only:
     raise SystemExit("The level preview and decoder preflight build profiles are separate")
 entrypoint = root / "packaging" / ("level_preview_entrypoint.py" if preview_only
                                  else "preflight.py" if preflight else "entrypoint.py")
-excluded = ["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"]
-if preview_only:
-    excluded += ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebChannel"]
+excluded = ["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets",
+            "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebChannel", "tkinter", "pytest"]
 a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, datas=datas,
              hiddenimports=hiddenimports,
              excludes=excluded,

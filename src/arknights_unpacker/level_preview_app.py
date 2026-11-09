@@ -30,9 +30,9 @@ def main() -> int:
     from .ui.level_preview_window import LevelPreviewWindow
 
     app = QApplication(sys.argv[:1])
-    app.setApplicationName('ArknightsLevelPreview')
+    app.setApplicationName('ArknightsMapViewer')
     app.setApplicationVersion(__version__)
-    app.setOrganizationName('ArknightsLevelPreview')
+    app.setOrganizationName('ArknightsMapViewer')
     app.setWindowIcon(QIcon(str(resource_root() / 'resources/ui/app-icon.png')))
     frozen = bool(getattr(sys, 'frozen', False))
     root = program_root() if frozen else program_root() / '.work/level-preview'

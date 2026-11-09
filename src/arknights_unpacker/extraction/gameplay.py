@@ -21,8 +21,8 @@ _AUTOCHESS_LEVEL = re.compile(r'gamedata/levels/activities/act[0-9]+v?autochess/
 _AUTOCHESS_GUIDE = re.compile(r'gamedata/story/activities/(?:act[0-9]+v?autochess|autochess)/')
 
 
-def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel, *, previous_levels=None):
-    """Read the active index once for the gameplay and level directories."""
+def discover_gameplay(snapshot: ScanSnapshot, catalog: ResourceCatalog, cancel):
+    """Identify gameplay data in the active resource index."""
     active = catalog.manifest
     result = {'root': snapshot.root, 'resource_version': str(active.get('versionId', 'unknown')),
               'modes': [], 'diagnostics': []}
@@ -47,14 +47,10 @@ def discover_game_content(snapshot: ScanSnapshot, catalog: ResourceCatalog, canc
             raise FileNotFoundError('活动资源索引未安装。')
         observed = record.size, record.mtime_ns
         index = _read_checked_index(path, observed)
-        gameplay = _identify(result, index, catalog, cancel)
-        levels = _level_directory(snapshot.root, result['resource_version'], index, catalog, previous_levels, cancel)
-        return gameplay, levels
+        return _identify(result, index, catalog, cancel)
     except (OSError, ValueError, TypeError, KeyError, IndexError, struct.error) as error:
         result['diagnostics'].append(f'玩法识别暂不可用：{error}')
-        levels = {'root': snapshot.root, 'resource_version': result['resource_version'],
-                  'levels': [], 'diagnostics': [f'关卡索引暂不可用：{error}']}
-        return result, levels
+        return result
 
 
 def _read_checked_index(path, observed):

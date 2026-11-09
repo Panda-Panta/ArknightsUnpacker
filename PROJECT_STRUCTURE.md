@@ -44,10 +44,10 @@ ArknightsUnpacker/
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
 │     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
-│     ├─ level_catalog_page.py   分类关卡目录和新增筛选
+│     ├─ level_catalog_page.py   ArknightsMapViewer 的关卡目录、新增筛选与回放入口
 │     ├─ level_preview_window.py 独立关卡预览器窗口、扫描与恢复
 │     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
-│     ├─ level_replay_view.py   关卡窗口内的 Qt WebEngine 实时播放器
+│     ├─ level_replay_view.py   源码环境的 Qt WebEngine 回放试验入口
 │     ├─ level_native_dialog.py Qt 宿主和 Godot 原生回放进程
 │     ├─ level_native_preview.py 按选择和指标后台准备原生回放，协调播放及取消
 │     ├─ level_tags_dialog.py    作战指标选择与脚本效果
@@ -73,7 +73,7 @@ ArknightsUnpacker/
 ├─ scripts/                       dev.ps1、verify.ps1、build.ps1、verify-html.cjs
 ├─ docs/                          游戏目录、用户指南、第三方声明
 ├─ artifacts/                     里程碑样本、审查报告与 M9 验收，不随程序打包
-├─ dist/<版本>/ArknightsUnpacker/ 最终目录式 Windows 便携包
+├─ dist/<版本>/                    Windows 目录式便携包，按产品分为 ArknightsUnpacker 和 ArknightsMapViewer
 ├─ .work/                         独立任务／测试／构建中间文件，不随包分发
 ├─ .tools/, .venv/                仅本机开发依赖，不随包分发
 ├─ pyproject.toml, uv.lock         精确依赖和工程命令

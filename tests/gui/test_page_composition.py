@@ -20,6 +20,15 @@ def make_window(qtbot, tmp_path, **kwargs):
     return window, services
 
 
+def test_workbench_restores_a_saved_map_tab_to_explorer(qtbot, tmp_path):
+    window, _ = make_window(qtbot, tmp_path)
+    window.pages.select('gameplay')
+    assert window.pages.current_id() == 'gameplay'
+    assert window.pages.widget('levels') is None
+    window.pages.restore_state({'tab': 'levels'})
+    assert window.pages.current_id() == 'explorer'
+
+
 def test_inserting_page_does_not_rename_another_page_when_queue_changes(qtbot, tmp_path):
     window, _ = make_window(qtbot, tmp_path)
     inserted = QWidget()

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QLabel, QLineE
 
 from .jobs import JobQueue
 from .models import value
-from .pages import LevelCatalogPage
+from .level_catalog_page import LevelCatalogPage
 from .preview_cache import PreviewCache
 from .styles import apply_theme
 

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QPushButton
 from arknights_unpacker import paths
 from arknights_unpacker.application import AppServices
 from arknights_unpacker.ui.level_native_preview import NativeReplayPreloader
-from arknights_unpacker.ui.main_window import MainWindow
+from arknights_unpacker.ui.level_preview_window import LevelPreviewWindow
 
 
 def test_new_stage_prepares_before_play_and_uses_a_separate_queue(qtbot, tmp_path, monkeypatch):
@@ -42,12 +42,11 @@ def test_new_stage_prepares_before_play_and_uses_a_separate_queue(qtbot, tmp_pat
     monkeypatch.setattr(paths, 'resource_root', lambda: tmp_path)
     monkeypatch.setattr(NativeReplayPreloader, '_open_player',
                         lambda _self, preview, result: played.append((preview.request.path, result)))
-    window = MainWindow(services)
+    window = LevelPreviewWindow(services)
     qtbot.addWidget(window)
     window.show()
-    page = window.pages._pages['levels']
+    page = window.page
     page._set_catalog(catalog)
-    window.pages.select('levels')
     page.view.search.setText('新增关卡')
     page.view.table.selectRow(0)
     try:

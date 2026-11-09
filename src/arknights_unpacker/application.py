@@ -153,14 +153,13 @@ class AppServices:
         self._select_installation(installation)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, changes, catalog
         self.gameplay_catalog = snapshot.manifest_versions.get('gameplay') if snapshot is not None else None
-        self.level_catalog = snapshot.manifest_versions.get('level_catalog') if snapshot is not None else None
         self.gamedata, self.entity_changes, self.baseline = data, entity_changes, baseline
         emit({"type": "progress", "message": "已恢复保存结果；重新扫描时将与完整基线比较。"})
         return {"snapshot": snapshot, "changes": changes, "catalog": catalog,
                 "gamedata": data, "entity_changes": entity_changes}
 
     def scan(self, root, hours=24.0, strict=False, emit=null_progress, cancel=None):
-        from .extraction.gameplay import discover_game_content
+        from .extraction.gameplay import discover_gameplay
         from .library import scan_installation, compare_files, resolve_resources
         cancel = cancel or CancelToken()
         installation = self._installation(root)
@@ -169,18 +168,12 @@ class AppServices:
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
         catalog.installation = installation
-        previous_versions = previous.manifest_versions if previous is not None else {}
-        previous_levels = previous_versions.get('level_catalog_baseline', previous_versions.get('level_catalog'))
-        gameplay, levels = discover_game_content(snapshot, catalog, cancel, previous_levels=previous_levels)
+        gameplay = discover_gameplay(snapshot, catalog, cancel)
         cancel.check()
         snapshot.manifest_versions['gameplay'] = gameplay
-        snapshot.manifest_versions['level_catalog'] = levels
-        if not levels['levels'] and previous_levels and previous_levels['levels']:
-            snapshot.manifest_versions['level_catalog_baseline'] = previous_levels
         self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
         self.gameplay_catalog = gameplay
-        self.level_catalog = levels
         self.config["hours"] = float(hours)
         self.save_config()
         return {"snapshot": snapshot, "changes": change_set, "catalog": catalog}

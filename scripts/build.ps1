@@ -8,7 +8,7 @@ param(
 . (Join-Path $PSScriptRoot '../packaging/common.ps1')
 $previousProfile = $env:ARKNIGHTS_LEVEL_PREVIEW_ONLY
 $env:ARKNIGHTS_LEVEL_PREVIEW_ONLY = if ($LevelPreview) { '1' } else { '0' }
-$bundleName = if ($LevelPreview) { 'ArknightsLevelPreview' } else { 'ArknightsUnpacker' }
+$bundleName = if ($LevelPreview) { 'ArknightsMapViewer' } else { 'ArknightsUnpacker' }
 try {
     if (-not $IsWindows) { throw 'The Windows portable bundle must be built on Windows x64.' }
     $taskId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)

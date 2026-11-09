@@ -12,16 +12,6 @@ import re
 import subprocess
 
 
-_WEBENGINE_ASSETS = (
-    "PySide6/Qt6WebEngineCore.dll", "PySide6/Qt6WebEngineWidgets.dll",
-    "PySide6/QtWebEngineCore.pyd", "PySide6/QtWebEngineWidgets.pyd", "PySide6/QtWebEngineProcess.exe",
-    "PySide6/qt.conf", "PySide6/resources/icudtl.dat", "PySide6/resources/v8_context_snapshot.bin",
-    "PySide6/resources/qtwebengine_resources.pak", "PySide6/resources/qtwebengine_devtools_resources.pak",
-    "PySide6/resources/qtwebengine_resources_100p.pak", "PySide6/resources/qtwebengine_resources_200p.pak",
-    "PySide6/translations/qtwebengine_locales/en-US.pak",
-    "PySide6/translations/qtwebengine_locales/zh-CN.pak",
-)
-
 _GODOT_EXE = "scripts/level_preview/native_player/Godot.exe"
 _GODOT_ASSETS = (
     _GODOT_EXE,
@@ -32,20 +22,15 @@ _GODOT_ASSETS = (
 )
 
 
-def _forbidden_asset(path: Path) -> bool:
+def _forbidden_asset(path: Path, preview_only: bool) -> bool:
     names = [part.casefold() for part in path.parts]
     if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in names):
         return True
-    if not any("webengine" in part for part in names):
-        return False
-    if path.parts[0] == "_internal" and Path(*path.parts[1:]).as_posix() in _WEBENGINE_ASSETS:
-        return False
-    parent = path.parent.as_posix()
-    if parent == "_internal/PySide6/translations":
-        return not re.fullmatch(r"qtwebengine_[a-z]{2,3}(?:_[A-Za-z0-9]{2,4})?\.qm", path.name)
-    if parent == "_internal/PySide6/translations/qtwebengine_locales":
-        return not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\.pak", path.name)
-    return True
+    if any("webengine" in part or "webchannel" in part for part in names):
+        return True
+    return not preview_only and (
+        "level_preview" in names or "godot" in names or "godot.exe" in names
+    )
 
 
 def sha256(path: Path) -> str:
@@ -105,7 +90,7 @@ def main():
             raise SystemExit("Source changed during build; retain intermediate files and rebuild a fixed candidate: " + ", ".join(changed))
     bundle = args.bundle.resolve()
     preview_only = os.environ.get("ARKNIGHTS_LEVEL_PREVIEW_ONLY") == "1"
-    bundle_name = "ArknightsLevelPreview" if preview_only else "ArknightsUnpacker"
+    bundle_name = "ArknightsMapViewer" if preview_only else "ArknightsUnpacker"
     guide = "LEVEL_PREVIEW_GUIDE.md" if preview_only else "USER_GUIDE.md"
     if not (bundle / (bundle_name + ".exe")).is_file():
         raise SystemExit("Missing executable")
@@ -117,26 +102,22 @@ def main():
         "PySide6/plugins/platforms/qwindows.dll", f"docs/{guide}", "docs/THIRD_PARTY_NOTICES.md",
         "licenses/Ark-Unpacker/Ark-Unpacker-LICENSE", "licenses/LGPL-3.0-only.txt",
     )
-    if not preview_only:
-        required_assets += _WEBENGINE_ASSETS
     godot = bundle / "_internal" / _GODOT_EXE
-    include_godot = bool(os.environ.get("ARKNIGHTS_GODOT_RUNTIME"))
-    if preview_only and not include_godot:
+    if preview_only and not os.environ.get("ARKNIGHTS_GODOT_RUNTIME"):
         raise SystemExit("The level preview bundle requires ARKNIGHTS_GODOT_RUNTIME")
-    if include_godot:
+    if preview_only:
         if not re.search(r"(?:^|[-._])test(?:$|[-._])", args.version, re.IGNORECASE):
             raise SystemExit("ARKNIGHTS_GODOT_RUNTIME is only supported for a test build")
         required_assets += _GODOT_ASSETS
     elif godot.exists():
-        raise SystemExit("Unexpected Godot runtime without ARKNIGHTS_GODOT_RUNTIME")
+        raise SystemExit("Unexpected Godot runtime in the unpacker bundle")
     missing = [name for name in required_assets if not (bundle / "_internal" / name).is_file()]
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
     relative_paths = (path.relative_to(bundle) for path in files_under(bundle))
-    forbidden = [path.as_posix() for path in relative_paths
-                 if _forbidden_asset(path) or (preview_only and 'webengine' in path.as_posix().casefold())]
+    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path, preview_only)]
     if forbidden:
-        raise SystemExit("Unexpected development or QtWebEngine files in bundle: " + ", ".join(forbidden[:20]))
+        raise SystemExit("Unexpected files for the selected bundle: " + ", ".join(forbidden[:20]))
     provenance = {
         "version": args.version, "task_id": args.task_id,
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -153,7 +134,7 @@ def main():
         "dependencies": {d.metadata["Name"]: d.version for d in metadata.distributions() if d.metadata.get("Name")},
         "source_files": current_sources,
     }
-    if include_godot:
+    if preview_only:
         source = json.loads((root / "packaging/godot/source.json").read_text(encoding="utf-8"))
         if sha256(godot) != source["executable_sha256"]:
             raise SystemExit("Godot executable in the bundle does not match the pinned source")
