@@ -58,6 +58,10 @@ class LevelReplayView(QWebEngineView):
         self._fullscreen_presentation = enabled
         self._apply_presentation()
 
+    def toggle_playback(self):
+        if self._page is not None:
+            self._page.runJavaScript("document.querySelector('#play')?.click()")
+
     def _apply_presentation(self):
         if self._page is not None:
             enabled = 'true' if self._fullscreen_presentation else 'false'

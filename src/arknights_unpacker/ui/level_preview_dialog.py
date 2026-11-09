@@ -20,7 +20,6 @@ def _has_mp4_header(path):
 class LevelPreviewDialog(QDialog):
     def __init__(self, path: Path | None, caption: str, parent=None):
         super().__init__(parent)
-        self._replay_fullscreen = False
         self.setWindowTitle(f'{caption} · 地图预览')
         self.resize(1020, 660)
 
@@ -58,16 +57,17 @@ class LevelPreviewDialog(QDialog):
         self.buttons.addButton(self.replay_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.replay_button.hide()
         self.fullscreen_button = QPushButton('全屏播放')
-        self.fullscreen_button.clicked.connect(self._toggle_fullscreen)
+        self.fullscreen_button.setToolTip('空格播放或暂停，Esc 恢复窗口')
+        self.fullscreen_button.clicked.connect(self._enter_fullscreen)
         self.buttons.addButton(self.fullscreen_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.fullscreen_button.hide()
-        self._fullscreen_exit = QPushButton('退出全屏', self)
-        self._fullscreen_exit.setToolTip('按 Esc 退出全屏')
-        self._fullscreen_exit.clicked.connect(self._leave_fullscreen)
-        self._fullscreen_exit.hide()
         self._escape_fullscreen = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape_fullscreen.setEnabled(False)
         self._escape_fullscreen.activated.connect(self._leave_fullscreen)
+        self._play_fullscreen = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        self._play_fullscreen.setAutoRepeat(False)
+        self._play_fullscreen.setEnabled(False)
+        self._play_fullscreen.activated.connect(self._toggle_fullscreen_playback)
         self.buttons.button(QDialogButtonBox.StandardButton.Close).setText('关闭')
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -77,11 +77,11 @@ class LevelPreviewDialog(QDialog):
 
     def show_detail(self, text):
         self.detail.setText(text)
-        self.detail.setVisible(bool(text) and not self._replay_fullscreen)
+        self.detail.setVisible(bool(text) and self._windowed_state is None)
 
     def show_replay_status(self, text):
         self.replay_status.setText(text)
-        self.replay_status.setVisible(bool(text) and not self._replay_fullscreen)
+        self.replay_status.setVisible(bool(text) and self._windowed_state is None)
 
     def show_replay(self, url):
         from .level_replay_view import LevelReplayView
@@ -98,39 +98,45 @@ class LevelPreviewDialog(QDialog):
         view = self.replay_view
         if view is None:
             return
+        self._leave_fullscreen()
         show_player = self.content.currentWidget() is self.viewer
         if show_player:
             self.viewer.player.pause()
-        else:
-            self._leave_fullscreen()
         self.content.setCurrentWidget(view if show_player else self.viewer)
         view.page().setVisible(show_player)
         self.replay_button.setText('返回地图预览' if show_player else '显示出怪回放')
         self.fullscreen_button.setVisible(show_player or self._has_video)
 
-    def _toggle_fullscreen(self):
-        if self.isFullScreen():
-            self._leave_fullscreen()
+    def _enter_fullscreen(self):
+        if self._windowed_state is not None:
             return
-        self._windowed_state = self.windowState()
-        if self.replay_view is not None and self.content.currentWidget() is self.replay_view:
-            self._set_replay_fullscreen(True)
+        window = self.windowHandle()
+        self._windowed_state = self.windowState(), window.flags()
+        # The Windows shell recognizes fullscreen when the frameless window covers the monitor exactly.
+        window.setFlag(Qt.WindowType.FramelessWindowHint)
+        self._set_fullscreen_presentation(True)
         self.showFullScreen()
-        self.fullscreen_button.setText('退出全屏')
         self._escape_fullscreen.setEnabled(True)
+        self._play_fullscreen.setEnabled(True)
 
     def _leave_fullscreen(self):
         if self._windowed_state is None:
             return
-        if self._replay_fullscreen:
-            self._set_replay_fullscreen(False)
-        self.setWindowState(self._windowed_state)
+        state, flags = self._windowed_state
         self._windowed_state = None
-        self.fullscreen_button.setText('全屏播放')
+        self.setWindowState(state)
+        self.windowHandle().setFlags(flags)
+        self._set_fullscreen_presentation(False)
         self._escape_fullscreen.setEnabled(False)
+        self._play_fullscreen.setEnabled(False)
 
-    def _set_replay_fullscreen(self, enabled):
-        self._replay_fullscreen = enabled
+    def _toggle_fullscreen_playback(self):
+        if self.replay_view is not None and self.content.currentWidget() is self.replay_view:
+            self.replay_view.toggle_playback()
+        elif self._has_video:
+            self.viewer.toggle_playback()
+
+    def _set_fullscreen_presentation(self, enabled):
         if enabled:
             self.layout().setContentsMargins(0, 0, 0, 0)
         else:
@@ -139,20 +145,10 @@ class LevelPreviewDialog(QDialog):
         self.detail.setVisible(bool(self.detail.text()) and not enabled)
         self.replay_status.setVisible(bool(self.replay_status.text()) and not enabled)
         self.buttons.setVisible(not enabled)
-        self.replay_view.set_fullscreen_presentation(enabled)
-        self._fullscreen_exit.setVisible(enabled)
-        if enabled:
-            self._place_fullscreen_exit()
-
-    def _place_fullscreen_exit(self):
-        self._fullscreen_exit.adjustSize()
-        self._fullscreen_exit.move(self.width() - self._fullscreen_exit.width() - 12, 12)
-        self._fullscreen_exit.raise_()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self._replay_fullscreen:
-            self._place_fullscreen_exit()
+        if self.replay_view is not None and self.content.currentWidget() is self.replay_view:
+            self.replay_view.set_fullscreen_presentation(enabled)
+        elif self._has_video:
+            self.viewer.set_video_fullscreen_presentation(enabled)
 
     def _replay_loaded(self, loaded):
         if not loaded and self.replay_view is not None:
