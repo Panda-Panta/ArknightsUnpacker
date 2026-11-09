@@ -5,19 +5,9 @@ from datetime import datetime, timezone
 import hashlib
 from importlib import metadata
 import json
-import os
 from pathlib import Path
 import platform
 import subprocess
-
-
-def _forbidden_asset(path: Path) -> bool:
-    names = [part.casefold() for part in path.parts]
-    if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in names):
-        return True
-    if any("webengine" in part or "webchannel" in part for part in names):
-        return True
-    return any(part in {"level_preview", "godot", "godot.exe"} for part in names)
 
 
 def sha256(path: Path) -> str:
@@ -33,8 +23,7 @@ def source_records(root: Path):
     source_inputs = [root / name for name in ("pyproject.toml", "uv.lock")]
     for name in ("src", "resources", "vendor", "packaging", "scripts"):
         source_inputs.extend(files_under(root / name))
-    source_inputs.extend(root / "docs" / name for name in
-                         ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
+    source_inputs.extend(root / "docs" / name for name in ("USER_GUIDE.md", "THIRD_PARTY_NOTICES.md"))
     return [{"path": p.relative_to(root).as_posix(), "size": p.stat().st_size, "sha256": sha256(p)} for p in sorted(set(source_inputs))]
 
 
@@ -89,18 +78,18 @@ def main():
     missing = [name for name in required_assets if not (bundle / "_internal" / name).is_file()]
     if missing:
         raise SystemExit("Missing required bundle assets: " + ", ".join(missing))
-    relative_paths = (path.relative_to(bundle) for path in files_under(bundle))
-    forbidden = [path.as_posix() for path in relative_paths if _forbidden_asset(path)]
+    forbidden = [p.relative_to(bundle).as_posix() for p in files_under(bundle)
+                 if any(part in {".work", ".venv", ".tools", "tests", "fixtures"} for part in p.relative_to(bundle).parts)
+                 or "webengine" in p.name.lower()]
     if forbidden:
-        raise SystemExit("Unexpected files in the unpacker bundle: " + ", ".join(forbidden[:20]))
+        raise SystemExit("Unexpected development or QtWebEngine files in bundle: " + ", ".join(forbidden[:20]))
     provenance = {
         "version": args.version, "task_id": args.task_id,
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         **source_provenance(root), "python": platform.python_version(),
         "source_consistency_checked": bool(args.source_snapshot),
         "platform": platform.platform(),
-        "application": "ArknightsUnpacker",
-        "preflight": os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
+        "preflight": __import__("os").environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1",
         "acceptance": "Build succeeded; consult docs/ACCEPTANCE.md for runtime acceptance boundaries.",
         "upstreams": {
             "Ark-Unpacker": "4a4b9efc6be4690b68b70b4a16578950baa066d3",

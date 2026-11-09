@@ -16,14 +16,6 @@ from .contracts import CancelToken, CancelledError, ExtractionRequest, as_jsonab
 from .paths import atomic_json
 
 
-def worker_command(args):
-    if "--worker-server" in args:
-        return worker_server_entry(args[args.index("--worker-server") + 1])
-    if "--worker" in args:
-        return worker_entry(args[args.index("--worker") + 1])
-    return None
-
-
 class FileCancelToken(CancelToken):
     def __init__(self, marker: Path):
         super().__init__()
@@ -71,10 +63,6 @@ def worker_entry(request_file: str) -> int:
                 from .extraction.unity import load_bundle
                 from .extraction.characters import character_catalog
                 value = character_catalog(load_bundle(args['path']), check=cancel.check)
-            elif operation in {"gameplay", "gameplay_level"}:
-                from .extraction.gameplay import load_autochess, load_gameplay_level
-                load = load_autochess if operation == "gameplay" else load_gameplay_level
-                value = load(**args, emit=emit, cancel=cancel)
             else:
                 raise ValueError(f"未知工作进程操作: {operation}")
         cancel.check()
@@ -178,10 +166,9 @@ class WorkerRunner:
             with self._lock:
                 if self._closed:
                     raise RuntimeError("工作进程管理器已关闭")
-                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
                 proc = subprocess.Popen(cmd, cwd=task, stdout=log, stderr=log,
                                         text=True, encoding="utf-8", errors="replace", env=env,
-                                        creationflags=flags)
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 self._active.add(proc)
 
             try:

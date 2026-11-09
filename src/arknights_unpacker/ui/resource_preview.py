@@ -110,13 +110,9 @@ class ResourcePreviewWidget(QWidget):
         self.audio_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.audio_hint.setWordWrap(True)
         media_layout.addWidget(self.audio_hint, 1)
-        self.media_controls = QWidget(self.media_page)
-        controls = QVBoxLayout(self.media_controls)
-        controls.setContentsMargins(0, 0, 0, 0)
-        media_layout.addWidget(self.media_controls)
         self.media_status = QLabel()
         self.media_status.setWordWrap(True)
-        controls.addWidget(self.media_status)
+        media_layout.addWidget(self.media_status)
         playback = QHBoxLayout()
         self.play_button = QPushButton('播放')
         self.play_button.setObjectName('resourceMediaPlay')
@@ -128,7 +124,7 @@ class ResourcePreviewWidget(QWidget):
         playback.addWidget(self.position_slider, 1)
         self.time_label = QLabel('00:00 / 00:00')
         playback.addWidget(self.time_label)
-        controls.addLayout(playback)
+        media_layout.addLayout(playback)
         volume = QHBoxLayout()
         volume.addStretch()
         volume.addWidget(QLabel('音量'))
@@ -139,7 +135,7 @@ class ResourcePreviewWidget(QWidget):
         self.volume_slider.setValue(70)
         self.volume_slider.setMaximumWidth(140)
         volume.addWidget(self.volume_slider)
-        controls.addLayout(volume)
+        media_layout.addLayout(volume)
         self.stack.addWidget(self.media_page)
         layout.addWidget(self.stack, 1)
         self.image_tools = QWidget()
@@ -176,7 +172,7 @@ class ResourcePreviewWidget(QWidget):
         self.player.playbackStateChanged.connect(self._playback_changed)
         self.player.mediaStatusChanged.connect(self._media_status_changed)
         self.player.errorOccurred.connect(self._media_error)
-        self.play_button.clicked.connect(self.toggle_playback)
+        self.play_button.clicked.connect(self._toggle_play)
         self.position_slider.sliderMoved.connect(self.player.setPosition)
         self.position_slider.sliderReleased.connect(lambda: self.player.setPosition(self.position_slider.value()))
         self.volume_slider.valueChanged.connect(lambda value: self.audio_output.setVolume(value / 100))
@@ -186,11 +182,6 @@ class ResourcePreviewWidget(QWidget):
         self.save_original_button.clicked.connect(lambda: self.save_original_requested.emit())
         self.file_choice.currentIndexChanged.connect(self._choose_file)
         self.clear()
-
-    def set_video_fullscreen_presentation(self, enabled):
-        self.media_controls.setVisible(not enabled)
-        self.video_widget.setAspectRatioMode(
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding if enabled else Qt.AspectRatioMode.KeepAspectRatio)
 
     def show_files(self, outputs) -> bool:
         self.clear()
@@ -385,7 +376,7 @@ class ResourcePreviewWidget(QWidget):
             QTimer.singleShot(0, self._fit_if_active)
         return super().eventFilter(watched, event)
 
-    def toggle_playback(self):
+    def _toggle_play(self):
         if self.player.source().isEmpty():
             return
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:

@@ -64,11 +64,9 @@ hiddenimports += collect_submodules("fontTools.ttLib.tables")
 hiddenimports += ["PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.BmpImagePlugin", "PIL.TgaImagePlugin", "Crypto.Cipher.AES", "bson", "flatbuffers", "numpy", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets"]
 preflight = os.environ.get("ARKNIGHTS_BUILD_PREFLIGHT") == "1"
 entrypoint = root / "packaging" / ("preflight.py" if preflight else "entrypoint.py")
-excluded = ["PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets",
-            "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebChannel", "tkinter", "pytest"]
 a = Analysis([str(entrypoint)], pathex=[str(root / "src")], binaries=binaries, datas=datas,
              hiddenimports=hiddenimports,
-             excludes=excluded,
+             excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "tkinter", "pytest"],
              hookspath=[], hooksconfig={}, runtime_hooks=[], noarchive=False, optimize=0)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ArknightsUnpacker",

@@ -8,7 +8,7 @@ import sqlite3
 import time
 import uuid
 
-from .contracts import (BuildSpec, CancelToken, CancelledError, DecodedTable, EntityChangeSet,
+from .contracts import (BuildSpec, CancelToken, DecodedTable, EntityChangeSet,
                         ExportFormat, ExtractionRequest, ExtractionResult,
                         GameDataSnapshot, ReportOptions, ReportSelection, ResourceCatalog,
                         ScanOptions, SourceRef, TableSourceSet, as_jsonable,
@@ -82,7 +82,6 @@ class AppServices:
         self.scan_snapshot = None
         self.file_changes = None
         self.catalog = None
-        self.gameplay_catalog = None
         self.gamedata = None
         self.entity_changes = None
         self.baseline = None
@@ -99,7 +98,6 @@ class AppServices:
             self.scan_snapshot = None
             self.file_changes = None
             self.catalog = None
-            self.gameplay_catalog = None
             self.gamedata = None
             self.entity_changes = None
             self.baseline = None
@@ -150,14 +148,12 @@ class AppServices:
         cancel.check()
         self._select_installation(installation)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, changes, catalog
-        self.gameplay_catalog = snapshot.manifest_versions.get('gameplay') if snapshot is not None else None
         self.gamedata, self.entity_changes, self.baseline = data, entity_changes, baseline
         emit({"type": "progress", "message": "已恢复保存结果；重新扫描时将与完整基线比较。"})
         return {"snapshot": snapshot, "changes": changes, "catalog": catalog,
                 "gamedata": data, "entity_changes": entity_changes}
 
     def scan(self, root, hours=24.0, strict=False, emit=null_progress, cancel=None):
-        from .extraction.gameplay import discover_gameplay
         from .library import scan_installation, compare_files, resolve_resources
         cancel = cancel or CancelToken()
         installation = self._installation(root)
@@ -165,46 +161,11 @@ class AppServices:
         snapshot = scan_installation(installation, ScanOptions(float(hours), bool(strict)), emit, cancel, baseline=previous)
         change_set = compare_files(previous, snapshot)
         catalog = resolve_resources(snapshot)
-        catalog.installation = installation
-        try:
-            gameplay = discover_gameplay(snapshot, catalog, cancel)
-            cancel.check()
-        except CancelledError:
-            # The scan result still needs to be saved when discovery is cancelled.
-            gameplay = None
-        else:
-            snapshot.manifest_versions['gameplay'] = gameplay
         self.store.save_scan(snapshot, change_set)
         self.scan_snapshot, self.file_changes, self.catalog = snapshot, change_set, catalog
-        self.gameplay_catalog = gameplay
         self.config["hours"] = float(hours)
         self.save_config()
         return {"snapshot": snapshot, "changes": change_set, "catalog": catalog}
-
-    def _gameplay_mode(self, root, mode_id, resource_version):
-        catalog = self.gameplay_catalog
-        if (catalog is None or catalog['resource_version'] != resource_version
-                or Path(catalog['root']) != Path(root).resolve()):
-            raise ValueError('当前玩法清单与游戏目录或资源版本不一致，请重新扫描。')
-        mode = next((entry for entry in catalog['modes'] if entry['id'] == mode_id), None)
-        if mode_id != 'autochess' or mode is None or not mode['supported']:
-            raise ValueError('当前玩法详情待适配。')
-        return mode
-
-    def load_gameplay(self, root, mode_id, resource_version, emit=null_progress, cancel=None):
-        mode = self._gameplay_mode(root, mode_id, resource_version)
-        if not mode['available']:
-            raise ValueError('玩法数据表未安装，请下载游戏资源后重新扫描。')
-        logical_path = mode.get('detail_resource') or mode['resources'][0]
-        return self.runner.run('gameplay', {'root': str(root), 'logical_path': logical_path,
-                                            'resource_version': resource_version}, emit, cancel)
-
-    def load_gameplay_level(self, root, logical_path, resource_version, emit=null_progress, cancel=None):
-        mode = self._gameplay_mode(root, 'autochess', resource_version)
-        if logical_path not in mode['level_paths']:
-            raise ValueError('关卡不在当前扫描的卫戍协议资源中，请重新扫描。')
-        return self.runner.run('gameplay_level', {'root': str(root), 'logical_path': logical_path,
-                                                  'resource_version': resource_version}, emit, cancel)
 
     def load_data(self, root, emit=null_progress, cancel=None):
         from .gamedata import load_gamedata, compare_entities

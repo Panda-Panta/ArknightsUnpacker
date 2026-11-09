@@ -4,10 +4,12 @@ import sys
 
 
 def main() -> int:
-    from .jobs import worker_command
-
-    if (result := worker_command(sys.argv)) is not None:
-        return result
+    if "--worker-server" in sys.argv:
+        from .jobs import worker_server_entry
+        return worker_server_entry(sys.argv[sys.argv.index("--worker-server") + 1])
+    if "--worker" in sys.argv:
+        from .jobs import worker_entry
+        return worker_entry(sys.argv[sys.argv.index("--worker") + 1])
     from .bootstrap import main as app_main
     return app_main()
 

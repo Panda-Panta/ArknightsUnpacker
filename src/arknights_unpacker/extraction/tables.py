@@ -35,7 +35,7 @@ def _table_name(value,names):
     match=_table_pattern(frozenset(names)).fullmatch(value)
     return match.group('table') if match else None
 
-def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None,decoders=None):
+def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None):
     result={}
     before=path.stat()
     payload=path.read_bytes()
@@ -60,9 +60,7 @@ def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None,de
             text=raw.decode('utf-8')
             decoded={'raw':text,**{k:v.strip() for k,v in (line.split(':',1) for line in text.splitlines() if ':' in line)}}
             evidence={'format':'text','encoding':'utf-8'}
-        else:
-            decode = (decoders or {}).get(name, decode_table_bytes)
-            decoded,evidence=decode(raw,name)
+        else: decoded,evidence=decode_table_bytes(raw,name)
         evidence['decodedPayloadVerification']={'sha256':sha,'md5':actual_md5,'byteLength':len(payload),'candidateSha256Matched':expected is not None,'expectedMd5Verified':bool(expected_md5)}
         result[name]=DecodedTable(name,decoded,SourceRef(path=str(path),layer=layer,logical_name=logical_names.get(name,''),object_name=data.m_Name,path_id=str(obj.path_id),table=name,sha256=sha,decoder_version=DECODER_VERSION),evidence)
     after=path.stat()
@@ -92,14 +90,12 @@ def locate_tables(catalog:ResourceCatalog,names:set[str])->TableSourceSet:
     result.diagnostics += [f'缺少核心表: {n}' for n in sorted(missing)]
     return result
 
-def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,cancel=None,*,names=None,
-                      decoders=None,logical_names=None,expected_resource_version=None)->TableSourceSet:
-    game_root=Path(game_root).resolve()
-    cache_dir=Path(cache_dir).resolve() if cache_dir is not None else None
-    if cache_dir is not None and (cache_dir==game_root or game_root in cache_dir.parents): raise ValueError('表缓存不得写入游戏目录')
+def load_local_tables(game_root:Path,cache_dir:Path,emit=null_progress,cancel=None,*,names=None)->TableSourceSet:
+    game_root=Path(game_root).resolve();cache_dir=Path(cache_dir).resolve()
+    if cache_dir==game_root or game_root in cache_dir.parents: raise ValueError('表缓存不得写入游戏目录')
     names=set(names or (CORE_TABLES|SUPPORT_TABLES))
     root=game_root if (game_root/'Arknights_Data').exists() else game_root.parent if game_root.name=='Arknights_Data' else game_root
-    if cache_dir is not None and (cache_dir==root or root in cache_dir.parents): raise ValueError('表缓存不得写入游戏目录')
+    if cache_dir==root or root in cache_dir.parents: raise ValueError('表缓存不得写入游戏目录')
     installation=discover_installation(root)
     layers={k:installation.source_roots[k] for k in ('hot','base') if k in installation.source_roots}
     stable_inputs={}
@@ -114,8 +110,6 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
     if not manifests: raise FileNotFoundError('没有本机资源清单 hot_update_list.json')
     active=manifests.get('hot') or manifests['base']
     version=str(active.get('manifestVersion','unknown'));rv=str(active.get('versionId','unknown'))
-    if expected_resource_version is not None and rv != expected_resource_version:
-        raise ValueError('活动资源版本已变化，请重新扫描。')
     result=TableSourceSet(version=version,resource_version=rv)
     entries={x['name']:x for x in active.get('abInfos',[])}
     manifest_name=active.get('manifestName','')
@@ -132,8 +126,6 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
         logical=asset.get('assetName') or asset.get('path') or asset.get('name') or ''
         name=_table_name(logical,names)
         if not name: continue
-        if logical_names and name in logical_names and logical_names[name] != logical:
-            continue
         bundle_name=asset['bundle']
         if bundle_name not in entries:
             # Some indices omit suffixes; exact association is still required.
@@ -171,8 +163,7 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
     for (fp,layer),logical in grouped.items():
         _check(cancel)
         try:
-            options = {'decoders': decoders} if decoders else {}
-            decoded=_decode_bundle(fp,set(logical),layer,logical,emit,cancel,expected=candidates[fp],**options)
+            decoded=_decode_bundle(fp,set(logical),layer,logical,emit,cancel,expected=candidates[fp])
             info=entries[fp.relative_to(layers[layer]).as_posix()]
             for t in decoded.values():
                 t.field_evidence['resourceVerification']={'manifestMatch':True,'sizeMatch':True,'hashKind':'md5' if re.fullmatch('[0-9a-fA-F]{32}',info.get('md5','')) else 'short_token','hash':info.get('md5',''),'cryptographicDigestVerified':t.field_evidence['decodedPayloadVerification']['expectedMd5Verified'],'sha256':t.source.sha256}
@@ -191,11 +182,10 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
         now=path.stat()
         if (now.st_size,now.st_mtime_ns)!=(size,mtime) or _sha(path)!=digest:
             raise OSError('资源清单、IDX或资源包在整组表解码期间变化，拒绝建立一致快照: '+str(path))
-    if cache_dir is not None:
-        cache_dir.mkdir(parents=True,exist_ok=True)
-        receipt={'version':version,'resource_version':rv,'manifest':str(index_path),'manifest_sha256':index_sha,'version_kind':'data_version.VersionControl' if 'data_version' in result.tables else 'manifestVersion','tables':{n:{'source':vars(t.source),'top_level_count':len(t.data) if hasattr(t.data,'__len__') else None} for n,t in result.tables.items()},'diagnostics':result.diagnostics,'complete':result.complete}
-        (cache_dir/'sources.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding='utf-8')
-        for n,t in result.tables.items():
-            (cache_dir/(n+'.json')).write_text(json.dumps(t.data,ensure_ascii=False),encoding='utf-8',errors='backslashreplace')
-            (cache_dir/(n+'.evidence.json')).write_text(json.dumps(t.field_evidence,ensure_ascii=False,indent=2),encoding='utf-8',errors='backslashreplace')
+    cache_dir.mkdir(parents=True,exist_ok=True)
+    receipt={'version':version,'resource_version':rv,'manifest':str(index_path),'manifest_sha256':index_sha,'version_kind':'data_version.VersionControl' if 'data_version' in result.tables else 'manifestVersion','tables':{n:{'source':vars(t.source),'top_level_count':len(t.data) if hasattr(t.data,'__len__') else None} for n,t in result.tables.items()},'diagnostics':result.diagnostics,'complete':result.complete}
+    (cache_dir/'sources.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding='utf-8')
+    for n,t in result.tables.items():
+        (cache_dir/(n+'.json')).write_text(json.dumps(t.data,ensure_ascii=False),encoding='utf-8',errors='backslashreplace')
+        (cache_dir/(n+'.evidence.json')).write_text(json.dumps(t.field_evidence,ensure_ascii=False,indent=2),encoding='utf-8',errors='backslashreplace')
     return result

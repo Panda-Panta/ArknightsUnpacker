@@ -20,15 +20,6 @@ def make_window(qtbot, tmp_path, **kwargs):
     return window, services
 
 
-def test_workbench_restores_a_saved_map_tab_to_explorer(qtbot, tmp_path):
-    window, _ = make_window(qtbot, tmp_path)
-    window.pages.select('gameplay')
-    assert window.pages.current_id() == 'gameplay'
-    assert window.pages.widget('levels') is None
-    window.pages.restore_state({'tab': 'levels'})
-    assert window.pages.current_id() == 'explorer'
-
-
 def test_inserting_page_does_not_rename_another_page_when_queue_changes(qtbot, tmp_path):
     window, _ = make_window(qtbot, tmp_path)
     inserted = QWidget()
@@ -37,8 +28,7 @@ def test_inserting_page_does_not_rename_another_page_when_queue_changes(qtbot, t
     window.queue.submit('等待处理', lambda **kw: None)
 
     assert window.tabs.tabText(window.tabs.indexOf(window.modules)) == '模组更新'
-    assert window.pages.widget('jobs') is None
-    assert window.show_task_history().table.rowCount() == 1
+    assert window.tabs.tabText(window.tabs.indexOf(window.jobs)) == '导出任务 (1)'
     assert window.tabs.tabText(window.tabs.indexOf(inserted)) == '附加页面'
 
 
@@ -49,7 +39,7 @@ def test_omitting_optional_page_keeps_scan_load_queue_and_state_working(qtbot, t
     definitions = [page for page in PAGE_DEFINITIONS if page.page_id != removed]
     window, services = make_window(qtbot, tmp_path, page_definitions=definitions)
     assert getattr(window, removed) is None
-    assert window.jobs is None and window.settings is not None
+    assert window.jobs is not None and window.settings is not None
     game = tmp_path / 'game'
     game.mkdir()
     window.root_edit.setText(str(game))
@@ -63,7 +53,7 @@ def test_omitting_optional_page_keeps_scan_load_queue_and_state_working(qtbot, t
     window.restore_view_state()
     # The compatibility entry point remains safe even without its feature page.
     window.profile(removed, 'missing', BuildSpec())
-    assert window.pages.widget('jobs') is None
+    assert window.tabs.tabText(window.tabs.indexOf(window.jobs)) == '导出任务'
     assert services.loaded == 1
     assert services.config['view_states'][str(game.resolve())]['tab'] in {
         page.page_id for page in definitions
@@ -96,13 +86,12 @@ services = SimpleNamespace(data_root=Path(data_root), config={}, installation=No
     modules=lambda: [], save_config=lambda: None)
 window = MainWindow(services)
 assert getattr(window, page_id) is None
-assert window.jobs is None and window.settings is not None
+assert window.jobs is not None and window.settings is not None
 window.refresh_entities()
 window._hours_changed()
 window.queue.paused = True
 window.queue.submit('waiting', lambda **kw: None)
-assert window.pages.widget('jobs') is None
-assert window.show_task_history().table.rowCount() == 1
+assert window.tabs.tabText(window.tabs.indexOf(window.jobs)) == '导出任务 (1)'
 window.close()
 '''
     env = {**os.environ, 'PYTHONPATH': str(source_root), 'QT_QPA_PLATFORM': 'offscreen'}
@@ -164,7 +153,7 @@ def test_page_id_and_individual_state_survive_reordered_registry_and_removed_pag
 
 
 @pytest.mark.parametrize('legacy_index,page_id', enumerate(
-    ('explorer', 'updates', 'operators', 'modules', 'explorer', 'settings')))
+    ('explorer', 'updates', 'operators', 'modules', 'jobs', 'settings')))
 def test_legacy_numeric_tab_and_page_fields_restore_by_original_page_identity(qtbot, tmp_path, legacy_index, page_id):
     from arknights_unpacker.ui.pages import PAGE_DEFINITIONS
 

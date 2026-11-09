@@ -1,8 +1,6 @@
 # 实际工程结构
 
-更新：2026-11-09。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
-
-关卡目录、地图预制体和出怪回放由独立的 [ArknightsMapViewer](https://github.com/Panda-Panta/ArknightsMapViewer) 维护。本仓库的玩法资料仍提供卫戍协议关卡摘要，资源浏览仍可预览和保存原始图像。
+更新：2026-11-02。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
@@ -16,8 +14,6 @@ ArknightsUnpacker/
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
 │  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
-│  │  ├─ gameplay.py            生效资源索引读取、玩法识别和按需详情
-│  │  └─ autochess.py           PC 卫戍协议的赛季结构及策略、盟约、调度解码
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器
 │  │  └─ module_comparison.py    同培养条件的模组各级属性、原效果与前一级对照
@@ -28,7 +24,6 @@ ArknightsUnpacker/
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
 │  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
 │     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
-│     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
 │     ├─ profile_navigation.py   干员右侧详情的当前章节目录与锚点跳转
 │     ├─ resource_preview.py     对象窗口右侧图片／音视频／文本及二进制预览
 │     ├─ preview_smoke.py        显式原生预览验收入口，走实际窗口／队列／worker
@@ -60,8 +55,6 @@ ArknightsUnpacker/
 
 Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG／HTML／TXT；JSON 保留完整当前资料和字段证据。`compose_report`及`export_report`不附带跨版本变化集，干员与模组详情统一只渲染当前资料，共享语义层不再生成任何跨版本更新段落；当前后勤阶段和模组未装备／各等级对照不受影响。历史差分仍用于新增／变化筛选。Unity 解码运行在独立进程中，GUI 线程只处理界面与结果。
 
-玩法识别在文件扫描完成后读取本次生效 IDX，并将目录写入扫描快照的 `manifest_versions.gameplay`，恢复历史时直接用保存的目录。卫戍协议的关卡摘要复用表来源定位、版本校验和独立 worker，打开详情时才读取源包。没有适配器的玩法展示资源入口及状态。
-
 `gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
 
 `ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别。资源浏览选择具体类型后在当前来源全库匹配，关键词与AB条件继续叠加；暂时禁用目录导航／递归且保留原值，切回全部类型恢复原目录范围。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
@@ -78,7 +71,7 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 0.1.22通过fonttools4.68.0读取Fonts目录的名称表和TTC索引，`font_index`与路径一起保存在设置／ReportOptions／任务请求中，旧值默认0。`fonts.py`将TTC的所选face提取为独立字体bytes，PNG与HTML使用同一face。资料预览通过`ReportArtifactsDialog.font_preview_requested`、主窗独立报告generation/pending状态和既有queue／PreviewLease异步更新；旧代结果不覆盖新选择、关闭只取消本窗口任务，成功选项传给正式导出。默认按钮不会响应字体文本控件的Return／Enter。显式`--smoke-test --profile-font-preview-test`验证实际系统字体选择、同窗切换、正式四格式和关闭回收；普通启动不执行。
 
-底部「任务记录…」在独立窗口呈现任务表。`Job.show_in_tasks` 为可选持久字段，内部资料、启动恢复和对象列表读取标为 False，`JobQueue.visible_jobs` 为任务表提供可见记录。旧记录按稳定内部标题兼容，其他默认可见。可见与内部成功记录分别保留最近 20 条。表格动作按稳定 job_id 查回原任务。后台串行调度、状态栏和错误信号继续处理内部读取。
+0.1.23的报告提交不再选中jobs页面。`Job.show_in_tasks`为可选持久字段，内部资料／启动恢复／对象列表读取标False；`JobQueue.visible_jobs`供任务表及JobsPage角标使用，后台串行调度不变。旧记录按稳定内部标题兼容，其他默认可见；可见与内部成功记录分别沿既有20条上限管理。过滤后的表格动作依稳定job_id查回原任务，进度／日志不显示内部读取；原状态栏与错误信号保留。
 
 0.1.24的`RecordsModel`列定义可追加原始排序getter，大小／时间保留字节／纳秒精度，未知值双向置后，`replace`沿用当前有效排序；持久索引在排序后按原行身份映射。`FileRecord.created_ns`为可空文件系统birth time，扫描及摘要后的最终stat记录该值，旧JSON默认未知、不迁移数据库。`ExplorerView`按快照绝对物理路径关联生效资源的修改／创建／首次观测值，离线不补读源文件；更新表同样按原值排序。`extraction.engine.list_bundle_objects`从Unity对象`byte_size`元数据返回可空`size`，独立媒体为源文件字节；`ObjectsDialog`的大小列可排序，自动预览选中以排序后的记录为准。显式`--smoke-test --resource-sort-test --game-root <隔离夹具>`通过真实扫描和表头点击验收文件排序／时间；既有资源预览smoke同时核对worker返回的对象大小、排序与预览身份，普通启动不执行。
 
