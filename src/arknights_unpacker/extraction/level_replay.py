@@ -1,4 +1,5 @@
 """Join the original stage schedule and routes with verified enemy data."""
+from collections import defaultdict
 from math import isfinite
 from random import Random
 from secrets import randbits
@@ -14,6 +15,7 @@ def build_level_replay(level, actors, *, seed=None, cancel=None):
         raise ValueError('移动速度倍率必须大于零。')
     routes, unavailable = build_level_routes(level, cancel=cancel)
     errors = []
+    route_errors = defaultdict(set)
     seed = randbits(53) if seed is None else seed
     rng = Random(seed)
     spawn_routes = []
@@ -23,7 +25,8 @@ def build_level_replay(level, actors, *, seed=None, cancel=None):
         spawn_routes.append(None)
         route_key = extra, route_index
         if route_key not in routes:
-            errors.append(f'{enemy_id} · 路线 {route_index}：{unavailable.get(route_key, "关卡未定义这条路线。")}')
+            reason = unavailable.get(route_key, '关卡未定义这条路线。')
+            route_errors[reason].add(route_key)
             return None
         speed = actors.get(enemy_id, {}).get('moveSpeed')
         if speed is None or not isfinite(speed) or speed <= 0:
@@ -44,9 +47,13 @@ def build_level_replay(level, actors, *, seed=None, cancel=None):
             continue
         events.append({
             **event, 'path': route['path'], 'waits': route['waits'],
+            'hiddenWaits': route['hidden_waits'], 'jumps': route['jumps'],
             'moveSpeed': actors[event['enemyId']]['moveSpeed'] * speed_factor,
         })
-    diagnostics = [*timeline['diagnostics'], *errors]
+    for reason, affected in route_errors.items():
+        examples = '、'.join(f'{"额外 " if extra else ""}{index}' for extra, index in sorted(affected)[:3])
+        errors.append(f'{len(affected)} 条路线受影响（例如 {examples}）。{reason}')
+    diagnostics = [*errors, *timeline['diagnostics']]
     if any(route is not None and any(route['spawn_range']) for route in spawn_routes):
         diagnostics.append('当前回放使用同一个随机种子计算出生偏移。')
     return {

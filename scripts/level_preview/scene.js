@@ -15,6 +15,13 @@ function positive(value) {
   return Number.isFinite(value) && value > 0;
 }
 
+function validWaits(waits, pathLength) {
+  return waits && typeof waits === 'object' && !Array.isArray(waits) &&
+    Object.entries(waits).every(([point, seconds]) =>
+      /^(0|[1-9][0-9]*)$/.test(point) && Number(point) < pathLength &&
+      Number.isFinite(seconds) && seconds >= 0);
+}
+
 function prepareRun(run) {
   const legacy = run.actors === undefined && run.events === undefined;
   const source = legacy ? {enemy: run} : run.actors;
@@ -25,7 +32,7 @@ function prepareRun(run) {
   const configs = new Map();
   let defaultSpeedCount = 0;
   const events = entries.map((event, index) => {
-    const {enemyId, time, path, waits = {}} = event ?? {};
+    const {enemyId, time, path, waits = {}, hiddenWaits = {}, jumps: jumpIndices = []} = event ?? {};
     if (typeof enemyId !== 'string' || !Object.hasOwn(source, enemyId) || !source[enemyId]) {
       throw new Error(`Spawn ${index + 1}: missing original actor resources for ${enemyId}`);
     }
@@ -43,23 +50,27 @@ function prepareRun(run) {
         path.some(point => !Array.isArray(point) || point.length !== 2 || !point.every(Number.isFinite))) {
       throw new Error(`Spawn ${index + 1} (${enemyId}): invalid time or route`);
     }
-    if (!waits || typeof waits !== 'object' || Array.isArray(waits) ||
-        Object.entries(waits).some(([point, seconds]) =>
-          !/^(0|[1-9][0-9]*)$/.test(point) || Number(point) >= path.length ||
-          !Number.isFinite(seconds) || seconds < 0)) {
+    if (!validWaits(waits, path.length) || !validWaits(hiddenWaits, path.length)) {
       throw new Error(`Spawn ${index + 1} (${enemyId}): invalid route waits`);
     }
-    const length = path.reduce((sum, [x, y], i) => i === 0 ? sum :
+    if (!Array.isArray(jumpIndices) || jumpIndices.some(i => !Number.isInteger(i) || i < 0 || i >= path.length - 1)) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): invalid teleport segments`);
+    }
+    const jumps = new Set(jumpIndices);
+    if (Object.keys(hiddenWaits).some(i => !jumps.has(Number(i)))) {
+      throw new Error(`Spawn ${index + 1} (${enemyId}): hidden waits need a reappearance point`);
+    }
+    const length = path.reduce((sum, [x, y], i) => i === 0 || jumps.has(i - 1) ? sum :
       sum + Math.hypot(x - path[i - 1][0], y - path[i - 1][1]), 0);
     const speed = event.moveSpeed ?? config.moveSpeed;
     if (speed === undefined || speed === null) defaultSpeedCount++;
     const moveSpeed = speed ?? 1;
-    const waitTime = Object.values(waits).reduce((sum, seconds) => sum + seconds, 0);
+    const waitTime = [...Object.values(waits), ...Object.values(hiddenWaits)].reduce((sum, seconds) => sum + seconds, 0);
     const end = time + length / moveSpeed + waitTime;
     if (!positive(moveSpeed) || !Number.isFinite(end) || end <= time) {
       throw new Error(`Spawn ${index + 1} (${enemyId}): invalid speed or empty route`);
     }
-    return {enemyId, time, path, waits, moveSpeed, end};
+    return {enemyId, time, path, waits, hiddenWaits, jumps, moveSpeed, end};
   });
   events.sort((a, b) => a.time - b.time);
   return {configs, events, defaultSpeedCount};
@@ -97,7 +108,7 @@ async function loadActors(configs) {
   }));
 }
 
-function routeAt({path, waits, moveSpeed}, elapsed) {
+function routeAt({path, waits, hiddenWaits, jumps, moveSpeed}, elapsed) {
   let direction = -1;
   let motionTime = 0;
   for (let i = 0; i < path.length; i++) {
@@ -105,7 +116,11 @@ function routeAt({path, waits, moveSpeed}, elapsed) {
     const wait = waits[i] ?? 0;
     if (elapsed < wait) return [x, y, direction, motionTime];
     elapsed -= wait;
+    const hiddenWait = hiddenWaits[i] ?? 0;
+    if (elapsed < hiddenWait) return null;
+    elapsed -= hiddenWait;
     if (i + 1 === path.length) break;
+    if (jumps.has(i)) continue;
     const [nextX, nextY] = path[i + 1];
     const step = Math.hypot(nextX - x, nextY - y) / moveSpeed;
     if (nextX !== x) direction = Math.sign(nextX - x);

@@ -6,6 +6,10 @@ from math import hypot, isfinite, sqrt
 _CARDINAL = ((-1, 0), (0, 1), (1, 0), (0, -1))
 _DIAGONAL = ((-1, 1), (1, 1), (1, -1), (-1, -1))
 _PASSABLE = {0: 1, 1: 2}
+_MOVE = 0
+_WAIT = 1
+_DISAPPEAR = 5
+_APPEAR = 6
 
 
 def _grid(level):
@@ -68,8 +72,9 @@ def _offset(data):
     return (data or {}).get('x', 0), (data or {}).get('y', 0)
 
 
-def _path_length(path):
-    return sum(hypot(x2 - x1, y2 - y1) for (x1, y1), (x2, y2) in zip(path, path[1:]))
+def _path_length(path, jumps):
+    return sum(hypot(x2 - x1, y2 - y1)
+               for i, ((x1, y1), (x2, y2)) in enumerate(zip(path, path[1:])) if i not in jumps)
 
 
 def sample_spawn_route(route, rng):
@@ -80,7 +85,20 @@ def sample_spawn_route(route, rng):
     x, y = path[0]
     # Route.GetSpawnOffset adds two independent symmetric draws to the fixed offset.
     path[0] = x + rng.uniform(-range_x, range_x), y + rng.uniform(-range_y, range_y)
-    return {**route, 'path': path, 'distance': _path_length(path)}
+    return {**route, 'path': path, 'distance': _path_length(path, route['jumps'])}
+
+
+def _append_move(path, segment, target):
+    path.extend(segment[1:-1])
+    if path[-1] != target:
+        path.append(target)
+
+
+def _waypoint(checkpoint, tile):
+    offset_x, offset_y = _offset(checkpoint.get('reachOffset'))
+    if not all(isfinite(value) and abs(value) <= 0.5 for value in (offset_x, offset_y)):
+        raise ValueError('途经点偏移超出原地图格。')
+    return tile[0] + offset_x, tile[1] + offset_y
 
 
 def _route(grid, source, check):
@@ -91,28 +109,42 @@ def _route(grid, source, check):
     if any(not isfinite(value) or value < 0 for value in spawn_range):
         raise ValueError('路线的随机出生范围无效。')
     current = _point(source['startPosition'])
-    path, waits = [current], {}
+    path, waits, hidden_waits, jumps = [current], {}, {}, []
+    hidden = False
     diagonal = source.get('allowDiagonalMove', False)
     for checkpoint in source.get('checkpoints') or ():
         check()
         kind = checkpoint.get('type')
-        if kind == 0 and not (any(_offset(checkpoint.get('reachOffset')))
-                              or checkpoint.get('randomizeReachOffset') or checkpoint.get('reachDistance')):
+        if kind == _MOVE and not hidden:
+            if checkpoint.get('randomizeReachOffset') or checkpoint.get('reachDistance'):
+                raise ValueError('途经点使用随机偏移或特殊到达距离。')
             end = _point(checkpoint['position'])
-            path.extend(_segment(grid, current, end, mask, diagonal, check)[1:])
+            _append_move(path, _segment(grid, current, end, mask, diagonal, check), _waypoint(checkpoint, end))
             current = end
-        elif kind == 1 and isfinite(checkpoint['time']) and checkpoint['time'] >= 0:
+        elif kind == _WAIT and isfinite(checkpoint['time']) and checkpoint['time'] >= 0:
             index = len(path) - 1
-            waits[index] = waits.get(index, 0) + checkpoint['time']
+            pauses = hidden_waits if hidden else waits
+            pauses[index] = pauses.get(index, 0) + checkpoint['time']
+        elif kind == _DISAPPEAR and not hidden:
+            hidden = True
+        elif kind == _APPEAR and hidden:
+            current = _point(checkpoint['position'])
+            jumps.append(len(path) - 1)
+            path.append(_waypoint(checkpoint, current))
+            hidden = False
         else:
-            raise ValueError('路线含未适配的途经点指令。')
-    path.extend(_segment(grid, current, _point(source['endPosition']), mask, diagonal, check)[1:])
+            raise ValueError(f'路线含尚未支持的途经点指令 {kind}。')
+    if hidden:
+        raise ValueError('敌人消失后需要运行时指令才能返回。')
+    end = _point(source['endPosition'])
+    _append_move(path, _segment(grid, current, end, mask, diagonal, check), end)
     offset_x, offset_y = _offset(source.get('spawnOffset'))
     if offset_x or offset_y:
         x, y = path[0]
         path[0] = x + offset_x, y + offset_y
-    return {'path': path, 'waits': waits, 'distance': _path_length(path),
-            'wait_seconds': sum(waits.values()), 'spawn_range': spawn_range}
+    return {'path': path, 'waits': waits, 'hidden_waits': hidden_waits, 'jumps': jumps,
+            'distance': _path_length(path, jumps),
+            'wait_seconds': sum(waits.values()) + sum(hidden_waits.values()), 'spawn_range': spawn_range}
 
 
 def build_level_routes(level, *, cancel=None):

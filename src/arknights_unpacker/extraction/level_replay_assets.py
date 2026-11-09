@@ -48,7 +48,7 @@ def prepare_replay(game_root, level_id, resource_version, output, *, caption=Non
                            enemy_levels=enemy_levels, cancel=cancel)
     replay = build_level_replay(level, actors, seed=seed, cancel=cancel)
     if not replay['complete']:
-        detail = '；'.join(replay['diagnostics']) or '无法确定完整的波次时间轴。'
+        detail = ' '.join(replay['diagnostics']) or '无法确定完整的波次时间轴。'
         raise ValueError(detail)
     replay.update(levelId=level_id, resourceVersion=source.resource_version,
                   caption=caption or level_id.rsplit('/', 1)[-1])
