@@ -20,7 +20,7 @@ _REQUIRED = {'fixture.json', 'scene-layout.json', 'native-actors/index.json'}
 
 class NativeReplayPrewarmBudgetError(ValueError):
     def __init__(self):
-        super().__init__('原生回放后台缓存已达容量上限，可点击原生回放手动准备。')
+        super().__init__('原生回放后台缓存已达容量上限，可点击播放出怪手动准备。')
 
 
 def _ready_record(slot):
@@ -92,8 +92,9 @@ def _check_prewarm_budget(root, incoming_bytes, cancel):
 
 def _cache_slot(data_root, options):
     game_root = Path(options['game_root']).resolve()
-    root = Path(data_root) / 'native-level-replays'
-    if validate_output(root, game_root) != root:
+    data_root = Path(data_root)
+    root = data_root / 'native-level-replays'
+    if validate_output(data_root, game_root) != data_root or root == game_root:
         raise ValueError('原生回放缓存路径越界。')
     archive = options.get('crisis_info')
     # The display caption can arrive asynchronously after opening the catalog.
@@ -102,8 +103,15 @@ def _cache_slot(data_root, options):
     identity.pop('caption', None)
     key = sha256(json.dumps(identity, sort_keys=True).encode('utf-8')).hexdigest()
     slot = root / key
-    if slot.resolve() != slot:
-        raise ValueError('原生回放缓存路径越界。')
+    # Another worker can create either directory while Windows resolves a
+    # missing path. Check each existing component without following links.
+    for directory in (root, slot):
+        try:
+            info = directory.lstat()
+        except FileNotFoundError:
+            break
+        if not _ordinary_directory(info):
+            raise ValueError('原生回放缓存路径越界。')
     return slot, identity
 
 
@@ -129,7 +137,9 @@ def prepare_cached_native_replay(runtime, options, *, emit, cancel, prewarm=Fals
 
     generation = f'assets-{uuid4().hex}'
     assets = slot / generation
-    assets.mkdir(parents=True, exist_ok=False)
+    slot.parent.mkdir(parents=True, exist_ok=True)
+    slot.mkdir(exist_ok=True)
+    assets.mkdir()
     published = False
     try:
         result = prepare_level_playback(**options, output=assets, emit=emit, cancel=cancel)

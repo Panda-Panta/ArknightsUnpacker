@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QDialogButtonBox, QPushButton
+from PySide6.QtWidgets import QPushButton
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,6 @@ class _Preview:
     button: QPushButton
     info_job: object
     waiting: bool = False
-    suspended: bool = False
     player: object = None
 
 
@@ -81,19 +80,13 @@ class NativeReplayPreloader:
 
     def attach(self, request, dialog, info_job):
         self.timer.stop()
-        button = QPushButton('原生回放（试验）…', dialog)
-        dialog.buttons.addButton(button, QDialogButtonBox.ButtonRole.ActionRole)
+        button = dialog.replay_button
+        button.setToolTip('使用游戏原版场景和角色，在原生窗口播放出怪。')
         self.preview = preview = _Preview(request, dialog, button, info_job)
         dialog.finished.connect(lambda *_: self._close_preview(preview))
         button.clicked.connect(lambda: self._play(preview))
+        button.show()
         self.prepare(request)
-
-    def suspend(self, dialog):
-        if self.preview is not None and self.preview.dialog is dialog:
-            self.preview.suspended = True
-            self.preview.waiting = False
-            self.preview.button.setEnabled(True)
-            self.cancel()
 
     def _close_preview(self, preview):
         self.preview = None
@@ -102,7 +95,6 @@ class NativeReplayPreloader:
         self.timer.start()
 
     def _play(self, preview):
-        preview.suspended = False
         preview.waiting = True
         preview.button.setEnabled(False)
         if preview.info_job is not None and preview.info_job.status in ('排队中', '运行中'):
@@ -111,7 +103,7 @@ class NativeReplayPreloader:
 
     def _current(self, request):
         preview = self.preview
-        return preview if preview and preview.request == request and not preview.suspended else None
+        return preview if preview and preview.request == request else None
 
     def _status(self, request, message):
         if (preview := self._current(request)) is not None:

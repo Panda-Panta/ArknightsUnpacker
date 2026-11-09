@@ -12,6 +12,7 @@ from arknights_unpacker.extraction import level_replay_assets
 
 @pytest.fixture
 def native_replay(tmp_path, monkeypatch):
+    (tmp_path / 'data').mkdir()
     calls = []
 
     def extract(**args):
@@ -109,16 +110,23 @@ def test_concurrent_prewarm_publication_respects_shared_budget(tmp_path, monkeyp
             return prepare(prewarm=True, resource_version=version)
         except level_native_cache.NativeReplayPrewarmBudgetError:
             return None
+        except Exception:
+            barrier.abort()
+            raise
 
     with ThreadPoolExecutor(2) as pool:
-        results = list(pool.map(warm, ('v1', 'v2')))
+        futures = [pool.submit(warm, version) for version in ('v1', 'v2')]
+        errors = [error for future in futures if (error := future.exception()) is not None]
+        if errors:
+            raise ExceptionGroup('Concurrent prewarm failed', errors)
+        results = [future.result() for future in futures]
     assert sum(result is not None for result in results) == 1
     root = tmp_path / 'data/native-level-replays'
     assert len(list(root.glob('*/assets-*'))) == len(list(root.glob('*/ready.json'))) == 1
 
 
 def test_prewarm_budget_does_not_count_linked_slots(tmp_path, monkeypatch, native_replay):
-    prepare, _, _ = native_replay
+    prepare, _, options = native_replay
     cached = prepare()
     generation = Path(cached['native_assets'])
     source = generation.parent / 'ready.json'
@@ -129,10 +137,13 @@ def test_prewarm_budget_does_not_count_linked_slots(tmp_path, monkeypatch, nativ
     outside.mkdir()
     (outside / source.name).write_text(json.dumps(record), encoding='utf-8')
     (outside / generation.name).mkdir()
-    link = generation.parent.parent / ('f' * 64)
+    identity = {key: value for key, value in options.items() if key != 'output'}
+    slot, _ = level_native_cache._cache_slot(tmp_path / 'data', {**identity, 'resource_version': 'v3'})
     try:
-        link.symlink_to(outside, target_is_directory=True)
+        slot.symlink_to(outside, target_is_directory=True)
     except OSError as error:
         pytest.skip(f'Symlinks unavailable: {error}')
 
     assert not prepare(prewarm=True, resource_version='v2')['native_cache_hit']
+    with pytest.raises(ValueError, match='缓存路径越界'):
+        prepare(resource_version='v3')

@@ -1,7 +1,8 @@
 extends Node
 
 const BUFFER := Vector2i(1920, 1080)
-const SPEED := 2.0
+const CONTROL_POLL_SECONDS := 0.1
+const STATUS_INTERVAL_SECONDS := 0.3
 const UP := Vector3(0.0, 0.0, 1.0)
 
 var options := {}
@@ -18,7 +19,12 @@ var sample_spawns := 0
 var timed_props: Array[Dictionary] = []
 var elapsed := 0.0
 var battle_time := 0.0
+var duration := 0.0
+var speed := 2
 var playing := true
+var controls_path := ""
+var next_controls_read := CONTROL_POLL_SECONDS
+var last_seek_serial := 0.0
 var frame_count := 0
 var peak_actors := 0
 var active_actors := 0
@@ -41,6 +47,12 @@ func _ready() -> void:
 	if not assets is String or not atlases is String or not assets.is_absolute_path() or not atlases.is_absolute_path():
 		fail("Native replay requires absolute --assets and --actors paths")
 		return
+	if options.has("--controls"):
+		var path: Variant = options["--controls"]
+		if not path is String or not path.is_absolute_path():
+			fail("Native replay requires an absolute --controls path")
+			return
+		controls_path = path
 	asset_root = assets
 	actor_root = atlases
 	layout = read_object(asset_root.path_join("scene-layout.json"))
@@ -48,6 +60,7 @@ func _ready() -> void:
 	if layout.is_empty() or fixture.is_empty():
 		fail("Original scene layout or replay fixture unavailable")
 		return
+	duration = float(fixture.duration)
 	actors = read_object(actor_root.path_join("index.json"))
 	if actors.is_empty() and (not fixture.events.is_empty() or not layout.get("predefinedActors", {}).get("events", []).is_empty()):
 		fail("Original actor atlas index unavailable")
@@ -75,7 +88,9 @@ func _ready() -> void:
 			if index < times.size() and times[index] != null:
 				timed_props.append({"node": instance, "time": float(times[index])})
 	build_timeline()
-	battle_time = clampf(float(options.get("--start", "0")), 0.0, float(fixture.duration))
+	battle_time = clampf(float(options.get("--start", "0")), 0.0, duration)
+	if not controls_path.is_empty():
+		read_controls()
 	update_scene()
 	present = TextureRect.new()
 	present.texture = viewport.get_texture()
@@ -441,20 +456,62 @@ func update_scene() -> void:
 	peak_actors = maxi(peak_actors, active_actors)
 
 
+func read_controls() -> bool:
+	var file := FileAccess.open(controls_path, FileAccess.READ)
+	if file == null:
+		return false
+	var commands: Variant = JSON.parse_string(file.get_as_text())
+	if not commands is Dictionary:
+		return false
+	var changed := false
+	var requested_speed: Variant = commands.get("speed")
+	if (requested_speed is float or requested_speed is int) and float(requested_speed) in [1.0, 2.0]:
+		changed = speed != int(requested_speed)
+		speed = int(requested_speed)
+	var serial: Variant = commands.get("seek_serial")
+	var seconds: Variant = commands.get("seek_seconds")
+	# The host may keep the same command file in place across many polls.
+	if ((serial is float or serial is int) and (seconds is float or seconds is int)
+			and is_finite(serial) and is_finite(seconds) and serial > last_seek_serial
+			and serial == floorf(serial)):
+		last_seek_serial = float(serial)
+		battle_time = clampf(float(seconds), 0.0, duration)
+		playing = false
+		changed = true
+	return changed
+
+
 func _process(delta: float) -> void:
 	elapsed += delta
+	var previous_time := battle_time
+	var previous_playing := playing
 	if playing:
-		battle_time = minf(battle_time + delta * SPEED, float(fixture.duration))
+		battle_time = minf(battle_time + delta * speed, duration)
+		if battle_time >= duration:
+			playing = false
+	var controls_changed := false
+	if not controls_path.is_empty() and elapsed >= next_controls_read:
+		next_controls_read = elapsed + CONTROL_POLL_SECONDS
+		controls_changed = read_controls()
+	if controls_changed or battle_time != previous_time:
 		update_scene()
-	if elapsed - last_tick >= 1.0:
-		last_tick = elapsed
-		print("PROBE_TICK ", JSON.stringify(status()))
+	if controls_changed or playing != previous_playing or elapsed - last_tick >= STATUS_INTERVAL_SECONDS:
+		report_tick()
+
+
+func report_tick() -> void:
+	last_tick = elapsed
+	print("PROBE_TICK ", JSON.stringify(status()))
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
+	if is_processing() and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE:
+			if not playing and battle_time >= duration:
+				battle_time = 0.0
+				update_scene()
 			playing = not playing
+			report_tick()
 		elif event.keycode == KEY_F11 and not options.has("--embedded"):
 			get_window().mode = Window.MODE_WINDOWED if get_window().mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
 		elif event.keycode == KEY_ESCAPE:
@@ -475,6 +532,7 @@ func on_frame_drawn() -> void:
 func status() -> Dictionary:
 	var size := get_window().size
 	return {"pid": OS.get_process_id(), "elapsed": elapsed, "battle": battle_time,
+		"duration": duration, "speed": speed, "playing": playing,
 		"drawn": frame_count, "fps": Engine.get_frames_per_second(), "maxGapMs": max_frame_gap,
 		"buffer": [BUFFER.x, BUFFER.y], "window": [size.x, size.y],
 		"actors": active_actors, "peakActors": peak_actors, "predefinedActors": active_predefined,

@@ -447,15 +447,16 @@ class LevelCatalogPage(PageController):
         identity = self._identity(self._catalog)
         if identity is None or load is None:
             return
+        native = self._native_preloader
+        if native is not None and (request := self._native_request(path, caption)) is not None:
+            native.attach(request, dialog, info_job)
+            return
         from ..level_preview_server import LevelPreviewServer, missing_preview_runtime
         from ..paths import resource_root
 
         root, version = identity
         runtime = self.window.services.data_root / 'level-preview-runtime'
         player = resource_root() / 'scripts' / 'level_preview'
-        native = self._native_preloader
-        if native is not None and (request := self._native_request(path, caption)) is not None:
-            native.attach(request, dialog, info_job)
         server = None
 
         def play():
@@ -471,8 +472,6 @@ class LevelCatalogPage(PageController):
             except (OSError, ValueError) as error:
                 dialog.show_replay_status(str(error))
                 return
-            if native is not None:
-                native.suspend(dialog)
             dialog.replay_button.setEnabled(False)
             dialog.show_replay_status('正在准备游戏原场景、角色和波次…')
             if info_job is not None and info_job.status in ('排队中', '运行中'):

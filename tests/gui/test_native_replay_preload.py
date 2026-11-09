@@ -57,7 +57,9 @@ def test_new_stage_prepares_before_play_and_uses_a_separate_queue(qtbot, tmp_pat
 
         page.view.preview_button.click()
         dialog = page._preview_dialog
-        button = next(item for item in dialog.findChildren(QPushButton) if '原生回放' in item.text())
+        button = dialog.replay_button
+        assert button.isVisible() and button.text() == '播放出怪…'
+        assert not any('原生回放' in item.text() for item in dialog.findChildren(QPushButton))
         qtbot.waitUntil(lambda: '地图 5×7' in dialog.detail.text())
         assert window.native_replay_queue.busy
         button.click()
@@ -72,7 +74,7 @@ def test_new_stage_prepares_before_play_and_uses_a_separate_queue(qtbot, tmp_pat
 
         page.view.preview_button.click()
         dialog = page._preview_dialog
-        button = next(item for item in dialog.findChildren(QPushButton) if '原生回放' in item.text())
+        button = dialog.replay_button
         assert '已准备' in dialog.replay_status.text()
         button.click()
         assert len(played) == 2 and len(calls) == 1
