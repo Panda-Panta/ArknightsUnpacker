@@ -1,8 +1,8 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock, Collection, Document,
-  Folder, FolderOpened, Grid, MoreFilled, Operation, RefreshRight, Search, Setting, User,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock, Close, Collection, Document,
+  Folder, FolderOpened, Grid, Moon, MoreFilled, Operation, RefreshRight, Search, Setting, Sunny, User,
 } from '@element-plus/icons-vue'
 import ObjectInspector from './components/ObjectInspector.vue'
 import ResourceInspector from './components/ResourceInspector.vue'
@@ -33,15 +33,36 @@ const objectTypes = [
 ]
 
 const {
-  state, connected, errorMessage, location, folder, filters, sort, page, pageSize,
+  state, connected, errorMessage, darkTheme, location, folder, filters, sort, page, pageSize,
   list, loadingList, files, selectedFileId, checkedFiles, fileInFocus, fileIds,
   columnOrder, hiddenColumns, visibleColumns, inspectorVisible, bundle, openingBundle,
   objectDetails, objectPreview, objectQuery, objectFilter, selectedObjectId, checkedObjects,
   objectSort, activeArtifactIndex, selectedObject, activeArtifact, objectCategories, objectRows,
   objectPage, objectPageSize, currentObjectPage,
   run, navigate, goBack, goForward, canGoForward, openRow, closeBundle, focusObject, moveColumn, toggleColumn,
-  chooseFile, sortFiles, sortObjects, selectAllFiles,
+  chooseFile, sortFiles, sortObjects, selectAllFiles, moveWindow, windowAction,
 } = useWorkbench()
+
+const appIcon = '../ui/app-icon.png'
+const resizeEdges = [
+  'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right',
+]
+const themeLabel = computed(() => darkTheme.value ? '切换到浅色模式' : '切换到暗色模式')
+const maximizeLabel = computed(() => state.value.maximized ? '还原窗口' : '最大化')
+let captionPress = null
+
+function pressCaption(event) {
+  if (!connected.value || event.button !== 0) return
+  captionPress = { id: event.pointerId, x: event.clientX, y: event.clientY }
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+function moveCaption(event) {
+  if (captionPress?.id !== event.pointerId || !(event.buttons & 1)) return
+  if (Math.hypot(event.clientX - captionPress.x, event.clientY - captionPress.y) < 4) return
+  moveWindow(captionPress.x / window.innerWidth, captionPress.y)
+  captionPress = null
+}
 
 const activePage = ref('explorer')
 const settingsMode = ref('settings')
@@ -52,7 +73,7 @@ watch(() => state.value.revision, () => {
 })
 const resourceTable = ref(null)
 let resourceScroll
-const rootName = computed(() => state.value.root.split(/[\\/]/).filter(Boolean).at(-1) || '选择游戏目录')
+const rootName = computed(() => state.value.root.split(/[\\/]/).filter(Boolean).at(-1) || '')
 const crumbs = computed(() => {
   const segments = folder.value.split(/[\\/]/).filter(Boolean)
   return segments.map((name, index) => ({ name, path: segments.slice(0, index + 1).join('/') }))
@@ -109,9 +130,8 @@ function openSettings(mode = 'settings') {
   void selectPage('settings')
 }
 
-async function headerAction(action) {
+async function workbenchAction(action) {
   if (action === 'scanOptions' || action === 'history') openSettings(action)
-  else if (action === 'tasks') await selectPage('tasks')
   else await run(action)
 }
 
@@ -158,43 +178,57 @@ watch(() => Boolean(bundle.value), async (insideBundle) => {
 <template>
   <div class="workbench">
     <header class="app-header">
-      <div class="app-title">
-        <el-icon :size="28"><Collection /></el-icon>
+      <div class="app-title" @pointerdown="pressCaption" @pointermove="moveCaption"
+        @lostpointercapture="captionPress = null" @dblclick.left="windowAction('maximize')"
+      >
+        <img :src="appIcon" alt="" width="33" height="33" draggable="false">
         <h1>ArknightsUnpacker</h1>
       </div>
       <div class="application-actions">
-        <el-button
+        <el-input
           class="game-root"
+          :model-value="rootName"
           :title="state.root || '选择游戏目录'"
-          :icon="FolderOpened"
-          :disabled="!connected || state.busy"
-          @click="run('chooseRoot')"
+          aria-label="游戏目录"
+          placeholder="选择游戏目录"
+          readonly
         >
-          <span class="root-name">{{ rootName }}</span>
-          <el-icon><ArrowDown /></el-icon>
-        </el-button>
+          <template #prefix><el-icon><FolderOpened /></el-icon></template>
+          <template #append>
+            <el-button :icon="FolderOpened" aria-label="选择游戏目录" title="选择游戏目录"
+              :disabled="!connected || state.busy" @click="run('chooseRoot')"
+            />
+          </template>
+        </el-input>
         <el-button
+          class="scan-button"
           type="primary"
           :icon="RefreshRight"
           :loading="state.scanning"
           :disabled="!connected || !state.root || state.busy"
           @click="run('scan')"
         >扫描更新</el-button>
-        <el-dropdown :disabled="!connected" trigger="click" @command="headerAction">
-          <el-button :icon="MoreFilled" aria-label="工作台操作" title="工作台操作" />
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="scanOptions" :disabled="state.busy">扫描选项</el-dropdown-item>
-              <el-dropdown-item command="history" :disabled="state.busy">资源快照与历史</el-dropdown-item>
-              <el-dropdown-item command="loadData" :disabled="state.busy || !state.root">解析核心数据</el-dropdown-item>
-              <el-dropdown-item command="tasks" divided>任务记录</el-dropdown-item>
-              <el-dropdown-item command="openOutput">打开输出目录</el-dropdown-item>
-              <el-dropdown-item v-if="state.busy" command="cancel" divided>取消当前任务</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <button type="button" class="window-control theme-button" :aria-label="themeLabel" :title="themeLabel"
+          :disabled="!connected" @click="darkTheme = !darkTheme"
+        ><el-icon aria-hidden="true"><component :is="darkTheme ? Sunny : Moon" /></el-icon></button>
+      </div>
+      <div class="window-controls" role="group" aria-label="窗口控制">
+        <button type="button" class="window-control" aria-label="最小化" title="最小化"
+          :disabled="!connected" @click="windowAction('minimize')"
+        ><span class="window-glyph minimize" aria-hidden="true"></span></button>
+        <button type="button" class="window-control" :aria-label="maximizeLabel" :title="maximizeLabel"
+          :disabled="!connected" @click="windowAction('maximize')"
+        ><span class="window-glyph" :class="state.maximized ? 'restore' : 'maximize'" aria-hidden="true"></span></button>
+        <button type="button" class="window-control window-close" aria-label="关闭窗口" title="关闭窗口"
+          :disabled="!connected" @click="windowAction('close')"
+        ><el-icon aria-hidden="true"><Close /></el-icon></button>
       </div>
     </header>
+    <template v-if="connected && !state.maximized">
+      <div v-for="edge in resizeEdges" :key="edge" class="resize-edge" :class="'resize-' + edge"
+        aria-hidden="true" @pointerdown.left.prevent="windowAction('resize-' + edge)"
+      ></div>
+    </template>
 
     <div class="workbench-body">
       <aside class="side-rail" aria-label="功能导航">
@@ -409,6 +443,17 @@ watch(() => Boolean(bundle.value), async (insideBundle) => {
           <el-button :disabled="!connected" link @click="selectPage('tasks')">
             任务记录{{ state.taskCount ? ' · ' + state.taskCount : '' }}
           </el-button>
+          <el-dropdown :disabled="!connected" trigger="click" placement="top-end" @command="workbenchAction">
+            <el-button :icon="MoreFilled" aria-label="工作台操作" title="工作台操作" text />
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="scanOptions" :disabled="state.busy">扫描选项</el-dropdown-item>
+                <el-dropdown-item command="history" :disabled="state.busy">资源快照与历史</el-dropdown-item>
+                <el-dropdown-item command="loadData" :disabled="state.busy || !state.root">解析核心数据</el-dropdown-item>
+                <el-dropdown-item command="openOutput">打开输出目录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </main>
     </div>

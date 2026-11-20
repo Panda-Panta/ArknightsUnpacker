@@ -5,8 +5,8 @@ import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QEvent, QObject, QPoint, QTimer, Qt, QUrl, Signal, Slot
+from PySide6.QtGui import QCursor, QDesktopServices
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -27,6 +27,17 @@ from .resources import WorkbenchResources
 from .settings import WorkbenchSettings
 
 logger = logging.getLogger(__name__)
+
+_RESIZE_EDGES = {
+    'resize-top': Qt.Edge.TopEdge,
+    'resize-bottom': Qt.Edge.BottomEdge,
+    'resize-left': Qt.Edge.LeftEdge,
+    'resize-right': Qt.Edge.RightEdge,
+    'resize-top-left': Qt.Edge.TopEdge | Qt.Edge.LeftEdge,
+    'resize-top-right': Qt.Edge.TopEdge | Qt.Edge.RightEdge,
+    'resize-bottom-left': Qt.Edge.BottomEdge | Qt.Edge.LeftEdge,
+    'resize-bottom-right': Qt.Edge.BottomEdge | Qt.Edge.RightEdge,
+}
 
 
 def workbench_index() -> Path:
@@ -106,6 +117,7 @@ class WorkbenchBridge(QObject):
             'scanning': window._scan_pending,
             'restoring': window._restore_pending,
             'status': window.status,
+            'maximized': window.isMaximized(),
             'taskCount': sum(job.status in ('排队中', '运行中', '正在取消') and job.show_in_tasks
                              for job in window.queue.jobs),
             'revision': self._revision,
@@ -192,6 +204,38 @@ class WorkbenchBridge(QObject):
             return self.characters.close(token)
         raise ValueError('未知的工作台操作。')
 
+    @Slot(float, float)
+    def moveWindow(self, fraction, offset_y):
+        window = self.window
+        if window.isMaximized():
+            normal = window.normalGeometry()
+            offset = QPoint(round(fraction * normal.width()), round(offset_y))
+            normal.moveTopLeft(QCursor.pos() - offset)
+
+            def move_restored_window():
+                window.setGeometry(normal)
+                window.windowHandle().startSystemMove()
+
+            window.showNormal()
+            QTimer.singleShot(0, move_restored_window)
+        else:
+            window.windowHandle().startSystemMove()
+
+    @Slot(str)
+    def windowAction(self, action):
+        window = self.window
+        if action in _RESIZE_EDGES and not window.isMaximized() and not window.isFullScreen():
+            window.windowHandle().startSystemResize(_RESIZE_EDGES[action])
+        elif action == 'minimize':
+            window.showMinimized()
+        elif action == 'maximize':
+            if window.isMaximized():
+                window.showNormal()
+            else:
+                window.showMaximized()
+        elif action == 'close':
+            window.close()
+
     @Slot(str, str, result=str)
     def invoke(self, action, serialized):
         try:
@@ -213,6 +257,7 @@ class VueWorkbenchWindow(DesktopJobActions, QMainWindow):
 
     def __init__(self, services, initial_root=''):
         super().__init__()
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.services = services
         self.root = initial_root or str(services.config.get('game_root', ''))
         self.status = '正在读取上次保存的结果…' if self.root else '选择游戏目录以开始浏览资源。'
@@ -409,6 +454,11 @@ class VueWorkbenchWindow(DesktopJobActions, QMainWindow):
         if self._monitor_stamp and stamp != self._monitor_stamp:
             self.scan()
         self._monitor_stamp = stamp
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self.state_changed.emit()
 
     def _loaded(self, ok):
         if not ok and not self._closing:

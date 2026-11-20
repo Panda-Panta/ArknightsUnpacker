@@ -38,6 +38,10 @@ function objectGroup(row) {
 
 export function useWorkbench() {
   const saved = readPreferences()
+  const darkTheme = ref(saved.theme === 'dark')
+  watch(darkTheme, (enabled) => {
+    document.documentElement.classList.toggle('dark', enabled)
+  }, { immediate: true, flush: 'sync' })
   const state = shallowRef(defaultState)
   const connected = ref(false)
   const errorMessage = ref('')
@@ -133,6 +137,7 @@ export function useWorkbench() {
       columnOrder: columnOrder.value,
       hiddenColumns: [...hiddenColumns.value],
       inspectorVisible: inspectorVisible.value,
+      theme: darkTheme.value ? 'dark' : 'light',
     })
   }
 
@@ -459,11 +464,11 @@ export function useWorkbench() {
     scheduleList()
     persist()
   })
-  watch([columnOrder, hiddenColumns, inspectorVisible], persist)
+  watch([columnOrder, hiddenColumns, inspectorVisible, darkTheme], persist)
   watch([objectQuery, objectFilter, objectSort], () => { objectPage.value = 1 })
 
   return {
-    state, connected, errorMessage, history, location, folder, filters, sort, page, pageSize,
+    state, connected, errorMessage, darkTheme, history, location, folder, filters, sort, page, pageSize,
     list, loadingList, files, selectedFileId, checkedFiles, fileInFocus, fileIds,
     columnOrder, hiddenColumns, visibleColumns, inspectorVisible, bundle, openingBundle,
     objectDetails, objectPreview, objectQuery, objectFilter, selectedObjectId, checkedObjects,
@@ -471,6 +476,8 @@ export function useWorkbench() {
     objectPage, objectPageSize, currentObjectPage,
     run, navigate, goBack, goForward, openRow, closeBundle, focusObject, moveColumn, toggleColumn, selectAllFiles,
     canGoForward: computed(() => !bundle.value && (Boolean(forwardBundle.value) || location.value < history.value.length - 1)),
+    windowAction: (action) => bridge?.windowAction(action),
+    moveWindow: (fraction, offsetY) => bridge?.moveWindow(fraction, offsetY),
     chooseFile: (row) => { selectedFileId.value = row.id },
     sortFiles: (key) => setSort(sort, key),
     sortObjects: (key) => setSort(objectSort, key),

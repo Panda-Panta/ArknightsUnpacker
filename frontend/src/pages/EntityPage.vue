@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
 .profile-block h3 { margin: 0; padding: 8px 12px; background: var(--wash); font-size: 16px; }
 .profile-block dl { display: grid; grid-template-columns: minmax(82px, max-content) minmax(0, 1fr); margin: 0; }
 .profile-block dt, .profile-block dd, .profile-block th, .profile-block td { margin: 0; padding: 7px 10px; border-bottom: 1px solid var(--rule); white-space: pre-wrap; }
-.profile-block dt { background: #f8fbff; }
+.profile-block dt { background: var(--el-fill-color-lighter); }
 .profile-block table { width: 100%; border-collapse: collapse; text-align: left; }
 .entity-actions { justify-content: flex-end; border-top: 1px solid var(--rule); border-bottom: 0; }
 .entity-actions .el-button { margin-left: 0; }

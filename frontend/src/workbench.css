@@ -2,8 +2,8 @@
   color-scheme: light;
   font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   font-size: 15px;
-  color: #202e3d;
-  background: #fff;
+  color: var(--ink);
+  background: var(--surface);
   --ink: #202e3d;
   --muted: #65778b;
   --accent: #0067c0;
@@ -13,6 +13,12 @@
   --chrome-blue: #e1edfc;
   --rule: #d4e0ef;
   --surface: #fff;
+  --inspector-surface: #fcfdff;
+  --table-heading: #f0f6fc;
+  --row-hover: #eef6ff;
+  --row-checked: #e7f3ff;
+  --folder-icon: #d99c27;
+  --status-error: #973e25;
   --workbench-gutter: clamp(14px, 1.26vw, 22px);
   --control-height: clamp(36px, 4.7vh, 44px);
   --el-color-primary: #0067c0;
@@ -29,6 +35,49 @@
   --el-border-color-light: var(--rule);
   --el-border-color-lighter: #e3ebf4;
   --el-fill-color-lighter: #f8fbfe;
+}
+
+html.dark {
+  --ink: #e3eaf4;
+  --muted: #a4b4c8;
+  --accent: #78baff;
+  --light-blue: #253f5d;
+  --pale-blue: #222f40;
+  --wash: #1b2736;
+  --chrome-blue: #1e2939;
+  --rule: #334156;
+  --surface: #141e2b;
+  --inspector-surface: #182332;
+  --table-heading: #1e2b3c;
+  --row-hover: #212f42;
+  --row-checked: #223a54;
+  --folder-icon: #edb75c;
+  --status-error: #ffab97;
+  --el-color-primary: var(--accent);
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: #111924;
+  --el-bg-color-overlay: #202d3d;
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: #c8d5e5;
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: #92a4bb;
+  --el-border-color: #425268;
+  --el-border-color-light: var(--rule);
+  --el-border-color-lighter: #2e3b4f;
+  --el-border-color-extra-light: #263346;
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: #233145;
+  --el-fill-color-lighter: var(--wash);
+  --el-fill-color-extra-light: #192536;
+}
+
+html.dark .el-button--primary:not(.is-plain, .is-text, .is-link) {
+  --el-button-bg-color: #1762a6;
+  --el-button-border-color: #2679c1;
+  --el-button-hover-bg-color: #246fb2;
+  --el-button-hover-border-color: #3389d2;
+  --el-button-active-bg-color: #155891;
+  --el-button-active-border-color: #2679c1;
 }
 
 * {
@@ -63,11 +112,9 @@ button:focus-visible {
 
 .app-header {
   display: flex;
-  flex: 0 0 clamp(54px, 7.05vh, 67px);
+  flex: 0 0 54px;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 0 clamp(16px, 1.45vw, 25px);
+  gap: 10px;
   background: var(--chrome-blue);
   border-bottom: 1px solid var(--rule);
 }
@@ -79,39 +126,146 @@ button:focus-visible {
   gap: 10px;
 }
 
-.app-title .el-icon {
-  color: var(--accent);
+.app-title {
+  flex: 1;
+  align-self: stretch;
+  padding-left: 19px;
+  user-select: none;
+  touch-action: none;
+}
+
+.app-title img {
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .app-title h1 {
   margin: 0;
-  font-size: clamp(22px, 1.59vw, 27px);
+  font-size: 20px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.application-actions .el-button + .el-button,
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.window-control {
+  display: grid;
+  width: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+}
+
+.window-control.theme-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+  font-size: 17px;
+}
+
+.window-control:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.window-control.window-close:not(:disabled):hover {
+  color: #fff;
+  background: #b91c32;
+}
+
+.window-control:focus-visible {
+  outline-offset: -4px;
+}
+
+.window-control:disabled {
+  opacity: .45;
+}
+
+.window-glyph {
+  position: relative;
+  width: 10px;
+  height: 10px;
+}
+
+.window-glyph.minimize {
+  height: 1px;
+  border-top: 1px solid currentColor;
+}
+
+.window-glyph.maximize {
+  border: 1px solid currentColor;
+}
+
+.window-glyph.restore::before, .window-glyph.restore::after {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  content: '';
+}
+
+.window-glyph.restore::before {
+  top: -1px;
+  right: -1px;
+}
+
+.window-glyph.restore::after {
+  bottom: -1px;
+  left: -1px;
+  background: var(--chrome-blue);
+}
+
+.resize-edge { position: fixed; z-index: 20; }
+.resize-top, .resize-bottom { height: 4px; inset-inline: 9px; cursor: ns-resize; }
+.resize-left, .resize-right { width: 4px; inset-block: 9px; cursor: ew-resize; }
+.resize-top-left, .resize-top-right, .resize-bottom-left, .resize-bottom-right { width: 9px; height: 9px; }
+.resize-top, .resize-top-left, .resize-top-right { top: 0; }
+.resize-bottom, .resize-bottom-left, .resize-bottom-right { bottom: 0; }
+.resize-left, .resize-top-left, .resize-bottom-left { left: 0; }
+.resize-right, .resize-top-right, .resize-bottom-right { right: 0; }
+.resize-top-left, .resize-bottom-right { cursor: nwse-resize; }
+.resize-top-right, .resize-bottom-left { cursor: nesw-resize; }
+
 .history-buttons .el-button + .el-button,
 .application-status .el-button + .el-button {
   margin-left: 0;
 }
 
 .game-root {
-  min-width: clamp(174px, 15.1vw, 255px);
-  max-width: min(293px, 30vw);
+  width: clamp(225px, 22vw, 303px);
 }
 
-.application-actions .el-button, .filters .el-button {
+.game-root .el-input-group__append {
+  padding: 0 12px;
+  background: var(--chrome-blue);
+}
+
+.game-root .el-input-group__append .el-button {
+  margin: 0 -12px;
+  padding: 0 12px;
+  color: var(--accent);
+}
+
+.game-root .el-input-group__append .el-button:disabled {
+  color: var(--el-text-color-disabled);
+}
+
+.application-actions .scan-button {
+  height: 34px;
+  padding-inline: 15px;
+}
+
+.filters .el-button {
   min-height: var(--control-height);
   font-size: 15px;
 }
 
-.game-root > span {
-  min-width: 0;
-  gap: 8px;
-}
-
-.root-name, .row-name span, .file-title h3 {
+.row-name span, .file-title h3 {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -187,7 +341,7 @@ button:focus-visible {
   flex: 0 0 auto;
   gap: clamp(4px, 1.02vw, 17px);
   padding-right: clamp(10px, 1.1vw, 19px);
-  border-right: 1px solid #a3b2c2;
+  border-right: 1px solid var(--el-border-color);
 }
 
 .history-buttons .el-button {
@@ -325,11 +479,11 @@ button:focus-visible {
 .table-shell .el-table {
   border-radius: 4px 4px 0 0;
   font-variant-numeric: tabular-nums;
-  --el-table-header-bg-color: #f0f6fc;
-  --el-table-header-text-color: #364454;
-  --el-table-text-color: #1c2a3b;
-  --el-table-border-color: #e2ebf5;
-  --el-table-row-hover-bg-color: #eef6ff;
+  --el-table-header-bg-color: var(--table-heading);
+  --el-table-header-text-color: var(--el-text-color-regular);
+  --el-table-text-color: var(--ink);
+  --el-table-border-color: var(--el-border-color-lighter);
+  --el-table-row-hover-bg-color: var(--row-hover);
   font-size: clamp(14px, 1.07vw, 18px);
 }
 
@@ -350,7 +504,7 @@ button:focus-visible {
 .table-shell .el-checkbox__inner {
   width: 16px;
   height: 16px;
-  border-color: #bac7d6;
+  border-color: var(--el-border-color);
   border-radius: 3px;
 }
 
@@ -369,7 +523,7 @@ button:focus-visible {
 }
 
 .table-shell .el-table__body .is-checked-row > td.el-table__cell {
-  background: #e7f3ff;
+  background: var(--row-checked);
 }
 
 .table-shell .el-table__body .is-focused-row > td.el-table__cell {
@@ -397,12 +551,12 @@ button:focus-visible {
 
 .row-name .el-icon {
   flex: 0 0 20px;
-  color: #64778d;
+  color: var(--muted);
   font-size: 20px;
 }
 
 .row-name .folder-icon, .file-title .folder-icon {
-  color: #d99c27;
+  color: var(--folder-icon);
 }
 
 .sort-header {
@@ -414,7 +568,7 @@ button:focus-visible {
   display: inline-block;
   width: 10px;
   height: 14px;
-  color: #abbac9;
+  color: var(--el-text-color-placeholder);
 }
 
 .sort-carets::before, .sort-carets::after {
@@ -452,7 +606,7 @@ button:focus-visible {
   position: absolute;
   z-index: 12;
   border: 1px solid var(--accent);
-  background: rgb(0 103 192 / 15%);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   pointer-events: none;
 }
 
@@ -505,17 +659,23 @@ button:focus-visible {
 }
 
 .application-status.has-error > span {
-  color: #973e25;
+  color: var(--status-error);
 }
 
 .application-status .el-button {
   font-size: 12px;
 }
 
+.application-status .el-dropdown .el-button {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 14px;
+}
+
 .inspector {
   flex: 0 0 clamp(233px, 17.3vw, 317px);
   border-left: 1px solid var(--rule);
-  background: #fcfdff;
+  background: var(--inspector-surface);
 }
 
 .inspector-heading {
@@ -618,7 +778,7 @@ button:focus-visible {
 .resource-inspector .el-descriptions__label.is-bordered-label {
   width: 43%;
   white-space: nowrap;
-  background: #edf3fa;
+  background: var(--wash);
 }
 
 .inspector-actions {
@@ -741,7 +901,7 @@ button:focus-visible {
 
 .object-inspector video {
   max-height: 50vh;
-  background: var(--ink);
+  background: #000;
 }
 
 .text-preview {
@@ -781,5 +941,5 @@ button:focus-visible {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: white;
+  background: var(--surface);
 }
