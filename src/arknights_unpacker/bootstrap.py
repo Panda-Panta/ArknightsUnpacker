@@ -174,15 +174,23 @@ def main() -> int:
             services.shutdown()
     from PySide6.QtCore import QTimer, qVersion
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication
-    from .ui.main_window import MainWindow
+    from PySide6.QtWidgets import QApplication, QMessageBox
     app = QApplication(sys.argv[:1])
     app.setApplicationName("ArknightsUnpacker")
     app.setApplicationVersion(__version__)
     app.setOrganizationName("ArknightsUnpacker")
     icon_path = resource_root() / 'resources/ui/app-icon.png'
     app.setWindowIcon(QIcon(str(icon_path)))
-    window = MainWindow(services, initial_root=args.game_root)
+    if args.smoke_test:
+        from .ui.main_window import MainWindow
+        window = MainWindow(services, initial_root=args.game_root)
+    else:
+        from .ui.workbench.window import VueWorkbenchWindow, workbench_index
+        if not workbench_index().is_file():
+            QMessageBox.critical(None, '缺少 Vue 工作台资源', '从源码运行时，请使用 scripts/dev.ps1 构建并启动。')
+            services.shutdown()
+            return 1
+        window = VueWorkbenchWindow(services, initial_root=args.game_root)
     app.aboutToQuit.connect(services.shutdown)
     window.show()
     if args.smoke_test and args.character_source:

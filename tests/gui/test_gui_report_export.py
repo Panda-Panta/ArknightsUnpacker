@@ -98,7 +98,7 @@ def test_preview_exports_to_private_cache_and_task_can_reopen_artifacts(qtbot, t
     assert window._dialogs[-1].export_button.isVisible()
     first_count = len(window._dialogs)
     original = window._dialogs[-1]
-    window.show_task_history().table.selectRow(len(window.queue.jobs) - 1)
+    window.jobs.table.selectRow(len(window.queue.jobs) - 1)
     window.jobs.preview_artifacts()
     assert len(window._dialogs) == first_count
     assert window._dialogs[-1] is original and original.isVisible()

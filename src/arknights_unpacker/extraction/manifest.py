@@ -1,34 +1,9 @@
 """Read local IDX and resolve logical paths without scanning every anonymous bundle."""
-from contextlib import contextmanager
-from contextvars import ContextVar
 from pathlib import Path
 from .decoder import schema
 
-
-_shared_reads = ContextVar('shared_resource_manifest_reads', default=None)
-
-
-@contextmanager
-def share_resource_manifest_reads():
-    """Reuse a read-only IDX decode for identical bytes within one operation."""
-    token = _shared_reads.set({})
-    try:
-        yield
-    finally:
-        _shared_reads.reset(token)
-
-
 def read_resource_manifest(path:Path):
-    data = path.read_bytes()
-    reads = _shared_reads.get()
-    if reads is None:
-        return _decode_resource_manifest(data)
-    if data not in reads:
-        reads[data] = _decode_resource_manifest(data)
-    return reads[data]
-
-
-def _decode_resource_manifest(data):
+    data=path.read_bytes()
     if len(data)<132: raise ValueError('IDX too short')
     obj=schema('resource_manifest').ROOT_TYPE.GetRootAs(data[128:],0)
     bundles=[]

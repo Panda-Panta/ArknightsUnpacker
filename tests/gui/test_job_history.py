@@ -25,7 +25,7 @@ def test_successful_report_history_can_preview_after_new_window(qtbot, tmp_path)
     assert not reopened.queue.busy
     assert not fresh_services.calls
     assert reopened.queue.jobs[0].status == '成功'
-    reopened.show_task_history().table.selectRow(0)
+    reopened.jobs.table.selectRow(0)
     reopened.jobs.preview_artifacts()
     assert reopened._dialogs[-1].image.pixmap().width() == 90
     record = json.loads(next((services.data_root / 'queue').glob('*.json')).read_text(encoding='utf-8'))
@@ -123,7 +123,7 @@ def test_receipt_and_completed_artifacts_survive_worker_failure(qtbot, tmp_path)
     window.close()
     reopened, fresh = make_window(qtbot, tmp_path)
     assert not fresh.calls and reopened.queue.jobs[0].status == '失败'
-    reopened.show_task_history().table.selectRow(0)
+    reopened.jobs.table.selectRow(0)
     reopened.jobs.preview_artifacts()
     assert reopened._dialogs[-1].image.pixmap().width() == 75
     records = reopened.queue.history.evidence(reopened.queue.jobs[0])
@@ -247,7 +247,7 @@ def test_cancelled_report_keeps_every_successful_page_and_bound_manifest(qtbot, 
     window.close()
     reopened, fresh = make_window(qtbot, tmp_path)
     assert not fresh.calls and reopened.queue.jobs[0].status == '已取消'
-    reopened.show_task_history().table.selectRow(0)
+    reopened.jobs.table.selectRow(0)
     reopened.jobs.preview_artifacts()
     assert reopened._dialogs[-1].pages.count() == 2
     assert not json.loads(manifest.read_text(encoding='utf-8'))['complete']

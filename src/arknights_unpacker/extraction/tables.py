@@ -35,7 +35,28 @@ def _table_name(value,names):
     match=_table_pattern(frozenset(names)).fullmatch(value)
     return match.group('table') if match else None
 
-def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None,decoders=None):
+def _table_objects(env, targets, container_paths, cancel):
+    if container_paths:
+        container = env.container
+        for name, path in container_paths.items():
+            _check(cancel)
+            obj = container[path]
+            if obj.type.name != 'TextAsset':
+                raise ValueError(f'索引对象不是 TextAsset: {path}')
+            yield name, obj, obj.read()
+    remaining = targets - (container_paths or {}).keys()
+    if not remaining:
+        return
+    for obj in env.objects:
+        _check(cancel)
+        if obj.type.name != 'TextAsset':
+            continue
+        data = obj.read()
+        if name := _table_name(data.m_Name, remaining):
+            yield name, obj, data
+
+
+def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None,decoders=None,container_paths=None):
     result={}
     before=path.stat()
     payload=path.read_bytes()
@@ -49,11 +70,7 @@ def _decode_bundle(path,targets,layer,logical_names,emit,cancel,expected=None,de
     # UnityPy sees precisely the immutable bytes whose SHA/MD5 were checked.
     # The path is retained only as diagnostic context for callers/adapters.
     env=load_bundle(path,data=payload)
-    for obj in env.objects:
-        _check(cancel)
-        if obj.type.name!='TextAsset': continue
-        data=obj.read(); name=_table_name(data.m_Name,targets)
-        if not name: continue
+    for name,obj,data in _table_objects(env,targets,container_paths,cancel):
         emit({'kind':'progress','stage':'decode','table':name,'path':str(path)})
         raw=raw_text(data)
         if name=='data_version':
@@ -128,6 +145,7 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
     stable_inputs[index_path]=(index_stat.st_size,index_stat.st_mtime_ns,index_sha)
     grouped={}
     candidates={}
+    indexed_containers = {}
     for asset in index['assets']:
         logical=asset.get('assetName') or asset.get('path') or asset.get('name') or ''
         name=_table_name(logical,names)
@@ -168,10 +186,17 @@ def load_local_tables(game_root:Path,cache_dir:Path|None,emit=null_progress,canc
         if not chosen:
             result.diagnostics.append(f'{name}: 活动版本包缺失或大小/摘要不符: {bundle_name}');continue
         grouped.setdefault(chosen,{})[name]=logical
+        # A level's serialized object name can differ in case from its IDX key.
+        container_path = f'dyn/{logical}.bytes'
+        if (logical_names and name in logical_names and logical.startswith('gamedata/levels/')
+                and asset.get('path') == container_path):
+            indexed_containers.setdefault(chosen, {})[name] = container_path
     for (fp,layer),logical in grouped.items():
         _check(cancel)
         try:
             options = {'decoders': decoders} if decoders else {}
+            if paths := indexed_containers.get((fp, layer)):
+                options['container_paths'] = paths
             decoded=_decode_bundle(fp,set(logical),layer,logical,emit,cancel,expected=candidates[fp],**options)
             info=entries[fp.relative_to(layers[layer]).as_posix()]
             for t in decoded.values():

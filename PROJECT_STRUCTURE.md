@@ -1,38 +1,27 @@
 # 实际工程结构
 
-更新：2026-11-09。唯一主计划为 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，使用入口为 [README.md](README.md)。本文件描述已存在源码和依赖方向。
+更新于 2026-11-20。实施和交付见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，启动步骤见 [README.md](README.md)。
 
 GitHub源码采用 `main`／`test`；Windows二进制放在对应版本 Release 附件，`data/`、`exports/`、`dist/` 和 `artifacts/` 不进入源码。可提交的验证摘要为 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)，完整本机日志与样本仍留在忽略目录。
 
 ```text
 ArknightsUnpacker/
+├─ frontend/
+│  ├─ src/App.vue                 顶部操作、左栏主导航、资源与包内工作区
+│  ├─ src/pages/                  更新／任务、资料、玩法、设置和 AVG 表情页面
+│  ├─ src/components/             资源／对象表格、文件信息和对象预览
+│  ├─ src/useWorkbench.js         目录历史、列表筛选、对象状态和浏览偏好
+│  ├─ src/bridge.js               本机 QWebChannel 调用与结果转换
+│  ├─ public/index.html           本地页面入口
+│  └─ package-lock.json           Vue、Element Plus、Vite 的锁定依赖
 ├─ src/arknights_unpacker/
-│  ├─ __main__.py, bootstrap.py    GUI／worker／验收入口分派
-│  ├─ level_preview_app.py        独立关卡预览器及同程序 worker 入口
+│  ├─ __main__.py, bootstrap.py    Vue 桌面／worker／显式 Qt 验收入口分派
 │  ├─ application.py              AppServices 用例集成，负责所选安装与输出保护
 │  ├─ contracts.py                共享模型、模组PNG排版选项、取消标记与序列化契约
 │  ├─ jobs.py                     隔离子进程、文件 IPC、取消与结果清单
-│  ├─ level_preview_cache.py      按安装、资源版本和关卡绑定本地动画
-│  ├─ level_preview_server.py     向窗口内播放器提供当前回放所需的本机资源
-│  ├─ level_native_atlases.py      在回放 worker 内准备原版骨骼帧图集
-│  ├─ level_native_cache.py        按客户端资源版本发布和复用原生回放资产
 │  ├─ paths.py                    程序旁 data／exports 默认路径、旧版迁移与原子写入
 │  ├─ library/                    目录发现、分类、清单、生效候选、扫描、快照和 SQLite
-│  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、图片、Spine、USM
-│  │  ├─ gameplay.py            生效资源索引读取、玩法识别和按需详情
-│  │  ├─ level_catalog.py       关卡发现、分类和新增判定
-│  │  ├─ level_metadata.py      真实关卡编号、标题、章节和活动名
-│  │  ├─ level_map_image.py     游戏原版地图原图的绑定和提取
-│  │  ├─ level_scenes.py        活动索引及赛季表中的原场景和地图预制体绑定
-│  │  ├─ level_tags.py          全息矩阵指标和危机合约赛季指标导入
-│  │  ├─ level_variants.py      指标对关卡脚本和禁部署格的变更
-│  │  ├─ level_replay_assets.py 组合原场景、预置物、角色与波次的 worker 入口
-│  │  ├─ level_replay.py        路线与时间轴的衔接
-│  │  ├─ level_spawn_choices.py 种子选取敌群及验证无部署条件分支
-│  │  ├─ level_sandbox_replay.py 生息演算 V3 限时关卡绑定
-│  │  ├─ level_predefined_assets.py 原版预置干员与机关资源和出场时间
-│  │  ├─ level_actor_attacks.py 从原版敌人技能与骨骼读取定时动作
-│  │  └─ autochess.py           PC 卫戍协议的赛季结构及策略、盟约、调度解码
+│  ├─ extraction/                 Unity／PC 文本解码、IDX、核心表、玩法资料、图片、Spine、USM
 │  ├─ gamedata/                   归一化、属性与描述、干员／模组资料、依赖与语义差异
 │  │  ├─ build.py                共用培养条件校验与来源信息，不依赖具体资料构建器
 │  │  └─ module_comparison.py    同培养条件的模组各级属性、原效果与前一级对照
@@ -41,16 +30,16 @@ ArknightsUnpacker/
 │  │  ├─ fonts.py                字体只读加载、TTC字形提取、PNG与HTML离线内嵌
 │  │  ├─ font_catalog.py         系统／用户Fonts名称、样式及集合字形索引，进程内缓存
 │  │  └─ exporters.py            JSON／TXT／HTML／PNG 有序适配器，所选格式延迟加载
-│  └─ ui/                         Qt 浅色工作台、启动恢复、更新批量导图、原图预览保存
-│     ├─ pages.py                稳定ID页面清单、各页控制器与状态／刷新装配
-│     ├─ gameplay_page.py        玩法子页、赛季选择和关卡详情
-│     ├─ level_catalog_page.py   ArknightsMapViewer 的关卡目录、新增筛选与回放入口
-│     ├─ level_preview_window.py 独立关卡预览器窗口、扫描与恢复
-│     ├─ level_preview_dialog.py 原版地图图像与本地动画播放
-│     ├─ level_replay_view.py   源码环境的 Qt WebEngine 回放试验入口
-│     ├─ level_native_dialog.py Qt 宿主和 Godot 原生回放进程
-│     ├─ level_native_preview.py 按选择和指标后台准备原生回放，协调播放及取消
-│     ├─ level_tags_dialog.py    作战指标选择与脚本效果
+│  └─ ui/
+│     ├─ workbench/               Vue 桌面宿主与后端桥接
+│     │  ├─ window.py            Qt WebEngine、启动恢复、扫描、QWebChannel 分派
+│     │  ├─ resources.py         分页资源浏览、文件夹和解包选择
+│     │  ├─ objects.py           包内读取、对象预览与指定对象提取
+│     │  ├─ records.py           更新记录、任务查询与产物操作
+│     │  └─ characters.py, entities.py, gameplay.py, settings.py
+│     │                          表情、干员／模组、卫戍协议文字资料、设置
+│     ├─ desktop_jobs.py         Vue 宿主的任务提交、恢复与产物回调
+│     ├─ main_window.py, pages.py  显式原生验收用旧版主窗口及页面装配
 │     ├─ profile_html.py         资料语义块到 Qt 详情 HTML 的转换
 │     ├─ report_preview.py       资料导出文件预览、换字体与分页
 │     ├─ object_preview.py       对象表格、自动预览与租约
@@ -61,7 +50,7 @@ ArknightsUnpacker/
 │     ├─ font_picker.py          设置和资料预览复用的系统字体／文件选择器
 │     ├─ report_font_smoke.py     显式原生同窗换字形、正式导出与回收验收
 │     └─ preview_cache.py        临时预览归属、窗口／生产任务释放、旧缓存回收
-├─ resources/                     文件夹规则、HTML 实际运行资产、ui/ 主图标PNG／ICO及主题矢量图标
+├─ resources/                     文件夹规则，HTML 报告模板，主图标，workbench/ 前端构建产物
 ├─ data/                          默认本机配置、扫描／解析／变化历史及预览，不随源码或程序打包
 ├─ exports/                       启动自动创建的默认输出，不随源码或程序打包
 ├─ vendor/                        固定 CN FlatBuffers schemas、LZ4AK 和来源摘要
@@ -71,28 +60,40 @@ ArknightsUnpacker/
 │  ├─ engine/                     数据解码、输入一致性与对象提取
 │  ├─ gamedata/                   属性、描述、模块、快照语义回归
 │  ├─ reports/                    同值导出、转义、分页、草稿与取消
-│  ├─ gui/                        Qt 交互、身份保持、可读预览和队列
+│  ├─ gui/                        Vue 宿主资源／对象桥接、Qt 预览回归和队列
 │  └─ integration/                显式启用的本机真实 Qt 全流程
-├─ packaging/                     PyInstaller、来源／文件清单、许可证和预检入口
-├─ scripts/                       dev.ps1、verify.ps1、build.ps1、verify-html.cjs
+├─ packaging/                     PyInstaller、来源／文件清单、前端许可证收集和预检入口
+├─ scripts/                       dev.ps1、build-frontend.ps1、verify.ps1、build.ps1、verify-html.cjs
 ├─ docs/                          游戏目录、用户指南、第三方声明
 ├─ artifacts/                     里程碑样本、审查报告与 M9 验收，不随程序打包
-├─ dist/<版本>/                    Windows 目录式便携包，按产品分为 ArknightsUnpacker 和 ArknightsMapViewer
+├─ dist/<版本>/ArknightsUnpacker/ 最终目录式 Windows 便携包
 ├─ .work/                         独立任务／测试／构建中间文件，不随包分发
 ├─ .tools/, .venv/                仅本机开发依赖，不随包分发
 ├─ pyproject.toml, uv.lock         精确依赖和工程命令
 └─ DEVELOPMENT_PLAN.md           完整主计划及最终事实记录
 ```
 
-Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG／HTML／TXT；JSON 保留完整当前资料和字段证据。`compose_report`及`export_report`不附带跨版本变化集，干员与模组详情统一只渲染当前资料，共享语义层不再生成任何跨版本更新段落；当前后勤阶段和模组未装备／各等级对照不受影响。历史差分仍用于新增／变化筛选。Unity 解码运行在独立进程中，GUI 线程只处理界面与结果。
+## 当前调用链
 
-玩法识别在文件扫描完成后读取本次生效 IDX，并将目录写入扫描快照的 `manifest_versions.gameplay`，恢复历史时直接用保存的目录。玩法和关卡详情复用表来源定位、版本校验和独立 worker，打开已支持的页面时才读取源包。没有适配器的玩法展示资源入口及状态。
+```text
+Vue → QWebChannel → ui/workbench/window.py → 同目录的业务适配器
+                                             ↓
+                           AppServices → library / CatalogStore
+                                       → WorkerRunner → extraction
+                                       → gamedata → reports
+```
+
+`library` 提供资源观测和来源，`extraction` 产出带来源的 `TableSourceSet`，`gamedata` 构建资料与变化集，`reports` 共用语义块输出 PNG、HTML、TXT，JSON 保留完整当前资料和字段证据。Unity 解码在独立进程执行。玩法页在扫描后按当前资源版本读取玩法资料与卫戍协议关卡文本。地图和战斗回放由独立的 ArknightsMapViewer 项目负责。
+
+`dev.ps1` 与 `build.ps1` 调用 `build-frontend.ps1` 构建 `resources/workbench/`，便携包携带页面、脚本、样式、前端依赖许可及 Qt WebEngine。`frontend/node_modules/` 和 `resources/workbench/` 都是本地构建输出。正常启动使用 Vue，显式 `--smoke-test` 可运行旧版 Qt 主窗口及原生控件验收。资料产物相关的原生对话框及后台队列由 Vue 宿主复用。
+
+## 共用模块与既有验收
 
 `gamedata/operators.py` 从同快照 `uniequip_table.subProfDict` 补齐分支本地化名称，原分支ID保留；后勤遍历全部槽位与解锁阶段，`building_skills` 保留 `slot`、名称、设施、说明及条件。该列表不随面板培养条件裁剪，战斗技能和属性仍按原培养规则计算。共用报告层显示全部阶段及替换关系，JSON保留完整结构；无需迁移已保存游戏表。
 
 `ui/explorer.py`和`ui/updates.py`共享`library.classifications.category_labels()`的用途标签，并补入扫描／资源目录观测到的类别。资源浏览选择具体类型后在当前来源全库匹配，关键词与AB条件继续叠加；暂时禁用目录导航／递归且保留原值，切回全部类型恢复原目录范围。`ExplorerPage`以`file_type`标签保存状态，旧状态缺字段默认全部类型；不会改变分类规则或实际解包器。
 
-`library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ui/object_preview.py` 的 `ObjectsDialog` 负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
+`library/preview_types.py`是独立媒体候选类型的单一映射，供源提取与浏览入口共享。`ui/resource_preview.py`只负责右侧呈现及播放器；`ObjectsDialog`负责对象选择、防抖、代次和预览租约，`MainWindow`合并同窗口的在途／最新请求并调用真实worker，避免旧结果覆盖新选择。普通预览独立使用auto解码，不改正式导出配置。QtMultimedia／Widgets及媒体插件随目录包收集，外部FFmpeg可执行程序仍为USM可选封装能力。`--smoke-test`配合隐藏的`--preview-source/--preview-kind`显式验收实际右侧面板、静音播放、暂停拖动与关闭释放；不在普通启动中执行。
 
 0.1.18 的 `jobs.py` 通过 `__main__.py --worker-server` 为对象列表和临时资源预览按需复用单个隔离解码进程，保留逐任务请求、结果、取消和事件；每次重新读取源文件，不缓存 Unity 环境，闲置约60秒／退出回收。正式解包和核心表继续一次性进程。`main_window.py` 提供三种检查方式，默认资料检查结束后再提交全文件扫描，取消不启动后续阶段；核心表缺失保留失败任务并继续默认文件扫描。`application.load_data` 只刷新资料，保留既有文件扫描与 catalog，没有扫描时创建明确空 catalog。`library.scan` 用目录栈携带相对路径和 DirEntry 元数据；`resolver` 每层预计算相对前缀、同次 live 观测共享父目录元数据，snapshot 恢复不访问游戏文件。`ui.explorer` 按 catalog/root 缓存当前资源基础行，在更换数据或目录根时失效，搜索及用途筛选复用这些行。
 
@@ -104,23 +105,11 @@ Qt 只调用 `AppServices`，不自行解释游戏表。`library` 提供资源�
 
 0.1.22通过fonttools4.68.0读取Fonts目录的名称表和TTC索引，`font_index`与路径一起保存在设置／ReportOptions／任务请求中，旧值默认0。`fonts.py`将TTC的所选face提取为独立字体bytes，PNG与HTML使用同一face。资料预览通过`ReportArtifactsDialog.font_preview_requested`、主窗独立报告generation/pending状态和既有queue／PreviewLease异步更新；旧代结果不覆盖新选择、关闭只取消本窗口任务，成功选项传给正式导出。默认按钮不会响应字体文本控件的Return／Enter。显式`--smoke-test --profile-font-preview-test`验证实际系统字体选择、同窗切换、正式四格式和关闭回收；普通启动不执行。
 
-底部「任务记录…」在独立窗口呈现任务表。`Job.show_in_tasks` 为可选持久字段，内部资料、启动恢复和对象列表读取标为 False，`JobQueue.visible_jobs` 为任务表提供可见记录。旧记录按稳定内部标题兼容，其他默认可见。可见与内部成功记录分别保留最近 20 条。表格动作按稳定 job_id 查回原任务。后台串行调度、状态栏和错误信号继续处理内部读取。
+0.1.23的报告提交不再选中jobs页面。`Job.show_in_tasks`为可选持久字段，内部资料／启动恢复／对象列表读取标False；`JobQueue.visible_jobs`供任务表及JobsPage角标使用，后台串行调度不变。旧记录按稳定内部标题兼容，其他默认可见；可见与内部成功记录分别沿既有20条上限管理。过滤后的表格动作依稳定job_id查回原任务，进度／日志不显示内部读取；原状态栏与错误信号保留。
 
 0.1.24的`RecordsModel`列定义可追加原始排序getter，大小／时间保留字节／纳秒精度，未知值双向置后，`replace`沿用当前有效排序；持久索引在排序后按原行身份映射。`FileRecord.created_ns`为可空文件系统birth time，扫描及摘要后的最终stat记录该值，旧JSON默认未知、不迁移数据库。`ExplorerView`按快照绝对物理路径关联生效资源的修改／创建／首次观测值，离线不补读源文件；更新表同样按原值排序。`extraction.engine.list_bundle_objects`从Unity对象`byte_size`元数据返回可空`size`，独立媒体为源文件字节；`ObjectsDialog`的大小列可排序，自动预览选中以排序后的记录为准。显式`--smoke-test --resource-sort-test --game-root <隔离夹具>`通过真实扫描和表头点击验收文件排序／时间；既有资源预览smoke同时核对worker返回的对象大小、排序与预览身份，普通启动不执行。
 
-主要调用链：
-
 0.1.25新增`extraction/character_config.py`归一两种AVG角色配置，`images.py`将配置Alpha显式引用接入普通Sprite／Texture并保持裁片；`extraction/characters.py`提供JSON目录、逻辑画布恢复及自动／手动共用合成。`ExtractionRequest.character_options`为可空兼容字段，`kinds=['expression']`经现有extract worker导出；内部`character_catalog`读取复用隔离worker，不进入可见任务。`ui/character_workbench.py`只管理组／底图／表情、位置尺寸、成功预览与lease，不解释Unity表。Explorer按钮／菜单→MainWindow→AppServices→worker接通；预览最新请求保留显式类型及合成参数，关闭仅取消本窗口所属读取／预览，正式批量不受影响。`--smoke-test --character-source`显式验证真实配置→手选预览→正式导出／批量与回收，普通启动不执行。
-
-```text
-MainWindow → AppServices.restore → CatalogStore → 上次文件／资料及变化结果
-MainWindow → AppServices.scan → library → CatalogStore
-MainWindow → AppServices.load_data → WorkerRunner → extraction.tables
-                                     ↓
-                               gamedata.load_gamedata → compare_entities
-MainWindow → AppServices.extract → WorkerRunner → extraction.engine
-MainWindow → AppServices.export → build_operator/build_module → reports.export_report
-```
 
 `reports/html_render.py` 负责生成资料、连续条目与锚点目录结构，并读取 `resources/html/operator.html`、`report.css`、`report.js`，将模板、样式与脚本内联进导出 HTML。这三份文件是实际运行资产，模板版本为 2.3.0，修改会直接影响新报告。`reports/style.py` 读取 `resources/report_styles.json`，提供两种格式共用的调色板、字体层级及 `ordered_groups(document)` 资料分区顺序。HTML 通过 `theme_css(theme)` 内联主题变量，PNG 使用 `theme_colors(theme)` 和 `typography()`；批次目录同样接收 `ReportOptions.theme`。JSON 是正式构建要求的运行资产，纯 JSON／TXT 导出仍不依赖这些样式。
 

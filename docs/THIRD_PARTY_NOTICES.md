@@ -18,8 +18,8 @@
 | 组件 | 版本／来源 | 当前发行材料中的声明 |
 | --- | --- | --- |
 | Python | 3.12 x64；[Python](https://www.python.org/) | PSF 等组合许可，构建时收集实际解释器 `LICENSE.txt`。 |
-| PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only。随包保留 wheel 提供的 `LicenseRef-Qt-Commercial.txt` 和 Qt 许可补充原文。目录式包保留实际使用的 Qt 动态库及必要插件，支持替换。 |
-| Godot Engine | [4.7.2-stable Windows x86_64](https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable) | ArknightsMapViewer 的原生回放进程。显式构建时使用 `ARKNIGHTS_GODOT_RUNTIME` 指定官方解压后的主可执行程序。构建校验固定 SHA-256，按原字节纳入 `Godot.exe`，并附 `_internal/licenses/Godot/` 中的官方 MIT `LICENSE.txt`、第三方完整 `COPYRIGHT.txt` 和来源清单。 |
+| PySide6 / Qt / shiboken6 | 6.8.3；[Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html) | wheel METADATA 声明 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only。随包保留 wheel 提供的许可原文与来源记录。目录式包保留实际使用的 Qt 动态库及必要插件，支持替换。 |
+| Qt WebEngine | 6.8.3；[Qt WebEngine 许可与 Chromium 第三方清单](https://doc.qt.io/qt-6.8/qtwebengine-licensing.html) | 承载离线 Vue 工作台。由锁定的 PySide6 wheel 提供 Qt WebChannel、Qt WebEngine、子进程及所需的运行资源和语言包。Qt 与 Chromium 所含第三方组件的许可见上游清单。 |
 | UnityPy | 1.25.3；[上游](https://github.com/K0lb3/UnityPy) | MIT；包含其运行数据及动态类，完整 wheel LICENSE 随包。 |
 | fonttools | 4.68.0；[官方文档](https://fonttools.readthedocs.io/en/stable/ttLib/ttFont.html) | 用于系统字体名称读取和TTC选定字形提取，保留实际wheel的LICENSE／METADATA；不附带系统字体文件。 |
 | flatbuffers / numpy / lz4 | 25.12.19 / 2.2.6 / 4.4.5 | 分别保留 wheel 的 Apache／BSD 等完整声明；numpy LICENSE 包含其本地库的多项声明。 |
@@ -30,6 +30,10 @@
 | spine-asset / WannaCRI / ffmpeg-python | 1.1.1 / 0.3.3 / 0.2.0 | 工程锁定依赖，保留提供的许可与 METADATA。WannaCRI 已用于 USM 自动分流；可选外部 FFmpeg 通过进程调用封装，安装 `ffmpeg-python` 不等于附带 FFmpeg 二进制。具体样本验证见下节及验收记录。 |
 | attrs / python-dateutil / six / future / typing-extensions / tqdm / python-json-logger / colorama / packaging | 当前锁文件精确版本 | 保留实际 wheel 提供的声明；按 bundle 文件清单确认实际交付内容。 |
 | PyInstaller | 6.16.0；[上游](https://pyinstaller.org/) | 构建工具；GPL-2.0-or-later 含 bootloader exception，保留 wheel `COPYING.txt` 原文。构建工具及整个开发环境不随程序目录分发。 |
+
+## 前端运行依赖
+
+Vue 3、Element Plus 及其运行依赖由 `frontend/package-lock.json` 固定。构建从锁定的 npm 包收集许可和版本，便携包内可查看 `_internal/resources/workbench/licenses.txt`。
 
 ## FMOD 原生 DLL
 

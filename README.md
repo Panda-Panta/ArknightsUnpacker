@@ -1,8 +1,8 @@
 # ArknightsUnpacker · 明日方舟资源与资料工作台
 
-Windows 原生 GUI：浏览《明日方舟》PC 资源、扫描最近更新、解包选中文件，并生成干员／模组 PNG 长图与 PRTS 风格离线 HTML。
+在 Windows 上浏览《明日方舟》PC 资源、扫描最近更新、提取包内对象，并生成干员／模组 PNG 长图与 PRTS 风格离线 HTML。
 
-**版本 0.1.26（源码与本机已更新）。** 表情制作在载入、切换图层或调整参数后自动预览，移除“预览合成”及内部对象窗口的“预览所选对象”按钮。透明提图、表情批量导出、大小排序、时间对照及当前页保持继续保留。使用方式见[用户指南](docs/USER_GUIDE.md)，验证见[验收摘要](docs/ACCEPTANCE.md)。当前公开发行下载仍为0.1.20。
+当前源码使用 Vue 3 与 Element Plus 构建浅色工作台，由 PySide6 Qt WebEngine 在本机加载。打开资源包即可浏览多个图片、音频和其他对象，逐项预览或勾选后提取。当前公开发行包为早期界面的 v0.1.20。
 
 ## 直接运行
 
@@ -10,10 +10,12 @@ Release 入口：[v0.1.20](https://github.com/Panda-Panta/ArknightsUnpacker/rele
 
 解压完整 ZIP 后，双击其中的 `ArknightsUnpacker.exe`。无需安装 Python，保留同目录的 `_internal` 文件夹。本机已交付目录中的程序也可直接运行；源码仓库不保存 `dist/` 构建产物。
 
-1. 选择游戏目录。默认输出为程序旁的 `exports/`，启动时自动创建；也可在设置中自定义输出目录。
-2. 顶部默认“干员 / 模组优先”，先检查资料再扫描资源；主要查看新增资料时可选“仅检查干员 / 模组”。扫描后浏览目录、查看用途，按需启用“仅 .ab”。最近时间默认 24 小时，可修改。
-3. 选中文件解包；双击包可浏览内部对象并选择提取。
-4. 资料检查后，在“干员资料”／“模组更新”选择资料，预览或导出 PNG、HTML；“解析核心数据”也可单独刷新资料。模组页可勾选或全选当前筛选结果后合并导出，也可合并导出本次新增模组。JSON 和 TXT 同步保存，完整字段来源保留于 JSON。
+## 工作台操作
+
+1. 用顶部的文件夹按钮选择游戏目录，点击“扫描更新”。检查顺序、最近更新时间和严格校验可在右上角菜单的“扫描选项”中调整。
+2. 在中间列表双击进入文件夹或打开资源包。资源列表与对象列表支持 Ctrl 点选、Shift 连选和左键拖动框选。鼠标侧键可在“资源浏览”中前进或后退。
+3. 使用“加入解包队列”处理勾选的资源。包内点击对象查看右侧预览，使用“提取勾选对象”导出多项。默认输出为程序旁的 `exports/`，可在左栏“玩法资料”下方的“设置”中更改。
+4. 在“干员资料”或“模组更新”中预览或导出选中资料。模组多选时可合并导出。“玩法资料”可查看识别到的资源和卫戍协议赛季的文字资料。
 
 再次启动直接读取保存结果，无需重新解析。设置、快照、变化记录与查看状态位于程序旁 `data/`；输出默认位于同级 `exports/`，源码运行时位于项目根。两者不随启动工作目录改变，显式 `--data-dir` 只改变数据目录。旧版 `Documents/ArknightsExports` 默认配置自动改用新默认，其他自定义输出路径保留，旧导出文件不搬动。升级时保留 `data/` 与已有输出。首次升级可非覆盖迁入旧 `%LOCALAPPDATA%\ArknightsUnpacker` 数据，原文件保留。游戏文件始终只读。
 
@@ -43,7 +45,7 @@ Release 入口：[v0.1.20](https://github.com/Panda-Panta/ArknightsUnpacker/rele
 
 ## 源码运行与构建
 
-需要 Python 3.12 x64、uv 和 PowerShell 7，精确依赖在 `uv.lock`：
+源码开发与构建需要 Python 3.12 x64、uv、PowerShell 7 和 Node.js（含 npm）。Python 依赖由 `uv.lock` 锁定，Vue 依赖由 `frontend/package-lock.json` 锁定。
 
 ```powershell
 uv sync --locked
@@ -52,9 +54,9 @@ pwsh -File scripts/verify.ps1
 pwsh -File scripts/build.ps1
 ```
 
-构建到 `dist/<版本>/ArknightsUnpacker`，已存在时拒绝覆盖。`build-info.json` 绑定源码摘要、依赖和实际 Git 提交／工作区状态，`file-manifest.json`／`SHA256SUMS.txt` 记录程序文件摘要。旧 v0.1.0 构建时尚无 Git，保留当时的工作区来源记录，不追溯改写。
+`dev.ps1` 和 `build.ps1` 调用 `scripts/build-frontend.ps1`，将前端生成到 `resources/workbench/`。Windows 便携包包含这些资源和 Qt WebEngine 运行时，双击即可离线使用。构建到 `dist/<版本>/ArknightsUnpacker`，已存在时拒绝覆盖。`build-info.json` 记录源码摘要、依赖和 Git 状态，`file-manifest.json`／`SHA256SUMS.txt` 记录程序文件摘要。
 
-真实游戏 GUI 验证需显式设置本机路径，输出只写测试工作目录或指定证据目录：
+既有 Qt 对照测试可用真实游戏目录验证底层服务与原生预览窗口。输出写入测试工作目录或指定证据目录。
 
 ```powershell
 $env:ARKNIGHTS_GAME_ROOT = 'D:\你的游戏目录\Arknights Game'

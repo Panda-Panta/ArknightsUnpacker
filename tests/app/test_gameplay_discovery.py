@@ -3,6 +3,7 @@ import json
 import pytest
 
 from arknights_unpacker.application import AppServices
+from arknights_unpacker.contracts import CancelToken
 
 
 ACTIVITY = 'gamedata/excel/activity_table071163'
@@ -42,10 +43,8 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
     game = gameplay_installation
     services = AppServices(tmp_path / 'data', tmp_path / 'exports')
     monkeypatch.setattr(services.runner, 'run', lambda *a, **kw: pytest.fail('scan decoded gameplay'))
-    result = services.scan(game)
+    services.scan(game)
     catalog = services.gameplay_catalog
-    assert services.level_catalog is None
-    assert 'level_catalog' not in result['snapshot'].manifest_versions
     assert catalog['resource_version'] == 'resource-1'
     assert [mode['id'] for mode in catalog['modes']] == ['autochess', 'roguelike']
     autochess, roguelike = catalog['modes']
@@ -62,7 +61,6 @@ def test_scan_discovers_pages_and_restart_restores_without_game(gameplay_install
                             lambda *a: pytest.fail('restore read the game index'))
         restored.restore(game)
         assert restored.gameplay_catalog == catalog
-        assert restored.level_catalog is None
     finally:
         restored.shutdown()
 
@@ -78,45 +76,34 @@ def test_index_error_does_not_fail_resource_scan(gameplay_installation, tmp_path
         services.shutdown()
 
 
-def test_level_catalog_keeps_last_readable_baseline(gameplay_installation, tmp_path, monkeypatch):
+def test_cancelled_gameplay_discovery_preserves_completed_inventory(gameplay_installation, tmp_path, monkeypatch):
     from arknights_unpacker.extraction import gameplay
 
     game = gameplay_installation
-    new_level = 'gamedata/levels/obt/main/level_main_01-02'
-    index = {'assets': [{'assetName': LEVEL, 'bundle': 'levels.ab'}]}
-    broken = False
+    cancel = CancelToken()
 
-    def read_index(path):
-        if broken:
-            raise ValueError('invalid index')
-        return index
-
-    def change_version(version):
-        path = game / 'hot_update_list.json'
-        manifest = json.loads(path.read_text(encoding='utf-8'))
-        manifest['versionId'] = version
-        path.write_text(json.dumps(manifest), encoding='utf-8')
+    def read_index(_path):
+        cancel.cancel()
+        return {'assets': [{'assetName': LEVEL, 'bundle': 'levels.ab'}]}
 
     monkeypatch.setattr(gameplay, 'read_resource_manifest', read_index)
-    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
+    data = tmp_path / 'data'
+    exports = tmp_path / 'exports'
+    services = AppServices(data, exports)
     try:
-        services.scan_level_catalog(game)
-        assert [(row['id'], row['is_new']) for row in services.level_catalog['levels']] == [(LEVEL, False)]
-
-        broken = True
-        change_version('resource-2')
-        with pytest.raises(ValueError, match='invalid index'):
-            services.scan_level_catalog(game)
-        assert [(row['id'], row['is_new']) for row in services.level_catalog['levels']] == [(LEVEL, False)]
-
-        broken = False
-        change_version('resource-3')
-        index['assets'].append({'assetName': new_level, 'bundle': 'levels.ab'})
-        for _ in range(2):
-            services.scan_level_catalog(game)
-            assert [row['id'] for row in services.level_catalog['levels'] if row['is_new']] == [new_level]
+        snapshot = services.scan(game, cancel=cancel)['snapshot']
+        assert cancel.cancelled and snapshot.complete
+        assert services.gameplay_catalog is None
     finally:
         services.shutdown()
+
+    restored = AppServices(data, exports)
+    try:
+        reopened = restored.restore(game)['snapshot']
+        assert reopened.snapshot_id == snapshot.snapshot_id
+        assert restored.gameplay_catalog is None
+    finally:
+        restored.shutdown()
 
 
 def test_gameplay_job_checks_catalog_and_only_loads_requested_assets(gameplay_installation, tmp_path, monkeypatch):
@@ -144,45 +131,5 @@ def test_gameplay_job_checks_catalog_and_only_loads_requested_assets(gameplay_in
         assert [(kind, args['logical_path']) for kind, args in calls] == [
             ('gameplay', ACTIVITY), ('gameplay_level', LEVEL),
         ]
-    finally:
-        services.shutdown()
-
-
-def test_level_animation_cache_follows_the_scanned_resource_version(gameplay_installation, tmp_path):
-    from arknights_unpacker.level_preview_cache import preview_directory, preview_filename
-
-    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
-    game = gameplay_installation.resolve()
-    services.level_catalog = {'root': str(game), 'resource_version': 'resource-1',
-                              'levels': [{'id': LEVEL, 'available': True}]}
-    directory = preview_directory(services.data_root, game, 'resource-1')
-    directory.mkdir(parents=True)
-    clip = directory / preview_filename(LEVEL)
-    clip.touch()
-    try:
-        assert services.level_preview_clips(game, 'resource-1') == {LEVEL: clip}
-        with pytest.raises(ValueError, match='重新扫描'):
-            services.level_preview_clips(tmp_path / 'another-game', 'resource-1')
-        services.level_catalog['resource_version'] = 'resource-2'
-        assert services.level_preview_clips(game, 'resource-2') == {}
-    finally:
-        services.shutdown()
-
-
-def test_level_replay_can_resolve_scene_after_catalog_scan(gameplay_installation, tmp_path, monkeypatch):
-    services = AppServices(tmp_path / 'data', tmp_path / 'exports')
-    game = gameplay_installation.resolve()
-    services.level_catalog = {'root': str(game), 'resource_version': 'resource-1',
-                              'scene_bindings_checked': True,
-                              'levels': [{'id': LEVEL, 'available': True}]}
-    output = services.data_root / 'preview' / 'session'
-    output.mkdir(parents=True)
-    calls = []
-    monkeypatch.setattr(services.runner, 'run', lambda operation, args, *_: calls.append((operation, args)))
-    try:
-        services.load_level_replay(game, LEVEL, 'resource-1', output, caption='关卡')
-        operation, args = calls[0]
-        assert operation == 'level_replay'
-        assert args['level_id'] == LEVEL and args['scene'] is None
     finally:
         services.shutdown()

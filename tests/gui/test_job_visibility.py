@@ -176,13 +176,14 @@ def test_entity_profile_remains_a_background_read_without_task_row_or_badge(qtbo
     wait_idle(qtbot, window)
     job = window.queue.jobs[-1]
     assert job.title.startswith('查看资料 · ') and not job.show_in_tasks
-    assert not window.queue.visible_jobs and window.show_task_history().table.rowCount() == 0
+    assert not window.queue.visible_jobs and window.jobs.table.rowCount() == 0
     assert '交互测试' in view.details.toPlainText()
     assert threads and all(identity != threading.get_ident() for identity in threads)
-    assert window.tabs.indexOf(window.jobs) == -1
+    jobs_tab = window.tabs.indexOf(window.jobs)
+    assert window.tabs.tabText(jobs_tab) == '导出任务'
 
 
-def test_visible_pending_and_active_tasks_keep_records_and_cancel_action(qtbot, tmp_path):
+def test_visible_pending_and_active_tasks_keep_badge_and_cancel_action(qtbot, tmp_path):
     window, _ = make_window(qtbot, tmp_path)
     started, release = threading.Event(), threading.Event()
 
@@ -194,8 +195,8 @@ def test_visible_pending_and_active_tasks_keep_records_and_cancel_action(qtbot, 
     try:
         qtbot.waitUntil(started.is_set)
         pending = window.queue.submit('可见正式导出', lambda **kw: None)
-        window.show_task_history()
-        assert window.tabs.indexOf(window.jobs) == -1
+        index = window.tabs.indexOf(window.jobs)
+        assert window.tabs.tabText(index) == '导出任务 (2)'
         assert window.jobs.table.rowCount() == 2 and window.queue.visible_jobs == [active, pending]
         cancel = named_button(window.jobs, '取消当前任务')
         assert cancel.isEnabled()

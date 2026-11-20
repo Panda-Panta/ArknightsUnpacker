@@ -118,7 +118,7 @@ def test_report_reuses_live_window_then_closing_removes_files_and_success_record
     window.preview_reports('operators', ['char_fixture'])
     wait_idle(qtbot, window)
     dialog = window._dialogs[-1]
-    window.show_task_history().table.selectRow(len(window.queue.jobs) - 1)
+    window.jobs.table.selectRow(len(window.queue.jobs) - 1)
     window.jobs.preview_artifacts()
     assert window._dialogs == [dialog] and roots[0].exists()
     dialog.close()

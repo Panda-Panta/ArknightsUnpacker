@@ -58,3 +58,30 @@ def test_resource_mutation_during_decode_is_not_accepted(tmp_path):
         with pytest.raises(OSError,match='变化'):
             load_local_tables(root,tmp_path/'cache',names={'character_table'})
     assert not (tmp_path/'cache'/'sources.json').exists()
+
+
+def test_explicit_level_uses_indexed_unity_container_instead_of_object_name(tmp_path, monkeypatch):
+    root, index = resource_folder(tmp_path)
+    name = 'level_example_s'
+    logical = f'gamedata/levels/activities/example/{name}'
+    container_path = f'dyn/{logical}.bytes'
+    index['assets'] = [{'assetName': logical, 'path': container_path, 'bundle': 'table.bin'}]
+
+    class LevelObj(TextObj):
+        def __init__(self, object_name, path_id):
+            self.object_name = object_name
+            self.path_id = path_id
+
+        def read(self):
+            return SimpleNamespace(m_Name=self.object_name, m_Script='{}')
+
+    expected = LevelObj('level_example_S', 12)
+    other = LevelObj(name, 34)
+    env = SimpleNamespace(objects=[expected, other], container={container_path: expected})
+    monkeypatch.setattr('arknights_unpacker.extraction.tables.read_resource_manifest', lambda _: index)
+    monkeypatch.setattr('arknights_unpacker.extraction.tables.load_bundle', lambda *_, **__: env)
+    result = load_local_tables(root, None, names={name}, logical_names={name: logical},
+                               decoders={name: lambda raw, _: (json.loads(raw), {})})
+
+    assert result.tables[name].source.path_id == '12'
+    assert result.tables[name].source.object_name == 'level_example_S'

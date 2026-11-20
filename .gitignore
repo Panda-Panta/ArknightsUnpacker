@@ -9,5 +9,6 @@ dist/
 artifacts/
 data/
 /exports/
+/resources/workbench/
 *.egg-info/
 
