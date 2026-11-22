@@ -1,4 +1,5 @@
 <script setup>
+import SystemFontSelect from '../components/SystemFontSelect.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps({ run: Function, state: Object, kind: String })
@@ -112,8 +113,8 @@ async function releasePreview() {
 }
 
 async function renderPreview() {
-  await releasePreview()
-  const request = ++previewVersion
+  const releasing = releasePreview()
+  const request = previewVersion
   previewLoading.value = true
   previewFiles.value = []
   previewError.value = ''
@@ -124,6 +125,8 @@ async function renderPreview() {
     options.font_path = previewFont.value.path
     options.font_index = previewFont.value.index
   }
+  await releasing
+  if (request !== previewVersion) return
   const result = await props.run('entitiesReport', { ...previewRequest.value, preview: true, options })
   if (request !== previewVersion) {
     if (result?.token) await props.run('entitiesClosePreview', { token: result.token })
@@ -155,12 +158,9 @@ async function previewReport() {
   await renderPreview()
 }
 
-async function changeFont() {
-  const font = await props.run('settingsChooseFont', { path: previewFont.value?.path || '' })
-  if (font) {
-    previewFont.value = font
-    await renderPreview()
-  }
+function changeFont(font) {
+  previewFont.value = font
+  void renderPreview()
 }
 
 async function exportPreview() {
@@ -284,7 +284,8 @@ onBeforeUnmount(() => {
         <el-select v-model="previewTheme" aria-label="预览主题" :empty-values="[null, undefined]" @change="renderPreview">
           <el-option value="" label="当前导出主题" /><el-option value="light" label="亮色" /><el-option value="dark" label="暗色" />
         </el-select>
-        <el-button @click="changeFont">切换预览字体…</el-button>
+        <SystemFontSelect :run="run" :model-value="previewFont" label="本次资料字体" inherit
+          @update:model-value="changeFont" />
         <el-select v-if="previewFiles.length" v-model="previewItem" aria-label="预览文件">
           <el-option v-for="(item, index) in previewFiles" :key="item.path" :value="index" :label="item.name" />
         </el-select>

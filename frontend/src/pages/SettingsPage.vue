@@ -1,4 +1,5 @@
 <script setup>
+import SystemFontSelect from '../components/SystemFontSelect.vue'
 import { onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps({ run: Function, state: Object, mode: String })
@@ -7,9 +8,6 @@ const saved = ref(false)
 const dataRoot = ref('')
 const history = ref([])
 const snapshot = ref('')
-const fonts = ref([])
-const fontQuery = ref('')
-const selectedFont = ref('')
 const options = reactive({
   output_root: '', extraction_mode: 'auto', extraction_kinds: ['image', 'text', 'audio', 'spine'],
   formats: ['png', 'html', 'json', 'txt'], report_width: 1200, report_font_size: 28, report_font_path: '',
@@ -42,23 +40,9 @@ async function chooseOutput() {
   if (result) options.output_root = result.path || result
 }
 
-async function chooseFont() {
-  const result = await props.run('settingsChooseFont', { path: options.report_font_path })
-  if (!result) return
-  fonts.value = result.faces || []
-  selectedFont.value = fonts.value.length ? 0 : ''
-  useFont(result)
-}
-
-function useFont(item) {
-  if (!item?.path) return
-  options.report_font_path = item.path
-  options.report_font_index = item.index ?? 0
-}
-
-async function searchFonts() {
-  const result = await props.run('settingsFonts', { query: fontQuery.value })
-  fonts.value = Array.isArray(result) ? result : result?.fonts || []
+function useFont(font) {
+  options.report_font_path = font.path
+  options.report_font_index = font.index
 }
 
 async function refreshHistory() {
@@ -117,20 +101,10 @@ onMounted(async () => {
               </el-form-item>
             </div>
             <el-form-item label="导出字体">
-              <div class="settings-line">
-                <el-input v-model="options.report_font_path" readonly placeholder="使用默认字体" />
-                <el-button @click="chooseFont">选择字体文件…</el-button>
-                <el-button @click="options.report_font_path = ''; options.report_font_index = 0; selectedFont = ''">使用默认</el-button>
-              </div>
+              <SystemFontSelect :run="run" label="导出字体"
+                :model-value="{ path: options.report_font_path || '', index: options.report_font_index }"
+                @update:model-value="useFont" />
             </el-form-item>
-            <div class="settings-line">
-              <el-input v-model="fontQuery" placeholder="搜索系统字体" @keyup.enter="searchFonts" />
-              <el-button @click="searchFonts">搜索</el-button>
-              <el-select v-if="fonts.length" v-model="selectedFont" placeholder="选择字体" @change="useFont(fonts[$event])">
-                <el-option v-for="(font, index) in fonts" :key="index" :value="index"
-                  :label="[font.family || font.path, font.style].filter(Boolean).join(' · ')" />
-              </el-select>
-            </div>
           </div>
           <div class="settings-section">
             <h3>运行与历史</h3>

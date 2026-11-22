@@ -103,16 +103,6 @@ class WorkbenchSettings:
                  ('' if item.get('complete', True) else '（不完整）')}
                 for item in self.services.store.list_data_snapshots(installation.profile_id)]
 
-    def _choose_font(self, payload):
-        path, _ = QFileDialog.getOpenFileName(self.window, '选择字体文件', payload.get('path', ''),
-                                             '字体 (*.ttf *.otf *.ttc)')
-        if not path:
-            return None
-        faces = font_faces(path)
-        if not faces:
-            raise ValueError('字体文件没有可用字形。')
-        return {**asdict(faces[0]), 'faces': [asdict(face) for face in faces]}
-
     def _edit_history(self, action, payload):
         if self.services.gamedata is None:
             raise ValueError('请先解析当前核心数据。')
@@ -148,11 +138,7 @@ class WorkbenchSettings:
         if action == 'settingsOpenData':
             return QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.services.data_root)))
         if action == 'settingsFonts':
-            query = str(payload.get('query', '')).strip().casefold()
-            return [asdict(face) for face in system_font_faces()
-                    if query in (face.family + ' ' + face.style + ' ' + face.path).casefold()][:200]
-        if action == 'settingsChooseFont':
-            return self._choose_font(payload)
+            return [asdict(face) for face in system_font_faces()]
         if action == 'settingsHistory':
             return self._history()
         if action in ('settingsCompareSnapshot', 'settingsImportBaseline', 'settingsExportSnapshot'):
